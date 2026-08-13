@@ -195,7 +195,7 @@ class Asset(TimeStampedModel):
 class AssignmentRole(models.TextChoices):
     """Role of a staff member *within a specific site*.
 
-    Site-level roles complement the platform-level :class:`Role`. Both are
+    Site-level roles complement the platform-level :class:`RoleCode`. Both are
     code-enforced because they drive authorization decisions.
     """
 
@@ -221,7 +221,7 @@ class StaffAssignment(TimeStampedModel):
     class Meta:
         verbose_name = "Staff assignment"
         verbose_name_plural = "Staff assignments"
-        ordering = ["site__name", "user__username"]
+        ordering = ["site__name", "user__email"]
         constraints = [models.UniqueConstraint(fields=["site", "user"], name="uniq_assignment_site_user")]
 
     def __str__(self) -> str:

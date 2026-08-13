@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils.text import slugify
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import RoleCode, User
 from apps.site_management.models import (
     Asset,
     AssetCategory,
@@ -99,26 +99,28 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
         admin, _ = User.objects.get_or_create(
-            username="admin",
+            email=settings.DEV_ADMIN_EMAIL,
             defaults={
-                "email": settings.DEV_ADMIN_EMAIL,
-                "role": Role.ADMIN,
+                "role": RoleCode.SYSTEM_ADMIN,
                 "is_staff": True,
                 "is_superuser": True,
                 "first_name": "Platform",
                 "last_name": "Admin",
             },
         )
-        admin.role = Role.ADMIN
+        admin.role = RoleCode.SYSTEM_ADMIN
         admin.is_staff = True
         admin.is_superuser = True
         if not admin.password or admin.password.startswith("!"):
             admin.set_password(settings.DEV_ADMIN_PASSWORD)
         admin.save()
 
-        manager = self._ensure_user("juma", "Juma", "Hassan", Role.MANAGER)
-        staff = self._ensure_user("amina", "Amina", "Ali", Role.STAFF)
-        viewer = self._ensure_user("viewer", "Viewer", "User", Role.VIEWER)
+        general = self._ensure_user("general@whitebird.test", "General", "Supervisor", RoleCode.GENERAL_SUPERVISOR)
+        zone = self._ensure_user("zone@whitebird.test", "Zone", "Supervisor", RoleCode.ZONE_SUPERVISOR)
+        site_supervisor = self._ensure_user(
+            "site-supervisor@whitebird.test", "Site", "Supervisor", RoleCode.SITE_SUPERVISOR
+        )
+        viewer = self._ensure_user("viewer@whitebird.test", "Viewer", "User", RoleCode.MANAGEMENT_VIEWER)
 
         self._seed_reference_data()
 
@@ -160,7 +162,7 @@ class Command(BaseCommand):
         resort = Site.objects.get(code=self._code("White Bird Beach Resort"))
         StaffAssignment.objects.get_or_create(
             site=resort,
-            user=manager,
+            user=general,
             defaults={
                 "role": AssignmentRole.SITE_MANAGER,
                 "is_primary": True,
@@ -168,7 +170,14 @@ class Command(BaseCommand):
             },
         )
         StaffAssignment.objects.get_or_create(
-            site=resort, user=staff, defaults={"role": AssignmentRole.STAFF, "assigned_by": admin}
+            site=resort,
+            user=zone,
+            defaults={"role": AssignmentRole.SITE_MANAGER, "assigned_by": admin},
+        )
+        StaffAssignment.objects.get_or_create(
+            site=resort,
+            user=site_supervisor,
+            defaults={"role": AssignmentRole.STAFF, "assigned_by": admin},
         )
         StaffAssignment.objects.get_or_create(
             site=resort,
@@ -176,13 +185,17 @@ class Command(BaseCommand):
             defaults={"role": AssignmentRole.STAFF, "assigned_by": admin},
         )
 
-        self.stdout.write(self.style.SUCCESS(f"Seed complete. Admin login: admin / {settings.DEV_ADMIN_PASSWORD}"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Seed complete. Admin login: {settings.DEV_ADMIN_EMAIL} / {settings.DEV_ADMIN_PASSWORD}"
+            )
+        )
 
     # ------------------------------------------------------------------ #
 
-    def _ensure_user(self, username: str, first: str, last: str, role: Role) -> User:
+    def _ensure_user(self, email: str, first: str, last: str, role: RoleCode) -> User:
         user, created = User.objects.get_or_create(
-            username=username,
+            email=email,
             defaults={
                 "first_name": first,
                 "last_name": last,
@@ -194,7 +207,7 @@ class Command(BaseCommand):
             user.set_password("changeme-password-1")
         user.save()
         if created:
-            self.stdout.write(f"  user: {username}")
+            self.stdout.write(f"  user: {email}")
         return user
 
     def _seed_reference_data(self) -> None:

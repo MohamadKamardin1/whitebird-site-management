@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.core.cache import cache
 from django.test import Client
 
-from apps.accounts.models import Role, User
+from apps.accounts.factories import UserFactory
+from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
-from apps.site_management.models import (
+from apps.site_management.factories import (
     AssetCategory,
     Site,
     SiteStatus,
@@ -30,24 +31,76 @@ def _fresh_cache() -> Iterator[None]:
 
 @pytest.fixture
 def admin_user(db: Any) -> User:
-    return User.objects.create_user(
-        username="admin", password="adminpass1", role=Role.ADMIN, is_superuser=True, is_staff=True
+    return cast(
+        User,
+        UserFactory(
+            email="admin@whitebird.test",
+            password="admin-password-1",
+            role=RoleCode.SYSTEM_ADMIN,
+            is_superuser=True,
+            is_staff=True,
+        ),
     )
 
 
 @pytest.fixture
-def manager_user(db: Any) -> User:
-    return User.objects.create_user(username="manager", password="managerpass1", role=Role.MANAGER)
+def general_user(db: Any) -> User:
+    return cast(
+        User,
+        UserFactory(
+            email="general@whitebird.test",
+            password="general-password-1",
+            role=RoleCode.GENERAL_SUPERVISOR,
+        ),
+    )
 
 
 @pytest.fixture
-def staff_user(db: Any) -> User:
-    return User.objects.create_user(username="staff", password="staffpass1", role=Role.STAFF)
+def zone_user(db: Any) -> User:
+    return cast(
+        User,
+        UserFactory(
+            email="zone@whitebird.test",
+            password="zone-password-1",
+            role=RoleCode.ZONE_SUPERVISOR,
+        ),
+    )
+
+
+@pytest.fixture
+def site_supervisor_user(db: Any) -> User:
+    return cast(
+        User,
+        UserFactory(
+            email="site-supervisor@whitebird.test",
+            password="site-password-1",
+            role=RoleCode.SITE_SUPERVISOR,
+        ),
+    )
 
 
 @pytest.fixture
 def viewer_user(db: Any) -> User:
-    return User.objects.create_user(username="viewer", password="viewerpass1", role=Role.VIEWER)
+    return cast(
+        User,
+        UserFactory(
+            email="viewer@whitebird.test",
+            password="viewer-password-1",
+            role=RoleCode.MANAGEMENT_VIEWER,
+        ),
+    )
+
+
+# Legacy aliases used by site-scoped tests: "staff" is the read-only viewer and
+# "manager" is a zone supervisor with write capacity on assigned sites.
+@pytest.fixture
+def staff_user(viewer_user: User) -> User:
+    return viewer_user
+
+
+@pytest.fixture
+def manager_user(zone_user: User) -> User:
+    return zone_user
 
 
 def _authed_client(user: User) -> Client:
@@ -61,13 +114,33 @@ def admin_client(admin_user: User) -> Client:
 
 
 @pytest.fixture
-def manager_client(manager_user: User) -> Client:
-    return _authed_client(manager_user)
+def general_client(general_user: User) -> Client:
+    return _authed_client(general_user)
 
 
 @pytest.fixture
-def staff_client(staff_user: User) -> Client:
-    return _authed_client(staff_user)
+def zone_client(zone_user: User) -> Client:
+    return _authed_client(zone_user)
+
+
+@pytest.fixture
+def site_supervisor_client(site_supervisor_user: User) -> Client:
+    return _authed_client(site_supervisor_user)
+
+
+@pytest.fixture
+def viewer_client(viewer_user: User) -> Client:
+    return _authed_client(viewer_user)
+
+
+@pytest.fixture
+def staff_client(viewer_user: User) -> Client:
+    return _authed_client(viewer_user)
+
+
+@pytest.fixture
+def manager_client(zone_user: User) -> Client:
+    return _authed_client(zone_user)
 
 
 @pytest.fixture

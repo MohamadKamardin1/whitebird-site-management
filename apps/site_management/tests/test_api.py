@@ -35,7 +35,7 @@ def test_site_list_admin_sees_all(admin_client, site):
 @pytest.mark.django_db
 def test_site_list_staff_sees_only_assigned(admin_client, staff_client, site):
     create_site(draft=SiteDraft(name="Hidden"), actor=site.created_by)
-    staff = User.objects.get(username="staff")
+    staff = User.objects.get(email="viewer@whitebird.test")
     assign_staff(site=site, user=staff, actor=site.created_by)
     response = staff_client.get("/api/site-management/v1/sites")
     assert response.status_code == 200
@@ -87,7 +87,7 @@ def test_site_archive_and_restore(admin_client, site):
 
 @pytest.mark.django_db
 def test_staff_cannot_archive_site(staff_client, site):
-    staff = User.objects.get(username="staff")
+    staff = User.objects.get(email="viewer@whitebird.test")
     assign_staff(site=site, user=staff, actor=site.created_by)
     assert staff_client.delete(f"/api/site-management/v1/sites/{site.pk}").status_code == 403
 
@@ -212,7 +212,7 @@ def test_staff_cannot_read_unassigned_site(staff_client, site):
 
 @pytest.mark.django_db
 def test_assigned_staff_cannot_write_unless_manager(admin_client, staff_user, site):
-    staff = User.objects.get(username="staff")
+    staff = User.objects.get(email="viewer@whitebird.test")
     assign_staff(site=site, user=staff, actor=site.created_by)
     denied = Client(HTTP_AUTHORIZATION=f"Bearer {issue_api_token(user=staff_user).key}")
     response = denied.patch(

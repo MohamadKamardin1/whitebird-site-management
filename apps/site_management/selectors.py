@@ -151,9 +151,7 @@ def list_assets(site_id: int, category_slug: str | None = None) -> list[Asset]:
 
 
 def list_assignments(site_id: int) -> list[StaffAssignment]:
-    return list(
-        StaffAssignment.objects.filter(site_id=site_id).select_related("site", "user").order_by("user__username")
-    )
+    return list(StaffAssignment.objects.filter(site_id=site_id).select_related("site", "user").order_by("user__email"))
 
 
 def list_notifications(user: User, *, unread_only: bool = False, limit: int = 50) -> list[Notification]:

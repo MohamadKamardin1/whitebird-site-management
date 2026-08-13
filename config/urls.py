@@ -15,6 +15,8 @@ api_urls, api_app_name, _ = api.urls
 urlpatterns = [
     path("", include("apps.web.urls")),
     path("admin/", admin.site.urls),
+    # Session auth views: login/logout + password reset/change foundation.
+    path("accounts/", include("django.contrib.auth.urls")),
     path(settings.API_V1_PREFIX + "/", include((api_urls, api_app_name), namespace="api")),
 ]
 

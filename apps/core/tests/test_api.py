@@ -6,7 +6,7 @@ import pytest
 from django.test import Client
 
 from apps.accounts.factories import UserFactory
-from apps.accounts.models import User
+from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
 
 
@@ -37,7 +37,7 @@ def test_health_reports_degraded_when_cache_down(admin_client: Client) -> None:
 
 @pytest.mark.django_db
 def test_audit_logs_allows_manager_role() -> None:
-    manager = UserFactory(role="manager")
+    manager = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     token = _token_for(manager)
     response = Client(HTTP_AUTHORIZATION=f"Bearer {token}").get("/api/site-management/v1/audit-logs")
     assert response.status_code == 200
@@ -45,7 +45,7 @@ def test_audit_logs_allows_manager_role() -> None:
 
 @pytest.mark.django_db
 def test_audit_logs_denies_staff() -> None:
-    staff = UserFactory(role="staff")
+    staff = UserFactory(role=RoleCode.MANAGEMENT_VIEWER)
     token = _token_for(staff)
     response = Client(HTTP_AUTHORIZATION=f"Bearer {token}").get("/api/site-management/v1/audit-logs")
     assert response.status_code == 403

@@ -90,7 +90,7 @@ class AssetAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 class StaffAssignmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("user", "site", "role", "is_primary", "assigned_by", "created_at")
     list_filter = ("role", "is_primary", "site")
-    search_fields = ("user__username", "site__name")
+    search_fields = ("user__email", "site__name")
     autocomplete_fields = ("site", "user")
 
 

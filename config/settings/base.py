@@ -86,8 +86,16 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "axes.middleware.AxesMiddleware",
+    "apps.accounts.middleware.UserTimezoneMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 TEMPLATES = [
@@ -186,7 +194,9 @@ API_THROTTLE_ANON_RATE = env.str("API_THROTTLE_ANON_RATE", default="30/min")
 API_THROTTLE_AUTH_RATE = env.str("API_THROTTLE_AUTH_RATE", default="300/min")
 
 # --------------------------------------------------------------------------- #
-# Authentication roadmap: session today, JWT later
+# Authentication: session for admin/dashboard, signed access + refresh tokens
+# for the API. The token backend is swappable for a JWT library later without
+# changing the router contract (see apps/accounts/tokens.py).
 # --------------------------------------------------------------------------- #
 
 AUTH_MECHANISM = env("AUTH_MECHANISM")  # "session" | "jwt"
@@ -195,12 +205,19 @@ JWT_ISSUER = env.str("JWT_ISSUER", default="whitebird")
 JWT_ACCESS_TOKEN_TTL = timedelta(seconds=env.int("JWT_ACCESS_TOKEN_TTL", default=900))
 JWT_REFRESH_TOKEN_TTL = timedelta(days=env.int("JWT_REFRESH_TOKEN_TTL_DAYS", default=7))
 
+# Signed access-token lifetime (seconds); refresh tokens use ApiToken expiry.
+ACCESS_TOKEN_TTL_SECONDS = env.int("ACCESS_TOKEN_TTL_SECONDS", default=1800)
+REFRESH_TOKEN_TTL_SECONDS = env.int("REFRESH_TOKEN_TTL_SECONDS", default=604800)
+
 # django-axes brute-force protection for the login endpoint.
 AXES_ENABLED = env.bool("AXES_ENABLED", default=True)
 AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
 AXES_COOLOFF_TIME = timedelta(hours=env.int("AXES_COOLOFF_TIME_HOURS", default=1))
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
+# Axes auto-derives this from USERNAME_FIELD ("email"); keep the credential key
+# consistent with how the platform calls ``authenticate(username=...)``.
+AXES_USERNAME_FORM_FIELD = "username"
 
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",

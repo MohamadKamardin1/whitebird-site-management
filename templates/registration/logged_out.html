@@ -1,0 +1,6 @@
+{% extends "registration/_auth_base.html" %}
+{% load i18n %}
+
+{% block subtitle %}{% trans "Signed out" %}{% endblock %}
+{% block heading %}{% trans "Signed out" %}{% endblock %}
+{% block form %}<p><a href="{% url 'login' %}">{% trans "Sign in again" %}</a></p>{% endblock %}

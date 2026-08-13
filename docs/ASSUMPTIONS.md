@@ -65,8 +65,34 @@ engineering contract.
 ## Quality
 
 15. **Coverage gate 90% branch** applies to `apps/` application code;
-    migrations, tests, and `__init__.py` are excluded. Current coverage ~95%.
+    migrations, tests, and `__init__.py` are excluded. Current coverage ~93%.
 16. **Mypy strict** for app code; tests and factories relax only annotation
     requirements (factory-boy ships no type stubs), never logic checks.
 17. **Factory-boy deprecation** (`skip_postgeneration_save`) is handled by
     saving in the password hook explicitly.
+
+## Accounts (Prompt 2)
+
+18. **Email is the login identifier.** `User` extends `AbstractBaseUser` +
+    `PermissionsMixin` with `USERNAME_FIELD = "email"`; emails are stored
+    lowercased for case-insensitive uniqueness. No `username` field.
+19. **Roles are code constants** (`RoleCode`) with group-backed Django
+    permissions. `seed_rbac` is idempotent; a `post_save` signal keeps each
+    user in their role's group automatically.
+20. **Token foundation is custom, secure, and documented** (no JWT library):
+    stateless HMAC-signed access tokens (`django.core.signing`) plus revocable
+    server-side refresh tokens (`ApiToken`). The `JWT_*` settings and
+    `AUTH_MECHANISM` remain for a future PyJWT swap.
+21. **Minimum password length 12**, plus common/numeric/similarity validators.
+    Service-level creation and password changes run `validate_password`.
+22. **django-axes `AXES_USERNAME_FORM_FIELD` is pinned to `"username"`** so the
+    lockout matches how the API calls `authenticate(username=...)`. Axes
+    auto-derives `"email"` from `USERNAME_FIELD`, which would break lockout.
+23. **Hard deletion is guarded in the admin**: users with audit history,
+    assignments, or tokens cannot be deleted; deactivation is the supported
+    flow.
+24. **Timezone middleware** activates the authenticated user's IANA timezone
+    for the request and deactivates afterwards.
+25. **Legacy test aliases**: `staff_user`→Management Viewer (read-only) and
+    `manager_user`→Zone Supervisor (write-capable) preserve site-scoped test
+    semantics from Prompt 1.

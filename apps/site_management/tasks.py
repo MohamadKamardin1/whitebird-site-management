@@ -11,7 +11,7 @@ from typing import Any
 
 from celery import shared_task
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import RoleCode, User
 
 from .models import Site, StaffAssignment
 from .selectors import refresh_all_site_stats_cache
@@ -30,7 +30,7 @@ def notify_site_status_change(self: Any, site_id: int, status_slug: str) -> None
         return
 
     # Admins are always informed; staff only when assigned to the site.
-    admin_ids = set(User.objects.filter(is_active=True, role=Role.ADMIN).values_list("pk", flat=True))
+    admin_ids = set(User.objects.filter(is_active=True, role=RoleCode.SYSTEM_ADMIN).values_list("pk", flat=True))
     staff_ids = set(site.staff_assignments.values_list("user_id", flat=True))
     for recipient in User.objects.filter(pk__in=admin_ids | staff_ids):
         create_notification(

@@ -3,13 +3,13 @@
 import pytest
 
 from apps.accounts.factories import ApiTokenFactory, UserFactory
-from apps.accounts.models import ApiToken, Role, User
+from apps.accounts.models import ApiToken, RoleCode, User
 from apps.site_management.factories import SiteFactory, SiteStatusFactory, SiteTypeFactory
 
 
 @pytest.mark.django_db
 def test_user_factory_builds_unique_users_with_role() -> None:
-    user = UserFactory(role=Role.MANAGER, password="S3cure-pass")
+    user = UserFactory(role=RoleCode.ZONE_SUPERVISOR, password="S3cure-pass")
     assert user.check_password("S3cure-pass")
     other = UserFactory()
     assert user.pk != other.pk

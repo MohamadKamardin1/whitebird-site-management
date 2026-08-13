@@ -12,7 +12,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from ninja import Query, Router
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import RoleCode, User
 from apps.accounts.permissions import role_required, user_can_manage_site
 from apps.core.requests import AuthenticatedRequest
 
@@ -90,14 +90,14 @@ router = Router()
 
 
 def _read_access(user: User, site_id: int) -> None:
-    if user.is_admin:
+    if user.is_system_admin:
         return
     if not Site.objects.filter(pk=site_id, staff_assignments__user=user).exists():
         raise PermissionDenied("You do not have access to this site.")
 
 
 def _write_access(user: User, site_id: int) -> None:
-    if user.is_admin:
+    if user.is_system_admin:
         return
     if not user_can_manage_site(user, site_id):
         raise PermissionDenied("You do not have permission to modify this site.")
@@ -110,7 +110,7 @@ def _load_site_or_404(site_id: int) -> Site:
     return site
 
 
-def _ensure_role(user: User, *roles: Role) -> None:
+def _ensure_role(user: User, *roles: RoleCode) -> None:
     if not role_required(*roles)(user):
         raise PermissionDenied("Insufficient role for this operation.")
 
@@ -151,7 +151,7 @@ def _assignment_out(assignment: StaffAssignment) -> AssignmentOut:
         id=assignment.pk,
         site_id=assignment.site_id,
         user_id=assignment.user_id,
-        username=assignment.user.username,
+        email=assignment.user.email,
         role=assignment.role,
         is_primary=assignment.is_primary,
         created_at=assignment.created_at,
@@ -230,7 +230,14 @@ def site_detail(request: AuthenticatedRequest, site_id: int) -> SiteDetailOut:
     summary="Create a site",
 )
 def site_create(request: AuthenticatedRequest, payload: SiteCreateIn) -> SiteDetailOut:
-    _ensure_role(request.auth, Role.ADMIN, Role.MANAGER)
+    _ensure_role(
+        request.auth,
+        RoleCode.SYSTEM_ADMIN,
+        RoleCode.GENERAL_SUPERVISOR,
+        RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+        RoleCode.ZONE_SUPERVISOR,
+        RoleCode.SITE_SUPERVISOR,
+    )
     draft = SiteDraft(
         name=payload.name,
         site_type=_type_or_none(payload.site_type_id),
@@ -310,7 +317,7 @@ def site_archive(request: AuthenticatedRequest, site_id: int) -> MessageOut:
     summary="Restore an archived site",
 )
 def site_restore(request: AuthenticatedRequest, site_id: int) -> SiteDetailOut:
-    _ensure_role(request.auth, Role.ADMIN)
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
     site = Site.objects.all_with_deleted().filter(pk=site_id).first()
     if site is None:
         raise Http404("Site not found.")
@@ -550,7 +557,7 @@ def site_stats(request: AuthenticatedRequest, site_id: int) -> SiteStatsOut:
     summary="Cross-site statistics overview",
 )
 def stats_overview(request: AuthenticatedRequest) -> dict[str, object]:
-    _ensure_role(request.auth, Role.ADMIN)
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
     per_site = get_all_site_stats()
     total_capacity = sum(s["capacity"] for s in per_site.values())
     total_staff = sum(s["staff"] for s in per_site.values())

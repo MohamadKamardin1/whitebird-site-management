@@ -1,17 +1,22 @@
-"""Accounts API router."""
+"""Accounts API router — authentication, token lifecycle, and staff admin."""
 
 from __future__ import annotations
 
+from django.contrib.auth import authenticate
 from django.core.exceptions import PermissionDenied, ValidationError
 from ninja import Router
 
-from apps.accounts.auth import ApiTokenAuth
-from apps.accounts.models import ApiToken, Role, User
+from apps.accounts.auth import TokenAuth
+from apps.accounts.models import ApiToken, RoleCode, User
 from apps.accounts.permissions import role_required
 from apps.accounts.schemas import (
     LoginIn,
     LoginOut,
+    LogoutIn,
     MessageOut,
+    PasswordChangeIn,
+    RefreshIn,
+    RefreshOut,
     StaffCreateIn,
     StaffMemberOut,
     TokenCreateIn,
@@ -22,31 +27,64 @@ from apps.accounts.selectors import list_active_tokens, staff_directory, user_st
 from apps.accounts.services import (
     create_user,
     issue_api_token,
-    login_and_issue_token,
+    login_and_issue_tokens,
+    refresh_access_token,
     revoke_api_token,
+    set_password,
 )
+from apps.accounts.tokens import access_token_lifetime_seconds
 from apps.core.requests import AuthenticatedRequest
 
-router = Router(auth=ApiTokenAuth())
+router = Router(auth=TokenAuth())
 
 
 @router.post(
     "/login",
     auth=None,
     response=LoginOut,
-    summary="Exchange credentials for a bearer token",
+    summary="Exchange email and password for access + refresh tokens",
 )
 def login(request: AuthenticatedRequest, payload: LoginIn) -> LoginOut:
     try:
-        token, user = login_and_issue_token(
+        user, access_token, refresh_token = login_and_issue_tokens(
             request=request,
-            username=payload.username,
+            email=payload.email,
             password=payload.password,
-            name=payload.token_name,
+            token_name=payload.token_name,
         )
     except ValidationError as exc:
         raise PermissionDenied(str(exc.messages[0])) from None
-    return LoginOut(token=token.key, expires_at=token.expires_at, user=UserOut.from_orm(user))
+    return LoginOut(
+        access_token=access_token,
+        refresh_token=refresh_token.key,
+        expires_in=access_token_lifetime_seconds(),
+        user=UserOut.from_orm(user),
+    )
+
+
+@router.post(
+    "/logout",
+    auth=None,
+    response=MessageOut,
+    summary="Revoke a refresh token",
+)
+def logout(request: AuthenticatedRequest, payload: LogoutIn) -> MessageOut:
+    ApiToken.objects.filter(key=payload.refresh_token).update(is_active=False)
+    return MessageOut(detail="Logged out.")
+
+
+@router.post(
+    "/refresh",
+    auth=None,
+    response=RefreshOut,
+    summary="Exchange a refresh token for a fresh access token",
+)
+def refresh(request: AuthenticatedRequest, payload: RefreshIn) -> RefreshOut:
+    try:
+        access_token = refresh_access_token(refresh_token_key=payload.refresh_token)
+    except ValidationError as exc:
+        raise PermissionDenied(str(exc.messages[0])) from None
+    return RefreshOut(access_token=access_token, expires_in=access_token_lifetime_seconds())
 
 
 @router.get("/me", response=UserOut, summary="Current authenticated user")
@@ -57,6 +95,21 @@ def me(request: AuthenticatedRequest) -> User:
 @router.get("/me/stats", response=dict, summary="Authenticated user dashboard aggregates")
 def my_stats(request: AuthenticatedRequest) -> dict[str, object]:
     return user_stats(request.auth)
+
+
+@router.post("/password-change", response=MessageOut, summary="Change the current user's password")
+def password_change(request: AuthenticatedRequest, payload: PasswordChangeIn) -> MessageOut:
+    if not authenticate(
+        request=request,
+        username=request.auth.email,
+        password=payload.current_password,
+    ):
+        raise PermissionDenied("Current password is incorrect.")
+    try:
+        set_password(user=request.auth, new_password=payload.new_password, actor=request.auth)
+    except ValidationError as exc:
+        raise PermissionDenied(str(exc.messages[0])) from None
+    return MessageOut(detail="Password changed.")
 
 
 @router.get("/tokens", response=list[TokenOut], summary="List your API tokens")
@@ -86,17 +139,22 @@ def revoke_token(request: AuthenticatedRequest, token_id: int) -> MessageOut:
 @router.get(
     "/staff",
     response=list[StaffMemberOut],
-    summary="Staff directory (admin & managers)",
+    summary="Staff directory (system admins and supervisors)",
 )
 def staff_list(request: AuthenticatedRequest) -> list[StaffMemberOut]:
-    if not role_required(Role.ADMIN, Role.MANAGER)(request.auth):
-        raise PermissionDenied("Staff directory requires admin or manager role.")
+    if not role_required(
+        RoleCode.SYSTEM_ADMIN,
+        RoleCode.GENERAL_SUPERVISOR,
+        RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+        RoleCode.ZONE_SUPERVISOR,
+    )(request.auth):
+        raise PermissionDenied("Staff directory requires a management role.")
     return [
         StaffMemberOut(
             id=user.id,
-            username=user.username,
-            full_name=user.get_full_name() or user.username,
-            role=Role(user.role),
+            email=user.email,
+            full_name=user.full_name,
+            role=RoleCode(user.role),
             assignment_count=user.assignment_count,  # type: ignore[attr-defined]
         )
         for user in staff_directory()
@@ -106,18 +164,18 @@ def staff_list(request: AuthenticatedRequest) -> list[StaffMemberOut]:
 @router.post(
     "/staff",
     response=UserOut,
-    summary="Create a platform user (admin only)",
+    summary="Create a platform user (system admin only)",
 )
 def staff_create(request: AuthenticatedRequest, payload: StaffCreateIn) -> User:
-    if not request.auth.is_admin:
-        raise PermissionDenied("Admin role required.")
+    if not request.auth.is_system_admin:
+        raise PermissionDenied("System admin role required.")
     return create_user(
-        username=payload.username,
-        password=payload.password,
         email=payload.email,
+        password=payload.password,
         role=payload.role,
         first_name=payload.first_name,
         last_name=payload.last_name,
         phone=payload.phone,
+        timezone=payload.timezone,
         actor=request.auth,
     )

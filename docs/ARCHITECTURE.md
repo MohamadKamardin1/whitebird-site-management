@@ -46,12 +46,20 @@ apps/web                host-facing views: /healthz, /readyz, landing redirect
 
 ### `apps.accounts`
 
-- `User` with platform `Role` (`admin`, `manager`, `staff`, `viewer`)
-- `ApiToken` — revocable bearer tokens, optional expiry, `last_used_at`
-- `apps/accounts/auth.py` — `ApiTokenAuth(HttpBearer)`
-- `apps/accounts/permissions.py` — `role_required`, site-scoped
-  `user_can_manage_site`
-- Brute-force protection via django-axes (login throttling)
+- `User` — email-identified (`AbstractBaseUser` + `PermissionsMixin`) with
+  platform `RoleCode` (`system_admin`, `general_supervisor`,
+  `assistant_general_supervisor`, `zone_supervisor`, `site_supervisor`,
+  `management_viewer`), phone/timezone/avatar, and role helpers.
+- `ApiToken` — revocable refresh/machine tokens.
+- `apps/accounts/tokens.py` — signed (HMAC) access tokens.
+- `apps/accounts/auth.py` — `TokenAuth(HttpBearer)` accepting access tokens
+  and `ApiToken` keys.
+- `apps/accounts/rbac.py` — declarative role→group→permission matrix used by
+  the idempotent `seed_rbac` command and the role-group sync signal.
+- `apps/accounts/permissions.py` — `role_required`, `management_required`,
+  site-scoped `user_can_manage_site`.
+- `apps/accounts/middleware.py` — per-user timezone activation.
+- Brute-force protection via django-axes (email + IP lockout).
 
 ### `apps.site_management`
 

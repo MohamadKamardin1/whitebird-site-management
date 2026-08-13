@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from ninja import NinjaAPI
 
 from apps.accounts.api import router as accounts_router
-from apps.accounts.auth import ApiTokenAuth
+from apps.accounts.auth import TokenAuth
 from apps.core.api import router as core_router
 from apps.site_management.api import router as site_management_router
 
@@ -19,9 +19,9 @@ api = NinjaAPI(
     description=(
         "Internal platform API for managing sites, departments, assets, staff "
         "assignments, notifications and operational statistics. All endpoints "
-        "except login/health require a bearer API token."
+        "except login/refresh/logout/health require a bearer token."
     ),
-    auth=ApiTokenAuth(),
+    auth=TokenAuth(),
     urls_namespace="api",
     docs_url="/docs",
     openapi_url="/openapi.json",

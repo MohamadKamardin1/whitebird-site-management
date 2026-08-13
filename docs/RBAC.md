@@ -1,56 +1,76 @@
-# Role-Based Access Control — Draft Matrix
+# Role-Based Access Control
 
-Permission-relevant roles are **code-enforced constants** (never database
-configuration), because authorization must be verifiable in code. This matrix
-is the reference for every permission check and for the admin dashboard.
+Permission-relevant roles are **code-enforced constants** (`apps.accounts.models.RoleCode`),
+never database configuration, because authorization must be verifiable in code.
+Each role maps to a Django group (`apps.accounts.rbac.ROLE_GROUP_NAMES`) that
+carries the role's model + custom permissions; group membership is synced
+automatically when a user's role changes.
 
-## Platform roles
+## Roles
 
-| Capability                                     | Admin | Manager | Staff | Viewer |
-| ---------------------------------------------- | :---: | :-----: | :---: | :----: |
-| Full platform administration (users, tokens)   |  ✔️   |    —    |   —   |   —    |
-| Manage all sites                               |  ✔️   |    —    |   —   |   —    |
-| Manage assigned sites (write)                  |  ✔️   |   ✔️    |   —   |   —    |
-| Read any site                                  |  ✔️   |   ✔️    |   —   |   —    |
-| Read assigned sites only                       |  ✔️   |   ✔️    |  ✔️   |   ✔️   |
-| Assign/unassign staff to sites                 |  ✔️   |   ✔️    |   —   |   —    |
-| Manage departments / assets                    |  ✔️   |   ✔️    |   —   |   —    |
-| View audit logs                                |  ✔️   |   ✔️    |   —   |   —    |
-| View cross-site statistics overview            |  ✔️   |    —    |   —   |   —    |
-| API token lifecycle                            |  ✔️   |  self   | self  | self   |
+| Role                            | `RoleCode` value                      | Domain persona                 |
+| ------------------------------- | ------------------------------------- | ------------------------------ |
+| System Admin                    | `system_admin`                        | Platform administration        |
+| General Supervisor              | `general_supervisor`                  | Top of the ops reporting chain |
+| Assistant General Supervisor    | `assistant_general_supervisor`        | Deputy to the general          |
+| Zone Supervisor                 | `zone_supervisor`                     | Owns a zone of sites           |
+| Site Supervisor                 | `site_supervisor`                     | Owns a single site             |
+| Management Viewer               | `management_viewer`                   | Read-only dashboards/reports   |
+
+## Capability matrix
+
+| Capability                                          | SysAdmin | General | Asst. General | Zone | Site | Viewer |
+| --------------------------------------------------- | :------: | :-----: | :-----------: | :--: | :--: | :----: |
+| Full platform administration (users, tokens, RBAC)  |    ✔️    |    —    |       —       |  —   |  —   |   —    |
+| Create users / manage all sites                     |    ✔️    |    —    |       —       |  —   |  —   |   —    |
+| Write to assigned sites                             |    ✔️    |   ✔️    |       ✔️      |  ✔️  |  ✔️  |   —    |
+| Read any site                                       |    ✔️    |   ✔️    |       ✔️      |  ✔️  |  ✔️  |   —    |
+| Read assigned sites only                            |    ✔️    |   ✔️    |       ✔️      |  ✔️  |  ✔️  |   ✔️   |
+| View audit logs                                     |    ✔️    |   ✔️    |       ✔️      |  ✔️  |  ✔️  |   —    |
+| Cross-site statistics overview                      |    ✔️    |    —    |       —       |  —   |  —   |   —    |
+| API token lifecycle                                 |    ✔️    |   self  |      self     | self | self |  self  |
 
 > `self` = the user may manage **their own** tokens only.
 
 ## Site-scoped roles (`StaffAssignment`)
 
-Within a site, a user may carry a site-level role that grants write capacity
-independent of their platform role:
+Within a site, a user may carry a site-level role that grants write capacity:
 
-| Site role       | Write on that site |
-| --------------- | :----------------: |
-| `site_manager`  | ✔️                  |
-| `staff`         | —                  |
+| Site role      | Write on that site |
+| -------------- | :----------------: |
+| `site_manager` | ✔️                  |
+| `staff`        | —                  |
 
-**Effective write rule:** a user may modify a site if they are an *admin*,
-**or** they have an assignment to that site **and** (their platform role is
-`manager` **or** their site role is `site_manager`).
+**Effective write rule:** a user may modify a site if they are a **system
+admin**, or they have an assignment to that site **and** (their platform role
+is a supervisor role **or** their site role is `site_manager`).
 
-## Domain roles (future prompts)
+## Custom permissions
 
-These domain personas map onto the platform roles for now:
+Defined on the `User` model and assigned to groups by `seed_rbac`:
 
-| Domain persona             | Platform role  | Notes                                   |
-| -------------------------- | -------------- | --------------------------------------- |
-| General Supervisor         | `manager`      | + future zone-wide scope                |
-| Assistant General Supervisor | `manager`     | + future escalation scope               |
-| Zone Supervisor            | `manager`      | scoped to assigned sites                |
-| Site Supervisor            | `manager`/`staff` + `site_manager` assignment | write on their site |
-| Management Viewer          | `viewer`       | read-only                               |
-| Cleaners / Trainees        | `staff`        | read-only on assigned site; task-execution scoped by future tasks |
+| Permission                        | Granted to                                                       |
+| --------------------------------- | ---------------------------------------------------------------- |
+| `submit_site_report`              | General, Assistant, Zone, Site                                    |
+| `review_zone_report`              | Zone                                                              |
+| `review_assistant_report`         | General, Assistant                                                |
+| `approve_general_report`          | General                                                           |
+| `assign_job` / `verify_job`       | General, Assistant, Zone, Site                                    |
+| `approve_trainee`                 | General, Assistant                                                |
+| `manage_site_configuration`       | Assistant, Zone, Site                                             |
+| `view_sensitive_cleaner_documents`| General, Assistant                                                |
+| `export_site_management_data`     | All roles (viewer may export read-only data)                      |
+
+## RBAC seeding
+
+`python manage.py seed_rbac` is **idempotent**: it creates the six groups and
+assigns the exact permission set declared in `apps/accounts.rbac`. Users are
+added to their role's group automatically by a `post_save` signal, so
+`user.has_perm(...)` works without manual group management.
 
 ## Enforcement points
 
 - Routers call `role_required(...)` and site-scoped `_read_access` /
   `_write_access` before any service call.
 - Services assume the caller passed authorization; they never re-authorize.
-- Superusers bypass all checks (`is_admin`).
+- Superusers bypass all checks (`is_system_admin` includes superusers).

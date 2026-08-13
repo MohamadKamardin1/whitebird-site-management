@@ -35,4 +35,4 @@ def test_audit_log_selectors(admin_user, site):
     record_audit(action=AuditLog.Action.CREATE, actor=admin_user, entity=site)
     rows = list_audit_logs(entity_type="site_management.site")
     assert len(rows) == 1
-    assert rows[0]["actor"] == "admin"
+    assert rows[0]["actor"] == "admin@whitebird.test"

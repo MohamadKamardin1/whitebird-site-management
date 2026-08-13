@@ -145,7 +145,7 @@ class AssignmentOut(Schema):
     id: int
     site_id: int
     user_id: int
-    username: str
+    email: str
     role: str
     is_primary: bool
     created_at: datetime

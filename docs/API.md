@@ -12,13 +12,35 @@
 
 ## Authentication
 
-- **Today:** revocable bearer tokens (`Authorization: Bearer <token>`), issued
-  via `POST /auth/login` or from the admin. Tokens may carry an expiry and are
-  tracked with `last_used_at`.
-- **Roadmap:** JWT (access + refresh) is pre-configured in settings
-  (`JWT_*`, `AUTH_MECHANISM`); session auth covers the admin and future
-  dashboard. The API switches mechanisms by configuration, not code churn.
-- **Brute force:** django-axes locks accounts after repeated failures.
+The API uses a hybrid, secure token foundation (no external JWT dependency —
+see `apps/accounts/tokens.py`):
+
+- **Access tokens** are short-lived, stateless, signed payloads
+  (`django.core.signing`, HMAC with the project secret). TTL:
+  `ACCESS_TOKEN_TTL_SECONDS` (default 1800s).
+- **Refresh tokens** are server-side `ApiToken` rows: revocable, expiring
+  (`REFRESH_TOKEN_TTL_SECONDS`, default 7 days), tracked with `last_used_at`.
+
+Send the access token as `Authorization: Bearer <token>`. Long-lived machine
+tokens issued via the admin/`POST /auth/tokens` are also accepted by the same
+scheme.
+
+- **Login identifier:** email (case-insensitive unique).
+- **Brute force:** django-axes locks accounts after `AXES_FAILURE_LIMIT`
+  repeated failures (by email + IP).
+- **Session auth** covers the admin and the future dashboard; password
+  reset/change flows use Django's built-in auth views at `/accounts/`.
+
+### Token endpoints
+
+| Method | Path                          | Description                          |
+| ------ | ----------------------------- | ------------------------------------ |
+| POST   | `/auth/login`                 | Exchange email + password for tokens |
+| POST   | `/auth/refresh`               | Exchange refresh token for a new access token |
+| POST   | `/auth/logout`                | Revoke a refresh token               |
+| POST   | `/auth/password-change`       | Change the current user's password (authenticated) |
+| GET    | `/auth/me`                    | Current user profile                 |
+| GET    | `/auth/me/stats`              | Dashboard aggregates for the user    |
 
 ## Authorization
 
@@ -65,3 +87,5 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
 - `/readyz` — readiness (DB + cache probes)
 - `/` → `/admin/` — landing redirect until the dashboard ships
 - `/admin/` — Jazzmin-themed Django admin (runtime configuration via constance)
+- `/accounts/` — session auth views: login/logout, password change, password
+  reset foundation (`password_reset`, `password_reset_confirm`, etc.)

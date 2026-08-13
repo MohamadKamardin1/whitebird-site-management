@@ -1,0 +1,15 @@
+{% extends "registration/_auth_base.html" %}
+{% load i18n %}
+
+{% block subtitle %}{% trans "Sign in" %}{% endblock %}
+{% block heading %}{% trans "Sign in" %}{% endblock %}
+{% block form %}
+<form method="post" action="{% url 'login' %}">
+    {% csrf_token %}
+    <p><label for="id_username">{% trans "Email:" %}</label> {{ form.username }}</p>
+    <p><label for="id_password">{% trans "Password:" %}</label> {{ form.password }}</p>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">{% trans "Sign in" %}</button>
+</form>
+<p><a href="{% url 'password_reset' %}">{% trans "Forgotten your password?" %}</a></p>
+{% endblock %}

@@ -421,7 +421,7 @@ def mark_notifications_read(*, user: User, notification_ids: list[int]) -> int:
 
 def scoped_site_ids(user: User) -> list[int]:
     """Site ids a non-admin user may manage, all sites for admins."""
-    if user.is_admin:
+    if user.is_system_admin:
         return list(Site.objects.filter(is_active=True).values_list("pk", flat=True))
     return list(user.staff_assignments.filter(site__is_active=True).values_list("site_id", flat=True))
 

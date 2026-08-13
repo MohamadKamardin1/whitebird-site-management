@@ -7,7 +7,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import connection
 from ninja import Router
 
-from apps.accounts.models import Role
+from apps.accounts.permissions import management_required
 from apps.core.requests import AuthenticatedRequest
 from apps.core.selectors import list_audit_logs
 
@@ -44,6 +44,6 @@ def health(request: AuthenticatedRequest) -> dict[str, object]:
 
 @router.get("/audit-logs", response=list[dict[str, object]], summary="Recent audit entries")
 def audit_logs(request: AuthenticatedRequest, limit: int = 50) -> list[dict[str, object]]:
-    if not (request.auth.is_admin or request.auth.role == Role.MANAGER):
+    if not management_required(request.auth):
         raise PermissionDenied("Audit log access requires admin or manager role.")
     return list_audit_logs(limit=limit)

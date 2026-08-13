@@ -6,18 +6,18 @@ from typing import Any
 
 import factory
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import ApiToken, RoleCode, User
 
 
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User
-        django_get_or_create = ("username",)
+        django_get_or_create = ("email",)
         skip_postgeneration_save = True
 
-    username = factory.Sequence(lambda n: f"user{n}")
-    email = factory.LazyAttribute(lambda obj: f"{obj.username}@whitebird.test")
-    role = Role.STAFF
+    email = factory.Sequence(lambda n: f"user{n}@whitebird.test")
+    role = RoleCode.MANAGEMENT_VIEWER
+    timezone = "Africa/Dar_es_Salaam"
     is_active = True
 
     @factory.post_generation
@@ -29,7 +29,7 @@ class UserFactory(factory.django.DjangoModelFactory):
 
 class ApiTokenFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "accounts.ApiToken"
+        model = ApiToken
 
     user = factory.SubFactory(UserFactory)
     name = "factory-token"
