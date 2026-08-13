@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from django.conf import settings
 from django.core.cache import cache
 from django.test import Client
 
@@ -27,6 +30,16 @@ def _fresh_cache() -> Iterator[None]:
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clean_media() -> Iterator[None]:
+    """Remove any files written to the private media root during a test."""
+    media_root = Path(settings.PRIVATE_MEDIA_ROOT)
+    yield
+    if media_root.exists():
+        shutil.rmtree(media_root, ignore_errors=True)
+        media_root.mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture

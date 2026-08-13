@@ -96,3 +96,37 @@ engineering contract.
 25. **Legacy test aliases**: `staff_user`→Management Viewer (read-only) and
     `manager_user`→Zone Supervisor (write-capable) preserve site-scoped test
     semantics from Prompt 1.
+
+## Core kernel (Prompt 3)
+
+26. **Audit schema redesigned** to `user/action/model_name/object_id/
+    object_repr/before_data/after_data/ip_address/request_id`. The
+    `record_audit` service keeps `actor` and `changes` as backward-compatible
+    aliases; `create_site`/`update_site` now record real before/after JSON
+    snapshots via `model_data()`.
+27. **`AuditLog.summary` is kept** as an extra human-readable field beyond the
+    spec's required list; it preserves existing call sites and aids triage.
+28. **Private storage**: Django replaces `base_url=None` with `MEDIA_URL`, so
+    `PrivateMediaStorage.url()` raises `ValueError` — no code path can produce
+    a public URL. Files live under `PRIVATE_MEDIA_ROOT` (not served by
+    WhiteNoise) and downloads go through signed tokens.
+29. **File token permission model**: a valid signed token (owner + expiry)
+    grants download; the endpoint additionally requires the request to be
+    authenticated as the token owner or a system admin.
+30. **Domain-event outbox** uses `transaction.on_commit`; events are only
+    persisted when the producing transaction commits. No publisher exists yet.
+31. **Cache keys** are namespaced under `wbz_site` with readable parts (no
+    hashing); `invalidate_prefix` scans `wbz_site:{prefix}:*` on Redis.
+32. **Error envelope** replaces the older `{"detail": ...}` responses:
+    `{"error": {"code", "message", "trace_id", "fields"}}`. `trace_id` comes
+    from the request-id contextvar.
+33. **`CONSTANCE_DATABASE_CACHE_BACKEND` is disabled in tests** (local-memory
+    cache is not cross-process), so constance values are read straight from
+    the database.
+34. **Request-id middleware** accepts a caller-provided `X-Request-ID` (via
+    `HTTP_X_REQUEST_ID`) and echoes it back on the response; a
+    `RequestIdFilter` injects it into every structured log line.
+35. **HTTP 401 (missing/invalid token)** is emitted by Django Ninja's auth
+    layer as `{"detail": "Unauthorized"}` and is not routed through our
+    exception handlers; every *handled* error (400/403/404/409/422/500) uses
+    the shared envelope.

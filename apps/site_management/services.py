@@ -16,7 +16,7 @@ from django.utils.text import slugify
 
 from apps.accounts.models import User
 from apps.core.models import AuditLog
-from apps.core.services import record_audit
+from apps.core.services import model_data, record_audit
 
 from .models import (
     Asset,
@@ -106,12 +106,14 @@ def create_site(*, draft: SiteDraft, actor: User) -> Site:
             actor=actor,
             entity=site,
             summary=f"Created site {site.name}",
+            after_data=model_data(site),
         )
     return site
 
 
 def update_site(*, site: Site, draft: SiteDraft, actor: User) -> Site:
     with transaction.atomic():
+        before = model_data(site)
         changes: dict[str, object] = {}
         for field in draft.to_dict():
             old = getattr(site, field)
@@ -132,7 +134,8 @@ def update_site(*, site: Site, draft: SiteDraft, actor: User) -> Site:
             actor=actor,
             entity=site,
             summary=f"Updated site {site.name}",
-            changes=changes,
+            before_data=before,
+            after_data=model_data(site),
         )
 
         if status_changed:

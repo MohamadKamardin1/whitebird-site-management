@@ -91,5 +91,5 @@ def test_has_operational_history() -> None:
     fresh = UserFactory()
     assert fresh.has_operational_history is False
     SiteFactory(created_by=fresh)  # still no history (created sites are not reverse FK history)
-    AuditLog.objects.create(actor=fresh, action="create", entity_type="accounts.user", entity_id=str(fresh.pk))
+    AuditLog.objects.create(user=fresh, action="create", model_name="accounts.user", object_id=str(fresh.pk))
     assert fresh.has_operational_history is True

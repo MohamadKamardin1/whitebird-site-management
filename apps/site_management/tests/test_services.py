@@ -56,9 +56,10 @@ def test_update_site_records_changes_and_audit(admin_user, site):
     )
     updated = update_site(site=site, draft=draft, actor=admin_user)
     assert updated.capacity == 250
-    audit = AuditLog.objects.filter(entity_type="site_management.site", entity_id=site.pk).latest("created_at")
+    audit = AuditLog.objects.filter(model_name="site_management.site", object_id=str(site.pk)).latest("created_at")
     assert audit.action == AuditLog.Action.UPDATE
-    assert audit.changes["capacity"] == {"from": 100, "to": 250}
+    assert audit.before_data["capacity"] == 100
+    assert audit.after_data["capacity"] == 250
 
 
 @pytest.mark.django_db
@@ -122,4 +123,4 @@ def test_assign_staff_is_idempotent(site, staff_user, admin_user):
 @pytest.mark.django_db
 def test_all_writes_create_audit_entries(site, admin_user):
     created = create_site(draft=SiteDraft(name="Audited Site"), actor=admin_user)
-    assert AuditLog.objects.filter(entity_type="site_management.site", entity_id=created.pk).exists()
+    assert AuditLog.objects.filter(model_name="site_management.site", object_id=str(created.pk)).exists()

@@ -5,6 +5,55 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 03] — 2026-08-13
+
+### Added
+
+- **Base models**: `TimeStampedModel`, `UserStampedModel` (nullable
+  `created_by`/`updated_by` with `SET_NULL`), `ActivatableModel` (soft-delete
+  manager), `CodeSlugModel`.
+- **Audit logging**: redesigned `AuditLog` with `user`, `action`, `model_name`,
+  `object_id`, `object_repr`, `before_data`/`after_data` JSON snapshots,
+  `ip_address`, `request_id`; `record_audit()` service (backward-compatible
+  `actor`/`changes` aliases) and `model_data()` snapshot helper.
+- **Request-ID middleware**: reads/generates `X-Request-ID`, sets the response
+  header, stores it in a contextvar, and injects it into every structured log
+  line via `RequestIdFilter`.
+- **Domain error contract**: `DomainError` hierarchy (`ConflictError`,
+  `NotFoundError`, `ForbiddenActionError`, `BusinessRuleError`).
+- **API error contract**: shared `{"error": {code, message, trace_id,
+  fields}}` envelope via `apps.core.handlers` (ValidationError→422,
+  DoesNotExist→404, PermissionDenied→403, ConflictError→409, unexpected→500).
+- **Pagination & sorting**: `PageParams`, generic `Paginated` envelope
+  (`count`/`next`/`previous`/`results`), constance-driven page-size defaults
+  and caps, whitelisted `apply_ordering`.
+- **Private file foundation**: `PrivateMediaStorage` (no public URL),
+  extension/size validators, abstract `PrivateFileModel`, signed download
+  tokens (TTL from constance `FILE_TOKEN_TTL_SECONDS`), and the
+  `/files/signed/{token}/` streaming endpoint with permission checks and
+  `FILE_DOWNLOAD` audit entries.
+- **Domain-event outbox**: `DomainEvent` model + `publish_domain_event()`
+  persisted via `transaction.on_commit`; `list_pending_domain_events`.
+- **Cache utilities**: keys namespaced under `wbz_site`, `get_or_set`,
+  `versioned`, `safe_delete`, prefix invalidation.
+- **Layering helpers**: `apps/core/policies.py` (`require`,
+  `ensure_permitted`) and `apps/core/validators.py`.
+
+### Changed
+
+- `record_audit` snapshots: `create_site`/`update_site` now record real
+  `before_data`/`after_data` instead of a field delta.
+- `config/api.py` now registers all error handlers from `apps.core.handlers`.
+- Logging includes `request_id` on every line.
+- Mypy test relaxation now disables `no-untyped-def` explicitly.
+
+### Fixed
+
+- django-constance database backend requires a cross-process cache; test
+  settings disable `CONSTANCE_DATABASE_CACHE_BACKEND`.
+- `ValidationError` with a list of messages now maps to 422 with a `_` field
+  bucket (previous code crashed on `error_dict`).
+
 ## [Prompt 02] — 2026-08-13
 
 ### Added

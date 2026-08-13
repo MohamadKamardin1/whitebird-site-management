@@ -21,7 +21,7 @@ def test_middleware_activates_user_timezone_during_request() -> None:
     request.user = user
     captured: list[str] = []
 
-    def get_response(req) -> HttpResponse:  # type: ignore[no-untyped-def]
+    def get_response(req) -> HttpResponse:
         captured.append(str(timezone.get_current_timezone()))
         return HttpResponse("ok")
 
@@ -39,7 +39,7 @@ def test_middleware_falls_back_to_utc_for_invalid_zone() -> None:
     request.user = user
     captured: list[str] = []
 
-    def get_response(req) -> HttpResponse:  # type: ignore[no-untyped-def]
+    def get_response(req) -> HttpResponse:
         captured.append(str(timezone.get_current_timezone()))
         return HttpResponse("ok")
 
@@ -56,7 +56,7 @@ def test_middleware_ignores_anonymous_users() -> None:
     request.user = AnonymousUser()
     captured: list[str] = []
 
-    def get_response(req) -> HttpResponse:  # type: ignore[no-untyped-def]
+    def get_response(req) -> HttpResponse:
         captured.append(str(timezone.get_current_timezone()))
         return HttpResponse("ok")
 

@@ -44,6 +44,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "apps/*/migrations/*" = ["E501"]
 "config/settings/*" = ["E501"]
+"apps/*/tests/*" = ["PLC0415"]  # tests may import fixtures lazily
 
 [tool.ruff.format]
 quote-style = "double"
@@ -74,7 +75,10 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = ["apps.*.tests.*", "apps.conftest", "apps.*.factories"]
 disallow_untyped_defs = false
-disable_error_code = ["no-untyped-call", "arg-type", "attr-defined", "misc", "call-overload", "type-arg", "untyped-decorator"]
+disable_error_code = [
+    "no-untyped-call", "no-untyped-def", "arg-type", "attr-defined", "misc",
+    "call-overload", "type-arg", "untyped-decorator", "var-annotated", "operator",
+]
 
 [tool.django-stubs]
 django_settings_module = "config.settings.test"

@@ -8,32 +8,37 @@ Module. Each prompt updates this file before its commit.
 | Prompt | Title                                        | Status             | Commit |
 | ------ | -------------------------------------------- | ------------------ | ------ |
 | 1      | Scaffold premium Django foundation           | Prompt 1 completed | —      |
-| 2      | Custom user, RBAC and auth foundation        | **Prompt 2 completed** | see CHANGELOG |
-| 3–20   | (pending)                                    | —                  | —      |
+| 2      | Custom user, RBAC and auth foundation        | Prompt 2 completed | —      |
+| 3      | Shared kernel: audit, files, events, errors  | **Prompt 3 completed** | see CHANGELOG |
+| 4–20   | (pending)                                    | —                  | —      |
 
-## Prompt 2 — completed ✅
+## Prompt 3 — completed ✅
 
-Built `apps.accounts` into a production-grade accounts system:
+Built `apps.core` into the shared kernel:
 
-- **Custom user**: email-identified `AbstractBaseUser` + `PermissionsMixin`,
-  case-insensitive unique email, validated Tanzania/E.164 phone, IANA
-  timezone (default `Africa/Dar_es_Salaam`), optional avatar, `full_name`,
-  `created_at`/`updated_at`, `last_login`, custom `UserManager`.
-- **Roles**: `RoleCode` enum with the six platform roles and per-role helper
-  methods (`is_system_admin`, `is_site_supervisor`, …).
-- **RBAC**: Django groups per role + model/custom permissions, declarative
-  matrix in `apps/accounts/rbac.py`, idempotent `seed_rbac` command, and a
-  `post_save` signal that keeps users in their role group.
-- **Authentication**: signed access tokens + revocable refresh tokens
-  (`apps/accounts/tokens.py`), `TokenAuth` bearer scheme, email login,
-  `/auth/login|refresh|logout|me|password-change`, django-axes lockout,
-  password validators (min 12), session auth views + password-reset
-  templates at `/accounts/`.
-- **Admin**: professional `UserAdmin` (role/active filters, activate/
-  deactivate actions, deletion guard for users with history, readonly audit
-  fields).
-- **Timezone middleware**, audit-ready services, factory-boy factories for
-  every role.
+- **Base models**: `TimeStampedModel`, `UserStampedModel` (`SET_NULL` user
+  refs), `ActivatableModel` (soft-delete), `CodeSlugModel`.
+- **Audit logging**: redesigned `AuditLog` (`user`, `action`, `model_name`,
+  `object_id`, `object_repr`, `before_data`/`after_data`, `ip_address`,
+  `request_id`) + `record_audit` service with backward-compatible aliases and
+  `model_data()` snapshots. `create_site`/`update_site` record real snapshots.
+- **Request-ID middleware** (`X-Request-ID`, contextvar, log filter, response
+  header) with `trace_id` in every structured log line.
+- **Domain errors + API error contract**: `DomainError` hierarchy and Ninja
+  handlers mapping to the shared `{"error": {code, message, trace_id,
+  fields}}` envelope (ValidationError→422, DoesNotExist→404,
+  PermissionDenied→403, ConflictError→409, BusinessRuleError, unexpected→500).
+- **Pagination & sorting**: `PageParams`, `Paginated` envelope (count/next/
+  previous/results), constance-driven defaults/caps, whitelisted sorting.
+- **Private file foundation**: `PrivateMediaStorage` (no public URL),
+  extension/size validators, `PrivateFileModel`, signed download tokens (TTL
+  from constance), and a secure `/files/signed/{token}/` streaming endpoint
+  that audits downloads.
+- **Domain-event outbox**: `DomainEvent` model + `publish_domain_event()`
+  (created via `transaction.on_commit`).
+- **Cache utilities**: keys namespaced under `wbz_site`, `get_or_set`,
+  versioned keys, safe delete, prefix invalidation.
+- **Layering helpers**: `apps/core/policies.py` and `apps/core/validators.py`.
 
-**Quality gates (all green):** Ruff · Mypy strict · pytest 131 passed ·
-coverage 93.1% ≥ 90 · `makemigrations --check` clean.
+**Quality gates (all green):** Ruff · Mypy strict (101 files) · pytest 170
+passed · coverage 92.5% ≥ 90 · `makemigrations --check` clean.

@@ -7,7 +7,7 @@ parse and validate input, enforce authorization, and delegate:
 
 ```
 HTTP ──► routers (apps/*/api.py, apps/*/views.py)
-             │  auth (apps/accounts/auth.py) + permissions (apps/accounts/permissions.py)
+             │  auth (accounts/auth.py) + policies (apps/core/policies.py, per-app)
              ▼
       services (writes, business rules, transactions, audit, cache invalidation)
              │
@@ -15,8 +15,23 @@ HTTP ──► routers (apps/*/api.py, apps/*/views.py)
       selectors (reads, filtering, cache-aware access)
              │
              ▼
+      validators (domain validation: apps/*/validators.py, apps/core/validators.py)
+             │
+             ▼
       models (persistence only — no business logic)
 ```
+
+Layer responsibilities:
+
+- **Routers** parse/validate request input, run a *policy*, and delegate to a
+  service or selector. No business logic.
+- **Policies** own permissions and data scoping (see `apps/core/policies.py`).
+  Routers call a policy before a service; services assume it passed.
+- **Services** own writes and business rules. Writes are transactional,
+  audited, and invalidate affected caches.
+- **Selectors** own reads: filtering, ordering, caching.
+- **Validators** own domain validation rules (file policy, field formats).
+- **Models** are persistence-only.
 
 Rules enforced by review (see `OPENCODE_CONTRACT.md`):
 
@@ -37,12 +52,31 @@ apps/web                host-facing views: /healthz, /readyz, landing redirect
 
 ### `apps.core`
 
-- `TimeStampedModel` (abstract `created_at`/`updated_at`)
-- `SoftDeleteManager` / `SoftDeleteQuerySet` — archived rows hidden by default
-- `AuditLog` — append-only trail; admin is read-only
-- `apps/core/cache.py` — stable cache keys, `cached_or`, invalidation
-- `apps/core/api.py` — API health + audit-log endpoints
-- `AuthenticatedRequest` — typed `request.auth` for handlers
+The shared kernel — reusable infrastructure with **no business logic**:
+
+- Base models: `TimeStampedModel`, `UserStampedModel` (`created_by`/
+  `updated_by`, `SET_NULL`), `ActivatableModel` (soft-delete manager),
+  `CodeSlugModel`.
+- `SoftDeleteManager` / `SoftDeleteQuerySet`.
+- `AuditLog` — append-only trail: `user`, `action`, `model_name`, `object_id`,
+  `object_repr`, `before_data`/`after_data` snapshots, `ip_address`,
+  `request_id`. Written via `apps/core/services.record_audit`.
+- `DomainEvent` — transactional outbox (created via `transaction.on_commit`);
+  a future publisher consumes pending events.
+- `PrivateFileModel` + `apps/core/files.py` — private storage (no public URL),
+  extension/size validators, signed download tokens, `FILE_DOWNLOAD` audits.
+- `apps/core/errors.py` — domain error contract (`DomainError` hierarchy).
+- `apps/core/handlers.py` — Ninja error handlers implementing the shared
+  `{"error": {code, message, trace_id, fields}}` envelope.
+- `apps/core/middleware.py` — `RequestIdMiddleware` (X-Request-ID, contextvar,
+  log filter, response header).
+- `apps/core/pagination.py` — reusable page params + `Paginated` envelope +
+  whitelisted sorting.
+- `apps/core/cache.py` — namespaced keys under `wbz_site`, `get_or_set`,
+  versioned keys, prefix invalidation.
+- `apps/core/policies.py` / `apps/core/validators.py` — tiny helpers for the
+  policy and validation layers.
+- `AuthenticatedRequest` — typed `request.auth` for handlers.
 
 ### `apps.accounts`
 

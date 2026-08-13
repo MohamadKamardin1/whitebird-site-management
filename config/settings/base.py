@@ -9,7 +9,7 @@ from pathlib import Path
 
 import environ
 
-from config.logging import StructuredFormatter
+from config.logging import RequestIdFilter, StructuredFormatter
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -81,6 +81,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "apps.core.middleware.RequestIdMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -90,6 +91,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Header that carries the caller-provided request id (e.g. X-Request-ID).
+REQUEST_ID_HEADER = "HTTP_X_REQUEST_ID"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -238,12 +242,17 @@ STORAGES = {
 }
 
 # Private media: never served directly by WhiteNoise. Files uploaded through
-# the platform live here and are delivered behind signed tokens in a later
-# milestone. PUBLIC_MEDIA_ROOT is reserved for assets that may be public.
-MEDIA_ROOT = BASE_DIR / "private_media"
+# the platform live here and are delivered behind signed tokens.
+PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"
+MEDIA_ROOT = PRIVATE_MEDIA_ROOT
 MEDIA_URL = "/media/"
 PUBLIC_MEDIA_ROOT = BASE_DIR / "public_media"
 PUBLIC_MEDIA_URL = "/public-media/"
+
+# Upload policy for private files (defaults; runtime MAX_UPLOAD_MB via constance).
+MAX_UPLOAD_MB = env.int("MAX_UPLOAD_MB", default=10)
+ALLOWED_UPLOAD_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "webp"]
+FILE_TOKEN_TTL_SECONDS = env.int("FILE_TOKEN_TTL_SECONDS", default=900)
 
 # --------------------------------------------------------------------------- #
 # Branding & dashboard (consumed by Jazzmin and future frontend)
@@ -354,8 +363,15 @@ LOGGING = {
     "formatters": {
         "structured": {"()": StructuredFormatter},
     },
+    "filters": {
+        "request_id": {"()": RequestIdFilter},
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "structured"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "structured",
+            "filters": ["request_id"],
+        },
     },
     "root": {"handlers": ["console"], "level": env.str("LOG_LEVEL", default="INFO")},
     "loggers": {

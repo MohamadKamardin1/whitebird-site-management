@@ -50,25 +50,38 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
 
 ## Conventions
 
-- **Pagination:** Limit/Offset (`?limit=`/`?offset=`), defaults from
-  `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE` (runtime-configurable via constance).
+- **Pagination:** `PageParams` (`page`, `page_size`) with defaults/caps from
+  constance (`DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`). Responses use the
+  `Paginated` envelope: `count`, `next`, `previous`, `results`.
 - **Filtering:** query parameters scoped to the resource (e.g.
   `?status=active&region=...&capacity_min=...`).
-- **Sorting:** stable server-side default ordering per resource; explicit
-  sort keys are added per resource as needed.
-- **Errors:** consistent envelope with a `detail` field.
+- **Sorting:** whitelisted sort keys via `apply_ordering` (unknown keys are
+  ignored).
+- **Errors:** consistent envelope, identical for every endpoint:
 
-  | HTTP | Meaning                                          |
-  | ---- | ------------------------------------------------ |
-  | 200  | Success                                          |
-  | 401  | Missing/invalid token                            |
-  | 403  | Authenticated but not permitted                  |
-  | 404  | Resource not found                               |
-  | 422  | Validation failure (Django `ValidationError`)    |
-  | 429  | Rate limit exceeded (future)                     |
+  ```json
+  {
+    "error": {
+      "code": "validation_error",
+      "message": "…",
+      "trace_id": "…",
+      "fields": {}
+    }
+  }
+  ```
+
+  | HTTP | Code              | Source                                |
+  | ---- | ----------------- | ------------------------------------- |
+  | 400  | `business_rule`   | `BusinessRuleError`                   |
+  | 401  | `unauthorized`    | missing/invalid token                 |
+  | 403  | `forbidden`       | `PermissionDenied` / `ForbiddenActionError` |
+  | 404  | `not_found`       | `ObjectDoesNotExist` / `Http404` / `NotFoundError` |
+  | 409  | `conflict`        | `ConflictError`                       |
+  | 422  | `validation_error`| Django `ValidationError`              |
+  | 500  | `internal_error`  | unexpected (safe, no internals leaked) |
 
 - **Caching:** read-heavy endpoints (site detail, stats) are cached in Redis
-  and invalidated by write-path services.
+  (keys namespaced under `wbz_site`) and invalidated by write-path services.
 
 ## Modules
 
@@ -79,7 +92,21 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
 | `/catalog`           | Site types, statuses, asset categories         |
 | `/stats`             | Cross-site statistics overview                 |
 | `/notifications`     | In-platform notifications                      |
+| `/files/signed/…`    | Signed private-file download                   |
 | `/` (core)           | Health, audit logs                             |
+
+## Private file downloads
+
+Private files (cleaner documents, inspection photos, job photos) are never
+served from a public URL. A signed token endpoint streams them:
+
+`GET /api/site-management/v1/files/signed/{token}/`
+
+The token is issued by `apps.core.files.create_file_token` and encodes the
+target user, model, object id, and an expiry (TTL from constance
+`FILE_TOKEN_TTL_SECONDS`). The endpoint validates the signature + expiry and
+enforces that the downloader is the token owner or a system admin; every
+download is written to the audit trail (`file_download` action).
 
 ## Outside the API
 

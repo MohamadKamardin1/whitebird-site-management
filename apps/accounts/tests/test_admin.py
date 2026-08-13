@@ -24,10 +24,10 @@ def test_admin_login_uses_email(admin_user: User) -> None:
 def test_delete_permission_denied_for_users_with_history(admin_user: User) -> None:
     target = UserFactory()
     AuditLog.objects.create(
-        actor=target,
+        user=target,
         action="create",
-        entity_type="accounts.user",
-        entity_id=str(target.pk),
+        model_name="accounts.user",
+        object_id=str(target.pk),
     )
     admin = CustomUserAdmin(model=User, admin_site=None)
     assert admin.has_delete_permission(request=None, obj=target) is False
@@ -44,7 +44,7 @@ def test_delete_permission_allowed_for_fresh_users(admin_user: User) -> None:
 @pytest.mark.django_db
 def test_guard_delete_raises_for_users_with_history() -> None:
     user = UserFactory()
-    AuditLog.objects.create(actor=user, action="create", entity_type="x", entity_id="1")
+    AuditLog.objects.create(user=user, action="create", model_name="x", object_id="1")
     admin = CustomUserAdmin(model=User, admin_site=None)
     with pytest.raises(DjangoValidationError):
         admin._guard_delete(user)

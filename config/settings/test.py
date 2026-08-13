@@ -5,6 +5,9 @@ No external services are required: SQLite in-memory, local-memory cache,
 eager Celery.
 """
 
+import tempfile
+from pathlib import Path
+
 from .base import *  # noqa: F403
 
 DEBUG = False
@@ -37,6 +40,10 @@ CELERY_RESULT_BACKEND = "cache+memory://"
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 AXES_ENABLED = False
 
+# Constance uses a cross-process cache for the database backend; the test
+# cache is local-memory, so disable constance's value cache.
+CONSTANCE_DATABASE_CACHE_BACKEND = None  # type: ignore[assignment]
+
 # Fast password hashing keeps the auth tests quick.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
@@ -49,6 +56,12 @@ WHITENOISE_AUTOREFRESH = False
 WHITENOISE_USE_FINDERS = False
 
 DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: False}
+
+# Private uploads go to a per-session temp dir, cleaned by the test fixtures.
+_MEDIA_TMP = Path(tempfile.mkdtemp(prefix="whitebird-test-media-"))
+PRIVATE_MEDIA_ROOT = _MEDIA_TMP
+MEDIA_ROOT = _MEDIA_TMP
+PUBLIC_MEDIA_ROOT = _MEDIA_TMP / "public"
 
 DEV_ADMIN_EMAIL = "admin@whitebird.test"
 DEV_ADMIN_PASSWORD = "admin-password"
