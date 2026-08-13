@@ -1,0 +1,5 @@
+# Development-only tooling (adds to requirements/base.txt)
+-r base.txt
+
+django-extensions==4.1
+django-debug-toolbar==7.1.0

@@ -11,7 +11,7 @@ from django.test import Client
 
 from apps.accounts.models import Role, User
 from apps.accounts.services import issue_api_token
-from apps.sites.models import (
+from apps.site_management.models import (
     AssetCategory,
     Site,
     SiteStatus,
@@ -37,23 +37,17 @@ def admin_user(db: Any) -> User:
 
 @pytest.fixture
 def manager_user(db: Any) -> User:
-    return User.objects.create_user(
-        username="manager", password="managerpass1", role=Role.MANAGER
-    )
+    return User.objects.create_user(username="manager", password="managerpass1", role=Role.MANAGER)
 
 
 @pytest.fixture
 def staff_user(db: Any) -> User:
-    return User.objects.create_user(
-        username="staff", password="staffpass1", role=Role.STAFF
-    )
+    return User.objects.create_user(username="staff", password="staffpass1", role=Role.STAFF)
 
 
 @pytest.fixture
 def viewer_user(db: Any) -> User:
-    return User.objects.create_user(
-        username="viewer", password="viewerpass1", role=Role.VIEWER
-    )
+    return User.objects.create_user(username="viewer", password="viewerpass1", role=Role.VIEWER)
 
 
 def _authed_client(user: User) -> Client:

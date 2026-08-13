@@ -18,10 +18,7 @@ def user_stats(user: User) -> dict[str, object]:
         "username": user.get_username(),
         "role": user.role,
         "site_count": assignments.count(),
-        "sites": [
-            {"id": assignment.site_id, "name": assignment.site.name}
-            for assignment in assignments
-        ],
+        "sites": [{"id": assignment.site_id, "name": assignment.site.name} for assignment in assignments],
     }
 
 

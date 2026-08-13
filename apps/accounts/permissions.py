@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 
-from apps.sites.models import AssignmentRole
+from apps.site_management.models import AssignmentRole
 
 from .models import Role, User
 

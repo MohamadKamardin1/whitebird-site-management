@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from django.contrib.auth import authenticate
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.common.models import AuditLog
-from apps.common.services import record_audit
+from apps.core.models import AuditLog
+from apps.core.services import record_audit
 
 from .models import ApiToken, Role, User
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 
 def create_user(
@@ -78,12 +82,19 @@ def revoke_api_token(*, token: ApiToken, actor: User | None = None) -> None:
     )
 
 
-def login_and_issue_token(*, username: str, password: str, name: str = "") -> tuple[ApiToken, User]:
+def login_and_issue_token(
+    *,
+    request: HttpRequest,
+    username: str,
+    password: str,
+    name: str = "",
+) -> tuple[ApiToken, User]:
     """Authenticate credentials and return a (token, user) pair.
 
-    Raises ``django.core.exceptions.ValidationError`` on bad credentials.
+    Raises ``django.core.exceptions.ValidationError`` on bad credentials. The
+    request is forwarded to ``authenticate`` so django-axes can track failures.
     """
-    user = authenticate(username=username, password=password)
+    user = authenticate(request=request, username=username, password=password)
     if user is None:
         raise ValidationError("Invalid username or password.")
     if not user.is_active:

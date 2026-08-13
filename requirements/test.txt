@@ -1,0 +1,15 @@
+# Test + quality-gate tooling (adds to requirements/base.txt)
+-r base.txt
+
+factory-boy==3.3.3
+pytest==9.1.1
+pytest-django==4.14.0
+pytest-cov==7.1.0
+pytest-xdist==3.8.0
+pytest-mock==3.15.1
+
+# Quality gates (CI runs these)
+ruff==0.16.2
+mypy==2.3.0
+django-stubs==6.1.0
+pre-commit==4.6.2

@@ -1,34 +1,58 @@
 [project]
 name = "whitebird"
-version = "1.0.0"
-description = "White Bird Zanzibar — Site Management Module backend"
+version = "0.1.0"
+description = "White Bird Zanzibar — Site Management Module"
 requires-python = ">=3.12"
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
-addopts = "-q --no-header"
 testpaths = ["apps"]
+addopts = "-q --no-header --strict-markers"
+
+# ---------------------------------------------------------------------------
+# Ruff — linter and formatter
+# ---------------------------------------------------------------------------
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 120
 src = ["."]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF", "PL"]
+select = [
+    "E", "W", "F", "I",      # pycodestyle, pyflakes, isort
+    "B",                     # flake8-bugbear
+    "C4",                    # flake8-comprehensions
+    "SIM",                   # flake8-simplify
+    "UP",                    # pyupgrade
+    "RUF", "PLC", "PLR",     # ruff + pylint subset
+]
 ignore = [
-    "PLR2004",  # magic-value-in-comparison (HTTP status codes read fine in tests)
-    "RUF012",   # mutable class defaults (Django Meta/Field patterns are noise here)
     "PLR0913",  # too-many-arguments (service signatures are deliberate)
     "PLR0917",
+    "PLR2004",  # magic-value-in-comparison (HTTP status codes read fine in tests)
+    "RUF012",   # mutable class defaults (Django Meta/Field patterns are noise)
     "S101",     # assert used in tests
-    "S311",     # pseudo-random for slugs in seed data
+    "S311",     # pseudo-random in seed data
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "apps/*/migrations/*" = ["E501"]
 "config/settings/*" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ---------------------------------------------------------------------------
+# mypy — strict static typing with django-stubs
+# ---------------------------------------------------------------------------
 
 [tool.mypy]
 python_version = "3.12"
@@ -42,14 +66,34 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["config.celery", "manage"]
+module = ["config.celery_app", "manage", "config.wsgi", "config.asgi"]
 disallow_untyped_defs = false
 
-# Tests lean on untyped pytest fixtures; strictness there adds noise without
-# catching real defects, so relax only the annotation requirements.
+# Tests lean on untyped pytest fixtures and dynamic factory objects; strictness
+# there adds noise without catching real defects.
 [[tool.mypy.overrides]]
-module = ["apps.*.tests.*", "apps.conftest"]
+module = ["apps.*.tests.*", "apps.conftest", "apps.*.factories"]
 disallow_untyped_defs = false
+disable_error_code = ["no-untyped-call", "arg-type", "attr-defined", "misc", "call-overload", "type-arg", "untyped-decorator"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings.test"
+
+# ---------------------------------------------------------------------------
+# coverage — branch coverage for application code
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+branch = true
+source = ["apps"]
+omit = ["*/migrations/*", "apps/*/tests/*", "apps/conftest.py", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

@@ -1,7 +1,10 @@
-"""URL routing. Public endpoints are versioned behind ``/api/v1``."""
+"""Root URL configuration.
+
+Public surface: operational probes, the API under ``/api/site-management/v1``,
+and the Django admin. The host-facing ``web`` app owns the root routes.
+"""
 
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
@@ -10,9 +13,12 @@ from config.api import api
 api_urls, api_app_name, _ = api.urls
 
 urlpatterns = [
+    path("", include("apps.web.urls")),
     path("admin/", admin.site.urls),
-    path("api/v1/", include((api_urls, api_app_name), namespace="api")),
+    path(settings.API_V1_PREFIX + "/", include((api_urls, api_app_name), namespace="api")),
 ]
 
-if settings.DEBUG:
-    urlpatterns.extend(static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT))  # type: ignore[arg-type]
+if settings.DEBUG and "debug_toolbar" in settings.INSTALLED_APPS:
+    import debug_toolbar
+
+    urlpatterns.append(path("__debug__/", include(debug_toolbar.urls)))

@@ -1,74 +1,91 @@
-"""Base Django settings for the White Bird Zanzibar Site Management Module.
+"""Base settings shared by every deployment profile.
 
-Environment-driven settings shared by every deployment profile. Values that
-must never be committed to the repository are read from the environment (or a
-local ``.env`` file loaded by ``python-dotenv``).
+Environment variables are read through ``django-environ``. Defaults are
+development-friendly but safe; production and test profiles tighten them.
 """
 
-import os
+from datetime import timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
+import environ
+
+from config.logging import StructuredFormatter
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-load_dotenv(BASE_DIR / ".env")
-
-
-def env_bool(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def env_list(name: str, default: str = "") -> list[str]:
-    raw = os.environ.get(name, default)
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
-# --------------------------------------------------------------------------- #
-# Core
-# --------------------------------------------------------------------------- #
-
-DEBUG = env_bool("DJANGO_DEBUG", default=True)
-
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-dev-only-change-me-in-production",
+env = environ.Env(
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
+    CSRF_TRUSTED_ORIGINS=(list, []),
+    CORS_ALLOWED_ORIGINS=(list, []),
+    TIME_ZONE=(str, "Africa/Dar_es_Salaam"),
+    LANGUAGE_CODE=(str, "en-us"),
+    AUTH_MECHANISM=(str, "session"),
 )
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1")
+# --------------------------------------------------------------------------- #
+# Django core
+# --------------------------------------------------------------------------- #
+
+environ.Env.read_env(BASE_DIR / ".env")
+
+DEBUG = env.bool("DJANGO_DEBUG")
+SECRET_KEY = env.str("DJANGO_SECRET_KEY", default="django-insecure-dev-only-change-me")
+
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 ROOT_URLCONF = "config.urls"
-
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+AUTH_USER_MODEL = "accounts.User"
+
+TIME_ZONE = env("TIME_ZONE")
+USE_I18N = True
+USE_TZ = True
+LANGUAGE_CODE = env("LANGUAGE_CODE")
 
 # --------------------------------------------------------------------------- #
 # Applications
 # --------------------------------------------------------------------------- #
 
 INSTALLED_APPS = [
+    # Django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "apps.common",
+    # Third-party (Jazzmin must precede admin to restyle it)
+    "jazzmin",
+    "constance",
+    "constance.backends.database",
+    "corsheaders",
+    "whitenoise.runserver_nostatic",
+    "ninja",
+    "django_celery_beat",
+    "axes",
+    "django.contrib.humanize",
+    "widget_tweaks",
+    # Local
+    "apps.core",
     "apps.accounts",
-    "apps.sites",
+    "apps.site_management",
+    "apps.web",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "axes.middleware.AxesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -76,7 +93,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -89,45 +106,25 @@ TEMPLATES = [
 ]
 
 # --------------------------------------------------------------------------- #
-# Authentication
+# Databases, cache, redis
 # --------------------------------------------------------------------------- #
 
-AUTH_USER_MODEL = "accounts.User"
+DATABASES = {"default": env.db("DATABASE_URL", default="postgres://postgres:postgres@127.0.0.1:5432/whitebird")}
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("POSTGRES_CONN_MAX_AGE", default=60)
+DATABASES["default"]["OPTIONS"] = {"connect_timeout": env.int("POSTGRES_CONNECT_TIMEOUT", default=10)}
 
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
-
-# --------------------------------------------------------------------------- #
-# Database / Cache / Broker
-# --------------------------------------------------------------------------- #
-
-DATABASES = {
-    "default": {
-        "ENGINE": os.environ.get("POSTGRES_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.environ.get("POSTGRES_DB", "whitebird"),
-        "USER": os.environ.get("POSTGRES_USER", "postgres"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
-        "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        "CONN_MAX_AGE": int(os.environ.get("POSTGRES_CONN_MAX_AGE", "60")),
-        "OPTIONS": {
-            "connect_timeout": int(os.environ.get("POSTGRES_CONNECT_TIMEOUT", "10")),
-        },
-    }
-}
-
-REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
+REDIS_URL = env.str("REDIS_URL", default="redis://127.0.0.1:6379/0")
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": REDIS_URL,
-        "TIMEOUT": int(os.environ.get("CACHE_DEFAULT_TIMEOUT", "300")),
-        "KEY_PREFIX": os.environ.get("CACHE_KEY_PREFIX", "whitebird"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {"max_connections": env.int("REDIS_MAX_CONNECTIONS", default=50)},
+        },
+        "TIMEOUT": env.int("CACHE_DEFAULT_TIMEOUT", default=300),
+        "KEY_PREFIX": env.str("CACHE_KEY_PREFIX", default="whitebird"),
     }
 }
 
@@ -135,82 +132,220 @@ CACHES = {
 # Celery
 # --------------------------------------------------------------------------- #
 
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
-CELERY_TIMEZONE = os.environ.get("CELERY_TIMEZONE", "UTC")
+CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
+CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default=REDIS_URL)
+CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "300"))
-CELERY_TASK_SOFT_TIME_LIMIT = int(os.environ.get("CELERY_TASK_SOFT_TIME_LIMIT", "270"))
+CELERY_TASK_TIME_LIMIT = env.int("CELERY_TASK_TIME_LIMIT", default=300)
+CELERY_TASK_SOFT_TIME_LIMIT = env.int("CELERY_TASK_SOFT_TIME_LIMIT", default=270)
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_BEAT_SCHEDULE = {
-    "recompute-site-statistics": {
-        "task": "apps.sites.tasks.recompute_site_statistics",
-        "schedule": int(os.environ.get("SITE_STATS_SCHEDULE_SECONDS", "900")),
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# Cadence for the periodic site-statistics refresh (seconds).
+SITE_STATS_SCHEDULE_SECONDS = env.int("SITE_STATS_SCHEDULE_SECONDS", default=900)
+
+# --------------------------------------------------------------------------- #
+# Runtime configuration (django-constance) — editable from the admin
+# --------------------------------------------------------------------------- #
+
+CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_DATABASE_CACHE_BACKEND = "default"
+
+CONSTANCE_CONFIG = {
+    "BRAND_NAME": ("White Bird Zanzibar", "Platform display name."),
+    "BRAND_PRIMARY_COLOR": ("#9c7c38", "Primary brand colour (hex)."),
+    "BRAND_ACCENT_COLOR": ("#c9a96e", "Accent brand colour (hex)."),
+    "BRAND_BACKGROUND_COLOR": ("#f7f3ea", "Dashboard background colour (hex)."),
+    "MAX_SITE_SUPERVISORS_PER_SITE": (2, "Maximum supervisor assignments per site."),
+    "MAX_UPLOAD_MB": (10, "Maximum upload size in megabytes."),
+    "DEFAULT_PAGE_SIZE": (25, "Default API page size."),
+    "MAX_PAGE_SIZE": (100, "Maximum allowed API page size."),
+    "DASHBOARD_CACHE_TTL": (300, "Dashboard aggregate cache lifetime (seconds)."),
+    "REPORT_CACHE_TTL": (600, "Report cache lifetime (seconds)."),
+    "FILE_TOKEN_TTL_SECONDS": (900, "Signed file token lifetime (seconds)."),
+    "LOW_STOCK_DEFAULT": (5, "Default low-stock threshold for the site store."),
+    "ENABLE_DOMAIN_EVENTS": (False, "Emit domain events to the event bus."),
+    "ENABLE_NOTIFICATIONS": (True, "Deliver in-platform notifications."),
+}
+
+# --------------------------------------------------------------------------- #
+# API (Django Ninja)
+# --------------------------------------------------------------------------- #
+
+API_V1_PREFIX = "api/site-management/v1"
+
+NINJA_PAGINATION_CLASS = "ninja.pagination.LimitOffsetPagination"
+NINJA_PAGINATION_PER_PAGE = env.int("API_PAGE_SIZE", default=25)
+NINJA_PAGINATION_MAX_LIMIT = env.int("API_MAX_PAGE_SIZE", default=100)
+
+# Per-endpoint throttling rates (Django Ninja throttling), read from env.
+API_THROTTLE_ANON_RATE = env.str("API_THROTTLE_ANON_RATE", default="30/min")
+API_THROTTLE_AUTH_RATE = env.str("API_THROTTLE_AUTH_RATE", default="300/min")
+
+# --------------------------------------------------------------------------- #
+# Authentication roadmap: session today, JWT later
+# --------------------------------------------------------------------------- #
+
+AUTH_MECHANISM = env("AUTH_MECHANISM")  # "session" | "jwt"
+JWT_AUDIENCE = env.str("JWT_AUDIENCE", default="whitebird")
+JWT_ISSUER = env.str("JWT_ISSUER", default="whitebird")
+JWT_ACCESS_TOKEN_TTL = timedelta(seconds=env.int("JWT_ACCESS_TOKEN_TTL", default=900))
+JWT_REFRESH_TOKEN_TTL = timedelta(days=env.int("JWT_REFRESH_TOKEN_TTL_DAYS", default=7))
+
+# django-axes brute-force protection for the login endpoint.
+AXES_ENABLED = env.bool("AXES_ENABLED", default=True)
+AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
+AXES_COOLOFF_TIME = timedelta(hours=env.int("AXES_COOLOFF_TIME_HOURS", default=1))
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_RESET_ON_SUCCESS = True
+
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+# --------------------------------------------------------------------------- #
+# Static & media storage
+# --------------------------------------------------------------------------- #
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
+# Private media: never served directly by WhiteNoise. Files uploaded through
+# the platform live here and are delivered behind signed tokens in a later
+# milestone. PUBLIC_MEDIA_ROOT is reserved for assets that may be public.
+MEDIA_ROOT = BASE_DIR / "private_media"
+MEDIA_URL = "/media/"
+PUBLIC_MEDIA_ROOT = BASE_DIR / "public_media"
+PUBLIC_MEDIA_URL = "/public-media/"
+
+# --------------------------------------------------------------------------- #
+# Branding & dashboard (consumed by Jazzmin and future frontend)
+# --------------------------------------------------------------------------- #
+
+BRAND_NAME = "White Bird Zanzibar"
+BRAND_PRIMARY_COLOR = "#9c7c38"
+BRAND_ACCENT_COLOR = "#c9a96e"
+BRAND_BACKGROUND_COLOR = "#f7f3ea"
+DASHBOARD_CACHE_ALIAS = "default"
+
+JAZZMIN_SETTINGS = {
+    "site_title": BRAND_NAME,
+    "site_header": BRAND_NAME,
+    "site_brand": BRAND_NAME,
+    "site_logo_classes": "img-circle",
+    "welcome_sign": "Welcome to the White Bird Zanzibar Management Platform",
+    "copyright": BRAND_NAME,
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "accounts.user": "fas fa-user",
+        "accounts.apitoken": "fas fa-key",
+        "site_management.site": "fas fa-building",
+        "site_management.sitetype": "fas fa-tags",
+        "site_management.sitestatus": "fas fa-flag",
+        "site_management.department": "fas fa-sitemap",
+        "site_management.asset": "fas fa-box",
+        "site_management.assetcategory": "fas fa-folder",
+        "site_management.staffassignment": "fas fa-user-tag",
+        "site_management.notification": "fas fa-bell",
+        "core.auditlog": "fas fa-history",
+        "constance": "fas fa-cogs",
+        "django_celery_beat": "fas fa-clock",
+    },
+    "related_modal_active": False,
+    "custom_css": "css/admin.css",
+    "custom_js": None,
+    "show_ui_builder": False,
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-light",
+    "accent": "accent-warning",
+    "navbar": "navbar-white navbar-light",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-light-warning",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": False,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "materia",
+    "dark_mode_theme": None,
+    "button_classes": {
+        "primary": "btn-outline-primary",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-outline-info",
+        "warning": "btn-outline-warning",
+        "danger": "btn-outline-danger",
+        "success": "btn-outline-success",
     },
 }
 
 # --------------------------------------------------------------------------- #
-# Django Ninja API
+# CORS & CSRF
 # --------------------------------------------------------------------------- #
 
-API_V1_PREFIX = "/api/v1"
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = True
+CORS_URLS_REGEX = r"^/api/.*$"
 
-API_TOKEN_HEADER = os.environ.get("API_TOKEN_HEADER", "Authorization")
-
-NINJA_PAGINATION_CLASS = "ninja.pagination.LimitOffsetPagination"
-NINJA_PAGINATION_PER_PAGE = int(os.environ.get("API_PAGE_SIZE", "25"))
-
-# --------------------------------------------------------------------------- #
-# Localization / Static
-# --------------------------------------------------------------------------- #
-
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "Africa/Dar_es_Salaam")
-USE_I18N = True
-USE_TZ = True
-
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-
-MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # --------------------------------------------------------------------------- #
-# Security (tightened for production; dev overrides relax as needed)
+# Security
 # --------------------------------------------------------------------------- #
 
-SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=False)
-SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=False)
-CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=False)
-SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", default=False)
-SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", default=False)
 SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = "DENY"
 SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = "DENY"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+
+# --------------------------------------------------------------------------- #
+# Logging
+# --------------------------------------------------------------------------- #
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {name} {process:d} {message}",
-            "style": "{",
-        },
+        "structured": {"()": StructuredFormatter},
     },
     "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
+        "console": {"class": "logging.StreamHandler", "formatter": "structured"},
     },
-    "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
+    "root": {"handlers": ["console"], "level": env.str("LOG_LEVEL", default="INFO")},
     "loggers": {
         "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "celery": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "axes": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }

@@ -1,7 +1,8 @@
 """
 WSGI config for the White Bird platform.
 
-It exposes the WSGI callable as a module-level variable named ``application``.
+Exposes ``application`` — the WSGI callable used by Gunicorn and the
+WhiteNoise static-file middleware.
 """
 
 import os

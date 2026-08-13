@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------------------
+# White Bird Zanzibar — Site Management Module
+# Base runtime dependencies (all profiles inherit these)
+# ---------------------------------------------------------------------------
+
+Django==5.2.17
+psycopg[binary]==3.3.4
+
+# Configuration & environment
+django-environ==0.14.0
+
+# Cache / broker / async
+redis==6.4.0
+django-redis==7.0.0
+celery[redis]==5.6.3
+django-celery-beat==2.9.0
+
+# API
+django-ninja==1.6.2
+django-cors-headers==4.9.0
+
+# Static assets & storage
+whitenoise[brotli]==6.12.0
+Pillow==12.3.0
+openpyxl==3.1.5
+
+# Admin & runtime configuration
+django-jazzmin==3.0.5
+django-constance==4.3.5
+django-widget-tweaks==1.5.1
+
+# Security
+django-axes==8.3.1

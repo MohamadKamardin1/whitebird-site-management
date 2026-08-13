@@ -25,7 +25,7 @@ from apps.accounts.services import (
     login_and_issue_token,
     revoke_api_token,
 )
-from apps.common.requests import AuthenticatedRequest
+from apps.core.requests import AuthenticatedRequest
 
 router = Router(auth=ApiTokenAuth())
 
@@ -39,7 +39,10 @@ router = Router(auth=ApiTokenAuth())
 def login(request: AuthenticatedRequest, payload: LoginIn) -> LoginOut:
     try:
         token, user = login_and_issue_token(
-            username=payload.username, password=payload.password, name=payload.token_name
+            request=request,
+            username=payload.username,
+            password=payload.password,
+            name=payload.token_name,
         )
     except ValidationError as exc:
         raise PermissionDenied(str(exc.messages[0])) from None

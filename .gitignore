@@ -11,12 +11,15 @@ venv/
 .ruff_cache/
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 # Django
-db.sqlite3
+*.sqlite3
 db.sqlite3-journal
 staticfiles/
+private_media/
+public_media/
 media/
 
 # Environment & secrets
@@ -29,6 +32,10 @@ media/
 .vscode/
 .DS_Store
 *.swp
+
+# Frontend (future Vite + Lit)
+frontend/node_modules/
+frontend/dist/
 
 # Logs
 *.log

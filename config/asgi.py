@@ -1,7 +1,8 @@
 """
 ASGI config for the White Bird platform.
 
-It exposes the ASGI callable as a module-level variable named ``application``.
+Exposes ``application`` — the ASGI callable used by Uvicorn/Daphne when an
+async server is required.
 """
 
 import os

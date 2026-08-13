@@ -1,13 +1,17 @@
-"""Test settings — isolated fast database, eager Celery, no external services.
+"""Test settings — hermetic and deterministic.
 
-Selected via ``DJANGO_SETTINGS_MODULE=config.settings.test`` (pytest sets this).
+Selected by pytest via ``DJANGO_SETTINGS_MODULE=config.settings.test``.
+No external services are required: SQLite in-memory, local-memory cache,
+eager Celery.
 """
 
 from .base import *  # noqa: F403
 
 DEBUG = False
+SECRET_KEY = "test-secret-key-not-for-production"
+ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 
-# Fast in-memory SQLite keeps the suite hermetic and dependency-free.
+# Fast in-memory SQLite keeps the suite hermetic and fast.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -15,7 +19,7 @@ DATABASES = {
     }
 }
 
-# Inline Redis so the suite never requires a running broker.
+# Inline local-memory cache so the suite never needs a running Redis.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -23,15 +27,28 @@ CACHES = {
     }
 }
 
+# Run tasks synchronously and surface their errors immediately.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = "memory://"
+CELERY_RESULT_BACKEND = "cache+memory://"
 
+# Never attempt outbound mail or brute-force protection.
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+AXES_ENABLED = False
 
+# Fast password hashing keeps the auth tests quick.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# Speed up admin/media rendering in tests and silence WhiteNoise startup noise.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+WHITENOISE_AUTOREFRESH = False
+WHITENOISE_USE_FINDERS = False
+
+DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: False}
 
 DEV_ADMIN_EMAIL = "admin@whitebird.test"
 DEV_ADMIN_PASSWORD = "admin-password"
-
-SITE_STATS_SCHEDULE_SECONDS = 900

@@ -7,7 +7,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
-from apps.common.models import TimeStampedModel
+from apps.core.models import TimeStampedModel
 
 
 class Role(models.TextChoices):
