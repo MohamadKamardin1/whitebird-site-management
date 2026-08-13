@@ -1,0 +1,55 @@
+[project]
+name = "whitebird"
+version = "1.0.0"
+description = "White Bird Zanzibar — Site Management Module backend"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "-q --no-header"
+testpaths = ["apps"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF", "PL"]
+ignore = [
+    "PLR2004",  # magic-value-in-comparison (HTTP status codes read fine in tests)
+    "RUF012",   # mutable class defaults (Django Meta/Field patterns are noise here)
+    "PLR0913",  # too-many-arguments (service signatures are deliberate)
+    "PLR0917",
+    "S101",     # assert used in tests
+    "S311",     # pseudo-random for slugs in seed data
+]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/*/migrations/*" = ["E501"]
+"config/settings/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main"]
+mypy_path = "."
+strict = true
+ignore_missing_imports = true
+exclude = [
+    "apps/*/migrations/",
+    "config/settings/",
+]
+
+[[tool.mypy.overrides]]
+module = ["config.celery", "manage"]
+disallow_untyped_defs = false
+
+# Tests lean on untyped pytest fixtures; strictness there adds noise without
+# catching real defects, so relax only the annotation requirements.
+[[tool.mypy.overrides]]
+module = ["apps.*.tests.*", "apps.conftest"]
+disallow_untyped_defs = false
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
