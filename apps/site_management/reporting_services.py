@@ -273,6 +273,21 @@ def return_site_report(*, report: DailySiteReport, user: User, reason: str) -> D
         report.save()
         _audit(AuditLog.Action.STATUS_CHANGE, report, user, f"Returned site report {report.report_date}: {reason}")
         _invalidate_reports()
+    created_by = report.created_by
+    if created_by is not None:
+        from .services import notify
+
+        notify(
+            recipient=created_by,
+            verb="report_returned",
+            title="Site report returned",
+            body=f"{report.site.name} report for {report.report_date} was returned: {reason}",
+            actor=user,
+            object_type="site_management.dailysitereport",
+            object_id=report.pk,
+            link=f"/admin/site_management/dailysitereport/{report.pk}/change/",
+            dedup_key=f"report-returned:{report.pk}",
+        )
     return report
 
 

@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import RoleCode, User
 from apps.core.files import validate_file_extension, validate_file_size
 from apps.core.models import AuditLog
 from apps.core.services import model_data, publish_domain_event, record_audit
@@ -36,6 +36,7 @@ from .models import (
     SiteArea,
 )
 from .policies import can_assign_job, can_verify_job, ensure
+from .services import notify_role
 
 EVENT_ISSUE_CREATED = "IssueCreated"
 EVENT_ISSUE_ESCALATED = "IssueEscalated"
@@ -193,6 +194,16 @@ def escalate_issue(*, issue: Issue, actor: User, reason: str = "") -> Issue:
             before=before,
         )
         _emit(EVENT_ISSUE_ESCALATED, issue, actor, {"level": issue.escalation_level, "reason": reason})
+        notify_role(
+            role=RoleCode.GENERAL_SUPERVISOR,
+            verb="issue_escalated",
+            title=f"Issue escalated: {issue.title}",
+            body=f"{issue.site.name} — {issue.title} escalated to level {issue.escalation_level}.",
+            object_type="site_management.issue",
+            object_id=issue.pk,
+            link=f"/admin/site_management/issue/{issue.pk}/change/",
+            dedup_key=f"issue-escalated:{issue.pk}",
+        )
     return issue
 
 

@@ -5,6 +5,45 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 19] — 2026-08-14
+
+### Added
+
+- **Notification model evolution** (migration `0013`): `actor`, `verb`,
+  `object_type`/`object_id`, `link`, `read_at`, `dedup_key` + recipient
+  read-index; legacy `create_notification` retained as a thin wrapper.
+- **Notification service**: `notify(...)` (verb-based, optional
+  deduplication of unread alerts), `notify_role(...)` (fan-out to a role),
+  `mark_all_notifications_read`. Wired into issue escalation (notify GS),
+  job assignment (notify assignee), site-report return (notify creator), and
+  low-stock alerts (deduped).
+- **Notification API**: `POST /notifications/{id}/read` and
+  `POST /notifications/read-all` added to the existing list/unread-count.
+- **Domain events**: publisher task `publish_domain_events` (marks outbox rows
+  published, idempotent) — all event types were already emitted via
+  `transaction.on_commit` with versioned payloads and `occurred_at`.
+- **Celery platform tasks** (`apps/core/tasks.py`): `publish_domain_events`,
+  `send_in_app_notifications` (batched delivery), `warm_dashboard_cache`,
+  `check_missing_site_reports`, `check_overdue_jobs`, `check_low_stock`,
+  `cleanup_old_notifications`. All idempotent with retry/backoff; alert checks
+  create deduplicated notifications.
+- **Celery Beat schedules**: publish events (30s), warm dashboard cache (5m),
+  missing-reports / overdue-jobs / low-stock checks (30m) registered
+  idempotently on migrate alongside the existing stats refresh.
+- **Exports** (`export_services.py` + `/exports/*.csv` endpoints): attendance,
+  cleaners, issues, jobs, reports — scoped to `visible_sites`, streamed via
+  `iterator`, CSV cells sanitised against formula injection, constance
+  `EXPORT_MAX_ROWS` cap, dated filenames, audited (`FILE_DOWNLOAD`), guarded by
+  `can_export_data`.
+- **Constance**: `NOTIFICATION_RETENTION_DAYS`, `EXPORT_MAX_ROWS`.
+- **Tests** (`apps/core/tests/test_platform.py`): event publishing, notify
+  dedup, unread-count/read-all, scheduled checks (missing report/overdue job/
+  low stock → deduped notifications), notification cleanup, cache warming,
+  export output + formula sanitisation + permissions.
+- **Docs**: `docs/OFFICE_INTEGRATION.md` — the future Office Management
+  boundary (HR/Inventory/Finance/Procurement), event vocabulary, API/export
+  surface, and the subscription strategy.
+
 ## [Prompt 18] — 2026-08-14
 
 ### Added

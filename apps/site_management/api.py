@@ -88,6 +88,13 @@ from .dashboard_selectors import (
     low_stock_by_site,
     report_status_by_site,
 )
+from .export_services import (
+    attendance_export_rows,
+    cleaner_export_rows,
+    issue_export_rows,
+    job_export_rows,
+    report_export_rows,
+)
 from .inspection_selectors import (
     InspectionFilter,
     TemplateFilter,
@@ -356,6 +363,7 @@ from .services import (
     deactivate_department,
     deactivate_operational_role,
     deactivate_shift,
+    mark_all_notifications_read,
     mark_notifications_read,
     restore_site,
     set_primary_assignment,
@@ -500,11 +508,14 @@ def _assignment_out(assignment: StaffAssignment) -> AssignmentOut:
 def _notification_out(notification: Notification) -> NotificationOut:
     return NotificationOut(
         id=notification.pk,
+        verb=notification.verb,
         title=notification.title,
         body=notification.body,
-        entity_type=notification.entity_type,
-        entity_id=notification.entity_id,
+        object_type=notification.object_type,
+        object_id=notification.object_id,
+        link=notification.link,
         is_read=notification.is_read,
+        read_at=notification.read_at,
         created_at=notification.created_at,
     )
 
@@ -4200,3 +4211,78 @@ def dashboards_report_status_endpoint(
 ) -> dict[str, object]:
     _report_read(request.auth)
     return report_status_by_site(request.auth, report_date or date.today())
+
+
+@router.post(
+    "/notifications/{notification_id}/read",
+    response=MessageOut,
+    summary="Mark a single notification as read",
+    tags=["Notifications"],
+)
+def notification_read(request: AuthenticatedRequest, notification_id: int) -> MessageOut:
+    updated = mark_notifications_read(user=request.auth, notification_ids=[notification_id])
+    if not updated:
+        raise Http404("Notification not found.")
+    return MessageOut(detail="Notification marked as read.")
+
+
+@router.post(
+    "/notifications/read-all",
+    response=MessageOut,
+    summary="Mark all notifications as read",
+    tags=["Notifications"],
+)
+def notification_read_all(request: AuthenticatedRequest) -> MessageOut:
+    updated = mark_all_notifications_read(user=request.auth)
+    return MessageOut(detail=f"{updated} notification(s) marked as read.")
+
+
+@router.get("/exports/attendance.csv", summary="Stream attendance CSV export", tags=["Exports"])
+def export_attendance_csv(
+    request: AuthenticatedRequest,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> StreamingHttpResponse:
+    _export_guard(request.auth)
+    filename, rows = attendance_export_rows(request.auth, date_from=date_from, date_to=date_to)
+    return _csv_response(filename, rows)
+
+
+@router.get("/exports/cleaners.csv", summary="Stream cleaner CSV export", tags=["Exports"])
+def export_cleaners_csv(request: AuthenticatedRequest) -> StreamingHttpResponse:
+    _export_guard(request.auth)
+    filename, rows = cleaner_export_rows(request.auth)
+    return _csv_response(filename, rows)
+
+
+@router.get("/exports/issues.csv", summary="Stream issues CSV export", tags=["Exports"])
+def export_issues_csv(request: AuthenticatedRequest) -> StreamingHttpResponse:
+    _export_guard(request.auth)
+    filename, rows = issue_export_rows(request.auth)
+    return _csv_response(filename, rows)
+
+
+@router.get("/exports/jobs.csv", summary="Stream jobs CSV export", tags=["Exports"])
+def export_jobs_csv(request: AuthenticatedRequest) -> StreamingHttpResponse:
+    _export_guard(request.auth)
+    filename, rows = job_export_rows(request.auth)
+    return _csv_response(filename, rows)
+
+
+@router.get("/exports/reports.csv", summary="Stream reports CSV export", tags=["Exports"])
+def export_reports_csv(request: AuthenticatedRequest, report_date: date | None = None) -> StreamingHttpResponse:
+    _export_guard(request.auth)
+    filename, rows = report_export_rows(request.auth, report_date)
+    return _csv_response(filename, rows)
+
+
+def _export_guard(user: User) -> None:
+    _report_read(user)
+    if not can_export_data(user, "export"):
+        raise PermissionDenied("You do not have permission to export data.")
+
+
+def _csv_response(filename: str, rows: Any) -> StreamingHttpResponse:
+    response = StreamingHttpResponse(rows, content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

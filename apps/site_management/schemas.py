@@ -206,11 +206,14 @@ class AssignmentCreateIn(Schema):
 
 class NotificationOut(Schema):
     id: int
+    verb: str = ""
     title: str
-    body: str
-    entity_type: str
-    entity_id: str
+    body: str = ""
+    object_type: str = ""
+    object_id: str = ""
+    link: str = ""
     is_read: bool
+    read_at: datetime | None = None
     created_at: datetime
 
 

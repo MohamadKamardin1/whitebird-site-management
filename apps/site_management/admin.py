@@ -318,10 +318,22 @@ class StaffAssignmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ("recipient", "title", "is_read", "entity_type", "created_at")
-    list_filter = ("is_read", "created_at")
-    search_fields = ("recipient__email", "title")
-    readonly_fields = ("recipient", "title", "body", "entity_type", "entity_id", "created_at")
+    list_display = ("recipient", "title", "verb", "is_read", "created_at")
+    list_filter = ("is_read", "verb", "created_at")
+    search_fields = ("recipient__email", "title", "body")
+    readonly_fields = (
+        "recipient",
+        "actor",
+        "verb",
+        "title",
+        "body",
+        "object_type",
+        "object_id",
+        "link",
+        "read_at",
+        "dedup_key",
+        "created_at",
+    )
 
 
 @admin.register(OperationalRole)

@@ -13,9 +13,10 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
-from apps.accounts.models import User
+from apps.accounts.models import RoleCode, User
 from apps.core.cache import invalidate_prefix
 from apps.core.models import AuditLog
 from apps.core.services import model_data, record_audit
@@ -435,17 +436,85 @@ def create_notification(
     entity_type: str = "",
     entity_id: str = "",
 ) -> Notification:
-    return Notification.objects.create(
-        recipient=recipient,
-        title=title,
-        body=body,
-        entity_type=entity_type,
-        entity_id=entity_id,
+    """Backward-compatible thin wrapper over :func:`notify`."""
+    return notify(
+        recipient=recipient, verb=entity_type, title=title, body=body, object_type=entity_type, object_id=entity_id
     )
 
 
+def notify(
+    *,
+    recipient: User,
+    verb: str,
+    title: str | None = None,
+    body: str = "",
+    actor: User | None = None,
+    object_type: str = "",
+    object_id: str | int = "",
+    link: str = "",
+    dedup_key: str = "",
+) -> Notification:
+    """Create an in-platform notification with optional deduplication.
+
+    When ``dedup_key`` is set, an existing *unread* notification with the same
+    key for the recipient is left untouched (repeated alerts coalesce).
+    """
+    if dedup_key and Notification.objects.filter(recipient=recipient, dedup_key=dedup_key, is_read=False).exists():
+        return Notification.objects.filter(recipient=recipient, dedup_key=dedup_key, is_read=False).first()  # type: ignore[return-value]
+    return Notification.objects.create(
+        recipient=recipient,
+        actor=actor,
+        verb=verb,
+        title=title or verb.replace("_", " ").title(),
+        body=body,
+        object_type=object_type,
+        object_id=str(object_id) if object_id else "",
+        link=link,
+        dedup_key=dedup_key,
+    )
+
+
+def notify_role(
+    *,
+    role: RoleCode,
+    verb: str,
+    object_type: str = "",
+    object_id: str | int = "",
+    link: str = "",
+    body: str = "",
+    title: str | None = None,
+    dedup_key: str = "",
+) -> int:
+    """Notify every active user holding ``role``; returns the count created."""
+    from django.db.models import Q
+
+    recipients = User.objects.filter(is_active=True).filter(Q(role=role) | Q(is_superuser=True))
+    created = 0
+    for recipient in recipients:
+        notify(
+            recipient=recipient,
+            verb=verb,
+            title=title,
+            body=body,
+            object_type=object_type,
+            object_id=object_id,
+            link=link,
+            dedup_key=dedup_key,
+        )
+        created += 1
+    return created
+
+
 def mark_notifications_read(*, user: User, notification_ids: list[int]) -> int:
-    return Notification.objects.filter(recipient=user, pk__in=notification_ids, is_read=False).update(is_read=True)
+    now = timezone.now()
+    return Notification.objects.filter(recipient=user, pk__in=notification_ids, is_read=False).update(
+        is_read=True, read_at=now
+    )
+
+
+def mark_all_notifications_read(*, user: User) -> int:
+    now = timezone.now()
+    return Notification.objects.filter(recipient=user, is_read=False).update(is_read=True, read_at=now)
 
 
 # --------------------------------------------------------------------------- #

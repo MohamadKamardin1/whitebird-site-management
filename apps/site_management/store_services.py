@@ -36,7 +36,7 @@ from .models import (
     StockRequestStatus,
     StoreItem,
 )
-from .services import create_notification
+from .services import notify
 
 EVENT_STOCK_REQUEST_SUBMITTED = "StockRequestSubmitted"
 EVENT_STOCK_LOW = "StockLow"
@@ -306,12 +306,15 @@ def _maybe_low_stock_alert(item: StoreItem, actor: User) -> None:
         store = item.store
         managed_by = store.managed_by
         if config.ENABLE_NOTIFICATIONS and managed_by is not None:
-            create_notification(
+            notify(
                 recipient=managed_by,
+                verb="low_stock",
                 title=f"Low stock: {item.item_name}",
                 body=f"{item.item_name} is at {item.current_stock} {item.unit} (min {item.minimum_stock_level}).",
-                entity_type="storeitem",
-                entity_id=str(item.pk),
+                object_type="site_management.storeitem",
+                object_id=item.pk,
+                link=f"/admin/site_management/storeitem/{item.pk}/change/",
+                dedup_key=f"low-stock:{item.pk}",
             )
 
 

@@ -25,7 +25,35 @@ Module. Each prompt updates this file before its commit.
 | 16     | Performance & caching | **Prompt 16 completed** | see CHANGELOG |
 | 17     | Jazzmin soft-gold admin theme | **Prompt 17 completed** | see CHANGELOG |
 | 18     | Role-based dashboards | **Prompt 18 completed** | see CHANGELOG |
-| 19–20  | (pending)                                    | —                  | —      |
+| 19     | Events, notifications, tasks, exports | **Prompt 19 completed** | see CHANGELOG |
+| 20     | (pending)                                    | —                  | —      |
+
+## Prompt 19 — completed ✅
+
+Finished the operational backbone:
+
+- **Domain events**: publisher task `publish_domain_events` advances the
+  transactional outbox (all event types already emitted with versioned payloads
+  + `occurred_at` via `transaction.on_commit`).
+- **Notifications**: evolved model (`actor`, `verb`, `object_type/id`, `link`,
+  `read_at`, `dedup_key`), `notify`/`notify_role` service with deduplication,
+  wired into escalation/assignment/report-return/low-stock; new
+  `POST /notifications/{id}/read` and `/read-all` endpoints.
+- **Celery tasks** (`apps/core/tasks.py`): publish events, batched in-app
+  delivery, warm dashboard cache, missing-report / overdue-job / low-stock
+  checks (deduped alerts), notification cleanup — all idempotent with retry/
+  backoff; beat schedules registered on migrate.
+- **Exports**: `/exports/{attendance,cleaners,issues,jobs,reports}.csv` —
+  scoped, streamed, formula-injection-safe, `EXPORT_MAX_ROWS` cap, dated
+  filenames, audited, guarded by `can_export_data`.
+- **Office boundary**: `docs/OFFICE_INTEGRATION.md` (HR/Inventory/Finance/
+  Procurement modules, event vocabulary, API/export surface, subscription
+  strategy; no direct coupling today).
+- **Tests** (`apps/core/tests/test_platform.py`): event publishing, notify
+  dedup, unread/read-all, scheduled checks, cleanup, cache warm, exports.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 498 passed ·
+coverage 90.36% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 18 — completed ✅
 

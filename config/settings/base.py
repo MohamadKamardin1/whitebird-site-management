@@ -185,6 +185,8 @@ CONSTANCE_CONFIG = {
     "LOW_STOCK_DEFAULT": (5, "Default low-stock threshold for the site store."),
     "ALLOW_NEGATIVE_STOCK": (False, "Explicit override allowing negative stock levels in the site store."),
     "JOB_COMPLETION_PHOTO_REQUIRED": (False, "Require photo evidence to complete a job."),
+    "NOTIFICATION_RETENTION_DAYS": (90, "Read notifications are purged after this many days."),
+    "EXPORT_MAX_ROWS": (100000, "Maximum rows a single export may return."),
     "ENABLE_DOMAIN_EVENTS": (False, "Emit domain events to the event bus."),
     "ENABLE_NOTIFICATIONS": (True, "Deliver in-platform notifications."),
 }

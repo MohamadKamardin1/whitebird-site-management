@@ -439,19 +439,40 @@ class AssistantGeneralSupervisorAssignment(AssignmentMixin, UserStampedModel):
 
 
 class Notification(TimeStampedModel):
-    """In-platform notification targeted at a user."""
+    """In-platform notification targeted at a user.
+
+    ``verb`` names the activity (e.g. ``job_assigned``, ``report_returned``);
+    ``title``/``body`` hold the human-readable copy. ``dedup_key`` lets repeated
+    alerts coalesce into one unread notification (e.g. the same overdue job
+    alerted on successive runs).
+    """
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notifications_sent",
+    )
+    verb = models.CharField(max_length=64, blank=True, default="", db_index=True)
     title = models.CharField(max_length=160)
     body = models.TextField(blank=True, default="")
-    entity_type = models.CharField(max_length=64, blank=True, default="")
-    entity_id = models.CharField(max_length=36, blank=True, default="")
+    object_type = models.CharField(max_length=64, blank=True, default="")
+    object_id = models.CharField(max_length=36, blank=True, default="")
+    link = models.CharField(max_length=255, blank=True, default="")
     is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    dedup_key = models.CharField(max_length=128, blank=True, default="", db_index=True)
 
     class Meta:
         verbose_name = "Notification"
         verbose_name_plural = "Notifications"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "is_read", "-created_at"]),
+            models.Index(fields=["dedup_key", "is_read"]),
+        ]
 
     def __str__(self) -> str:
         return f"[{self.recipient}] {self.title}"
