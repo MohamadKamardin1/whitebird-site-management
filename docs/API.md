@@ -296,6 +296,40 @@ Submitted inspections are immutable until returned. Permissions: read =
 management/viewer; start/manage = site scope; return/review = zone supervisor
 or above.
 
+### Issues & Jobs
+
+| Method | Path                              | Description                                    |
+| ------ | --------------------------------- | ---------------------------------------------- |
+| GET    | `/issues`                         | Paginated issues (site/status/priority/category/source/assigned/escalated) |
+| POST   | `/issues`                         | Raise an issue (`title`, `site_id`, `source`, `inspection_id`, ...) |
+| GET    | `/issues/summary`                 | Counts by status/priority/category + escalated |
+| GET    | `/issues/{id}`                    | Issue detail                                   |
+| PUT    | `/issues/{id}`                    | Update metadata (not closed)                   |
+| POST   | `/issues/{id}/review`             | OPEN/REOPENED → UNDER_REVIEW (zone+)           |
+| POST   | `/issues/{id}/escalate`           | Escalate (level + flag; GS/AGS)                |
+| POST   | `/issues/{id}/jobs`               | Spawn an assigned job from the issue           |
+| GET    | `/jobs`                           | Paginated jobs (site/status/priority/issue/assignee) |
+| POST   | `/jobs`                           | Create a job (standalone or issue-linked)      |
+| GET    | `/jobs/overdue`                   | Jobs past due and not done                     |
+| GET    | `/jobs/summary`                   | Counts by status + overdue total               |
+| GET    | `/jobs/{id}`                      | Job detail                                     |
+| PUT    | `/jobs/{id}`                      | Update metadata (not closed)                   |
+| POST   | `/jobs/{id}/assign`               | Assign to user/cleaner (`assign_job` perm)     |
+| POST   | `/jobs/{id}/start`                | ASSIGNED → IN_PROGRESS                         |
+| POST   | `/jobs/{id}/complete`             | → COMPLETED (`completion_notes`; photo required when configured) |
+| POST   | `/jobs/{id}/photo`                | Upload private completion photo (`file`)       |
+| GET    | `/jobs/{id}/photo/download-url`   | Signed photo URL                               |
+| POST   | `/jobs/{id}/verify`               | COMPLETED → VERIFIED (`verify_job` perm)       |
+| POST   | `/jobs/{id}/close`                | VERIFIED → CLOSED (verification required)      |
+| POST   | `/jobs/{id}/reopen`               | → REOPENED preserving history (`reason`)       |
+
+Lifecycle: issues OPEN → UNDER_REVIEW → ASSIGNED → … → CLOSED; jobs OPEN →
+ASSIGNED → IN_PROGRESS → COMPLETED → VERIFIED → CLOSED (+ REOPENED). A job
+cannot close without verification. Permissions: read = management/viewer;
+manage (raise/update/complete) = site scope; review/close/reopen = zone
+supervisor+; escalate = GS/AGS; assign/verify = RBAC custom permissions + site
+scope.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

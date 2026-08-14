@@ -182,6 +182,7 @@ CONSTANCE_CONFIG = {
     "FILE_TOKEN_TTL_SECONDS": (900, "Signed file token lifetime (seconds)."),
     "LOW_STOCK_DEFAULT": (5, "Default low-stock threshold for the site store."),
     "ALLOW_NEGATIVE_STOCK": (False, "Explicit override allowing negative stock levels in the site store."),
+    "JOB_COMPLETION_PHOTO_REQUIRED": (False, "Require photo evidence to complete a job."),
     "ENABLE_DOMAIN_EVENTS": (False, "Emit domain events to the event bus."),
     "ENABLE_NOTIFICATIONS": (True, "Deliver in-platform notifications."),
 }

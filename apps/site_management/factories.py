@@ -22,6 +22,8 @@ from .models import (
     InspectionResult,
     InspectionTemplate,
     InspectionTemplateItem,
+    Issue,
+    Job,
     OperationalRole,
     Site,
     SiteArea,
@@ -373,3 +375,30 @@ class InspectionResultFactory(factory.django.DjangoModelFactory):
     template_item = factory.SubFactory(InspectionTemplateItemFactory)
     passed = True
     uploaded_by = factory.SubFactory(UserFactory)
+
+
+class IssueFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Issue
+
+    title = factory.Sequence(lambda n: f"Issue {n}")
+    source = "manual"
+    site = factory.SubFactory(SiteFactory)
+    issue_category = "other"
+    priority = "medium"
+    status = "open"
+    raised_by = factory.SubFactory(UserFactory)
+    created_by = factory.SubFactory(UserFactory)
+
+
+class JobFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Job
+
+    job_title = factory.Sequence(lambda n: f"Job {n}")
+    site = factory.SubFactory(SiteFactory)
+    assigned_by = factory.SubFactory(UserFactory)
+    due_date = date.today() + timedelta(days=3)
+    priority = "medium"
+    status = "open"
+    created_by = factory.SubFactory(UserFactory)

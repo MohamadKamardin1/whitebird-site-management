@@ -5,6 +5,44 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 12] — 2026-08-14
+
+### Added
+
+- **`Issue`**: title/description, source (inspection/attendance/store/manual/
+  report), site/area/cleaner/inspection refs, category, priority, full status
+  lifecycle (OPEN → UNDER_REVIEW → ASSIGNED → IN_PROGRESS → COMPLETED →
+  VERIFIED → CLOSED, REOPENED), escalation level + flag, due date, resolved/
+  closed timestamps.
+- **`Job`**: work orders (issue-linked or standalone) assigned to users or
+  cleaners, priority, full status lifecycle with verify-before-close, private
+  completion photo (`file` on the private backend), completion/verified/closed
+  timestamps; `overdue` = past due and not done.
+- **Services** (transactional + audited): create/update/review/escalate issue,
+  assign-from-issue, create/update/assign/start/complete/verify/close/reopen
+  job; transition-controlled; photo evidence enforced when
+  `JOB_COMPLETION_PHOTO_REQUIRED`; reopened jobs preserve history; issue status
+  follows its jobs (assigned once worked, closed when all jobs close); domain
+  events `IssueCreated`, `IssueEscalated`, `JobAssigned`, `JobCompleted`,
+  `JobVerified`.
+- **Selectors**: role-scoped `issue_list`, `issue_detail`, `job_list`,
+  `job_detail`, `overdue_jobs`, `issue_summary`, `job_summary` (single
+  queries).
+- **API**: `/issues` CRUD + review/escalate/jobs, `/jobs` CRUD +
+  assign/start/complete/verify/close/reopen + photo upload + signed
+  download-url + `/jobs/overdue` + `/jobs/summary` + `/issues/summary`; read =
+  management/viewer, manage = site scope, review/close/reopen = zone
+  supervisor+, escalate = GS/AGS, assign = `assign_job` perm + site scope,
+  verify = `verify_job` perm + site scope.
+- **Admin**: `IssueAdmin` (priority/category/status badges, job inline,
+  escalate/assign/verify/reopen actions, delete guard) and `JobAdmin`
+  (due date/status/assignee, readonly photo fields, delete guard).
+- **Factories** + migration (`site_management.0010`).
+
+### Changed
+
+- `JOB_COMPLETION_PHOTO_REQUIRED` added to constance runtime configuration.
+
 ## [Prompt 11] — 2026-08-14
 
 ### Added

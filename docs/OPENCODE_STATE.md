@@ -18,7 +18,38 @@ Module. Each prompt updates this file before its commit.
 | 9      | Trainee lifecycle & conversion | **Prompt 9 completed** | see CHANGELOG |
 | 10     | Site store & stock requests | **Prompt 10 completed** | see CHANGELOG |
 | 11     | Inspections & templates | **Prompt 11 completed** | see CHANGELOG |
-| 12–20  | (pending)                                    | —                  | —      |
+| 12     | Issues, jobs & escalation | **Prompt 12 completed** | see CHANGELOG |
+| 13–20  | (pending)                                    | —                  | —      |
+
+## Prompt 12 — completed ✅
+
+Implemented issue tracking and job/work-order assignment with full escalation
+and verification workflow:
+
+- **`Issue`**: sources (inspection/attendance/store/manual/report), category,
+  priority, escalation level/flag, status lifecycle with due dates; linked to
+  area/cleaner/inspection.
+- **`Job`**: issue-linked or standalone work orders assigned to users/cleaners,
+  full lifecycle OPEN → ASSIGNED → IN_PROGRESS → COMPLETED → VERIFIED → CLOSED
+  (+ REOPENED preserving history), private completion photo, `overdue` flag.
+- **Services**: transition-controlled and audited; verify is required before a
+  job can close; photo evidence enforced when `JOB_COMPLETION_PHOTO_REQUIRED`;
+  issue status follows its jobs (assigned when worked, closed when all jobs
+  close); `IssueCreated`, `IssueEscalated`, `JobAssigned`, `JobCompleted`,
+  `JobVerified` domain events.
+- **API**: issues CRUD + review/escalate/jobs, jobs CRUD +
+  assign/start/complete/verify/close/reopen, photo upload + signed download,
+  `/issues/summary`, `/jobs/overdue`, `/jobs/summary`; read = management/
+  viewer, manage = site scope, review/close/reopen = zone supervisor+,
+  escalate = GS/AGS, assign/verify = RBAC `assign_job`/`verify_job` + site
+  scope.
+- **Admin**: `IssueAdmin` (badges, job inline, escalate/assign/verify/reopen
+  actions, delete guard) and `JobAdmin` (due/status/assignee, readonly photo
+  fields, delete guard).
+- **Factories** + migration (`site_management.0010`).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 412 passed ·
+coverage 90.30% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 11 — completed ✅
 

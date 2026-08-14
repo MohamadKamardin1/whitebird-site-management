@@ -1612,3 +1612,204 @@ class InspectionResult(PrivateFileModel):
         elif item_type == InspectionItemType.TEXT:
             if not self.value_text.strip():
                 raise ValidationError("Text items require a text answer.", code="text_required")
+
+
+# --------------------------------------------------------------------------- #
+# Issues & jobs
+# --------------------------------------------------------------------------- #
+
+
+class IssueSource(models.TextChoices):
+    INSPECTION = "inspection", "Inspection"
+    ATTENDANCE = "attendance", "Attendance"
+    STORE = "store", "Store"
+    MANUAL = "manual", "Manual"
+    REPORT = "report", "Report"
+
+
+class IssueCategory(models.TextChoices):
+    CLEANING_QUALITY = "cleaning_quality", "Cleaning Quality"
+    MAINTENANCE = "maintenance", "Maintenance"
+    SAFETY = "safety", "Safety"
+    MATERIALS = "materials", "Materials"
+    BEHAVIOR = "behavior", "Behavior"
+    ATTENDANCE = "attendance", "Attendance"
+    OTHER = "other", "Other"
+
+
+class IssuePriority(models.TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    URGENT = "urgent", "Urgent"
+
+
+class IssueStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    UNDER_REVIEW = "under_review", "Under Review"
+    ASSIGNED = "assigned", "Assigned"
+    IN_PROGRESS = "in_progress", "In Progress"
+    COMPLETED = "completed", "Completed"
+    VERIFIED = "verified", "Verified"
+    CLOSED = "closed", "Closed"
+    REOPENED = "reopened", "Reopened"
+
+
+class JobStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    ASSIGNED = "assigned", "Assigned"
+    IN_PROGRESS = "in_progress", "In Progress"
+    COMPLETED = "completed", "Completed"
+    VERIFIED = "verified", "Verified"
+    CLOSED = "closed", "Closed"
+    REOPENED = "reopened", "Reopened"
+
+
+class Issue(UserStampedModel):
+    """An operational issue raised at a site, optionally tied to an
+    inspection/attendance/store record, tracked through escalation."""
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    source = models.CharField(max_length=16, choices=IssueSource.choices, default=IssueSource.MANUAL, db_index=True)
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="issues")
+    area = models.ForeignKey(SiteArea, on_delete=models.SET_NULL, null=True, blank=True, related_name="issues")
+    cleaner = models.ForeignKey(Cleaner, on_delete=models.SET_NULL, null=True, blank=True, related_name="issues")
+    inspection = models.ForeignKey(Inspection, on_delete=models.SET_NULL, null=True, blank=True, related_name="issues")
+    issue_category = models.CharField(
+        max_length=24, choices=IssueCategory.choices, default=IssueCategory.OTHER, db_index=True
+    )
+    priority = models.CharField(
+        max_length=8, choices=IssuePriority.choices, default=IssuePriority.MEDIUM, db_index=True
+    )
+    status = models.CharField(max_length=16, choices=IssueStatus.choices, default=IssueStatus.OPEN, db_index=True)
+    raised_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="raised_issues",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_issues",
+    )
+    due_date = models.DateField(null=True, blank=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    escalation_level = models.PositiveSmallIntegerField(default=0)
+    is_escalated = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        verbose_name = "Issue"
+        verbose_name_plural = "Issues"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["site", "status"]),
+            models.Index(fields=["site", "priority"]),
+            models.Index(fields=["status", "due_date"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} @ {self.site.name} ({self.status})"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in {IssueStatus.CLOSED}
+
+    @property
+    def overdue(self) -> bool:
+        from django.utils import timezone
+
+        if self.due_date is None:
+            return False
+        if self.status in {IssueStatus.CLOSED}:
+            return False
+        return self.due_date < timezone.localdate()
+
+
+class Job(UserStampedModel):
+    """A work order spawned from an issue (or standalone) with a verify-before-
+    close lifecycle and optional private completion photo."""
+
+    issue = models.ForeignKey(Issue, on_delete=models.SET_NULL, null=True, blank=True, related_name="jobs")
+    job_title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="jobs")
+    assigned_to_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_jobs",
+    )
+    assigned_to_cleaner = models.ForeignKey(
+        Cleaner, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_jobs"
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_jobs_by",
+    )
+    due_date = models.DateField(db_index=True)
+    priority = models.CharField(
+        max_length=8, choices=IssuePriority.choices, default=IssuePriority.MEDIUM, db_index=True
+    )
+    status = models.CharField(max_length=16, choices=JobStatus.choices, default=JobStatus.OPEN, db_index=True)
+    completion_notes = models.TextField(blank=True, default="")
+    file = models.FileField(
+        storage=PrivateMediaStorage(),
+        upload_to="private/jobs/%Y/%m/",
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Private completion photo; served only via signed download tokens.",
+    )
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    content_type = models.CharField(max_length=127, blank=True, default="")
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_jobs",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Job"
+        verbose_name_plural = "Jobs"
+        ordering = ["due_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["site", "status"]),
+            models.Index(fields=["status", "due_date"]),
+            models.Index(fields=["issue", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.job_title} @ {self.site.name} ({self.status})"
+
+    @property
+    def overdue(self) -> bool:
+        from django.utils import timezone
+
+        if self.status in {JobStatus.COMPLETED, JobStatus.VERIFIED, JobStatus.CLOSED}:
+            return False
+        return self.due_date < timezone.localdate()
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status == JobStatus.CLOSED
+
+    def clean(self) -> None:
+        super().clean()
+        if self.issue_id and self.issue is not None and self.issue.site_id != self.site_id:
+            raise ValidationError("Issue must belong to the job's site.", code="issue_site_mismatch")

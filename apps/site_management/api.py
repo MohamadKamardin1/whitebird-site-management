@@ -99,6 +99,33 @@ from .inspection_services import (
     update_template,
     upload_result_photo,
 )
+from .issues_selectors import (
+    IssueFilter,
+    JobFilter,
+    get_issue_or_none,
+    get_job_or_none,
+    issue_list,
+    issue_summary,
+    job_list,
+    job_summary,
+    overdue_jobs,
+)
+from .issues_services import (
+    assign_job,
+    assign_job_from_issue,
+    close_job,
+    complete_job,
+    create_issue,
+    create_job,
+    escalate_issue,
+    reopen_job,
+    review_issue,
+    start_job,
+    update_issue,
+    update_job,
+    upload_job_photo,
+    verify_job,
+)
 from .models import (
     Asset,
     AssetCategory,
@@ -118,6 +145,8 @@ from .models import (
     InspectionResult,
     InspectionTemplate,
     InspectionTemplateItem,
+    Issue,
+    Job,
     Notification,
     OperationalRole,
     Site,
@@ -180,6 +209,19 @@ from .schemas import (
     InspectionTemplateStatusIn,
     InspectionTemplateUpdateIn,
     InspectionUpdateIn,
+    IssueCreateIn,
+    IssueEscalateIn,
+    IssueOut,
+    IssueReviewIn,
+    IssueSummaryOut,
+    IssueUpdateIn,
+    JobAssignIn,
+    JobCompleteIn,
+    JobCreateIn,
+    JobOut,
+    JobReopenIn,
+    JobSummaryOut,
+    JobUpdateIn,
     MessageOut,
     NotificationOut,
     OperationalRoleCreateIn,
@@ -3110,3 +3152,473 @@ def inspection_result_download_url(request: AuthenticatedRequest, inspection_id:
         object_id=result.pk,
     )
     return DownloadUrlOut(download_url=f"/{settings.API_V1_PREFIX}/files/signed/{token}/")
+
+
+# --------------------------------------------------------------------------- #
+# Issues & jobs
+# --------------------------------------------------------------------------- #
+
+
+def _issues_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Issue records require a management role.")
+
+
+def _issues_manage(user: User, site_id: int) -> None:
+    _issues_read(user)
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You do not have permission to manage issues for this site.")
+
+
+def _issues_review(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role
+        in {
+            RoleCode.GENERAL_SUPERVISOR,
+            RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+            RoleCode.ZONE_SUPERVISOR,
+        }
+    ):
+        raise PermissionDenied("Only zone-level management can review issues.")
+
+
+def _issues_escalate(user: User) -> None:
+    if not (user.is_system_admin or user.role in {RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
+        raise PermissionDenied("Only senior management can escalate issues.")
+
+
+def _issues_assign(user: User, site_id: int) -> None:
+    _issues_read(user)
+    if not user.has_perm("accounts.assign_job"):
+        raise PermissionDenied("You do not have permission to assign jobs.")
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You do not have permission to assign jobs at this site.")
+
+
+def _issues_verify(user: User, site_id: int) -> None:
+    _issues_read(user)
+    if not user.has_perm("accounts.verify_job"):
+        raise PermissionDenied("You do not have permission to verify jobs.")
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You do not have permission to verify jobs at this site.")
+
+
+def _load_issue_or_404(issue_id: int) -> Issue:
+    issue = get_issue_or_none(issue_id)
+    if issue is None:
+        raise Http404("Issue not found.")
+    return issue
+
+
+def _load_job_or_404(job_id: int) -> Job:
+    job = get_job_or_none(job_id)
+    if job is None:
+        raise Http404("Job not found.")
+    return job
+
+
+def _issue_out(issue: Issue) -> IssueOut:
+    area = issue.area
+    cleaner = issue.cleaner
+    raised_by = issue.raised_by
+    assigned_to = issue.assigned_to
+    return IssueOut(
+        id=issue.pk,
+        title=issue.title,
+        description=issue.description,
+        source=issue.source,
+        site_id=issue.site_id,
+        site_name=issue.site.name,
+        area_id=issue.area_id,
+        area_name=area.area_name if area else None,
+        cleaner_id=issue.cleaner_id,
+        cleaner_name=cleaner.full_name if cleaner else None,
+        inspection_id=issue.inspection_id,
+        issue_category=issue.issue_category,
+        priority=issue.priority,
+        status=issue.status,
+        raised_by=raised_by.email if raised_by else None,
+        assigned_to=assigned_to.email if assigned_to else None,
+        assigned_to_id=issue.assigned_to_id,
+        due_date=issue.due_date,
+        resolved_at=issue.resolved_at,
+        closed_at=issue.closed_at,
+        escalation_level=issue.escalation_level,
+        is_escalated=issue.is_escalated,
+        job_count=issue.job_count if hasattr(issue, "job_count") else issue.jobs.count(),
+        created_at=issue.created_at,
+    )
+
+
+def _job_out(job: Job) -> JobOut:
+    assigned_user = job.assigned_to_user
+    assigned_cleaner = job.assigned_to_cleaner
+    assigned_by = job.assigned_by
+    verified_by = job.verified_by
+    issue = job.issue
+    return JobOut(
+        id=job.pk,
+        issue_id=job.issue_id,
+        issue_title=issue.title if issue else None,
+        job_title=job.job_title,
+        description=job.description,
+        site_id=job.site_id,
+        site_name=job.site.name,
+        assigned_to_user=assigned_user.email if assigned_user else None,
+        assigned_to_user_id=job.assigned_to_user_id,
+        assigned_to_cleaner=assigned_cleaner.full_name if assigned_cleaner else None,
+        assigned_to_cleaner_id=job.assigned_to_cleaner_id,
+        assigned_by=assigned_by.email if assigned_by else None,
+        due_date=job.due_date,
+        priority=job.priority,
+        status=job.status,
+        completion_notes=job.completion_notes,
+        has_completion_photo=bool(job.file),
+        completed_at=job.completed_at,
+        verified_by=verified_by.email if verified_by else None,
+        verified_at=job.verified_at,
+        closed_at=job.closed_at,
+        created_at=job.created_at,
+    )
+
+
+@router.get(
+    "/issues",
+    response=Paginated[IssueOut],
+    summary="List issues (paginated, filtered)",
+)
+def issue_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+    assigned_to_id: int | None = None,
+    escalated: bool | None = None,
+) -> Paginated[IssueOut]:
+    _issues_read(request.auth)
+    spec = IssueFilter(
+        site_id=site_id,
+        status=status,
+        priority=priority,
+        category=category,
+        source=source,
+        assigned_to_id=assigned_to_id,
+        escalated=escalated,
+    )
+    qs = issue_list(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_issue_out(i) for i in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get(
+    "/issues/summary",
+    response=IssueSummaryOut,
+    summary="Issue summary counts",
+)
+def issue_summary_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+) -> IssueSummaryOut:
+    _issues_read(request.auth)
+    spec = IssueFilter(site_id=site_id, status=status, priority=priority, category=category)
+    return IssueSummaryOut(**issue_summary(request.auth, spec))
+
+
+@router.post("/issues", response=IssueOut, summary="Raise an issue")
+def issue_create(request: AuthenticatedRequest, payload: IssueCreateIn) -> IssueOut:
+    site = _load_site_or_404(payload.site_id)
+    _issues_manage(request.auth, site.pk)
+    area = SiteArea.objects.filter(pk=payload.area_id).first() if payload.area_id else None
+    cleaner = Cleaner.objects.filter(pk=payload.cleaner_id).first() if payload.cleaner_id else None
+    inspection = None
+    if payload.inspection_id:
+        inspection = Inspection.objects.filter(pk=payload.inspection_id).first()
+        if inspection is None or inspection.site_id != site.pk:
+            raise Http404("Inspection not found.")
+    created = create_issue(
+        title=payload.title,
+        site=site,
+        raised_by=request.auth,
+        actor=request.auth,
+        description=payload.description,
+        source=payload.source,
+        issue_category=payload.issue_category,
+        priority=payload.priority,
+        area=area,
+        cleaner=cleaner,
+        inspection=inspection,
+        due_date=payload.due_date,
+    )
+    return _issue_out(get_issue_or_none(created.pk) or created)
+
+
+@router.get("/issues/{issue_id}", response=IssueOut, summary="Issue detail")
+def issue_detail_endpoint(request: AuthenticatedRequest, issue_id: int) -> IssueOut:
+    _issues_read(request.auth)
+    issue = _load_issue_or_404(issue_id)
+    if not site_in_user_scope(request.auth, issue.site_id):
+        raise PermissionDenied("You do not have access to this issue.")
+    return _issue_out(issue)
+
+
+@router.put("/issues/{issue_id}", response=IssueOut, summary="Update an issue")
+def issue_update(request: AuthenticatedRequest, issue_id: int, payload: IssueUpdateIn) -> IssueOut:
+    issue = _load_issue_or_404(issue_id)
+    _issues_manage(request.auth, issue.site_id)
+    area = SiteArea.objects.filter(pk=payload.area_id).first() if payload.area_id is not None else None
+    cleaner = Cleaner.objects.filter(pk=payload.cleaner_id).first() if payload.cleaner_id is not None else None
+    updated = update_issue(
+        issue=issue,
+        actor=request.auth,
+        title=payload.title,
+        description=payload.description,
+        issue_category=payload.issue_category,
+        priority=payload.priority,
+        area=area,
+        cleaner=cleaner,
+        due_date=payload.due_date,
+    )
+    return _issue_out(get_issue_or_none(updated.pk) or updated)
+
+
+@router.post("/issues/{issue_id}/review", response=IssueOut, summary="Review an issue")
+def issue_review(request: AuthenticatedRequest, issue_id: int, payload: IssueReviewIn) -> IssueOut:
+    issue = _load_issue_or_404(issue_id)
+    _issues_review(request.auth)
+    reviewed = review_issue(issue=issue, actor=request.auth, notes=payload.notes)
+    return _issue_out(get_issue_or_none(reviewed.pk) or reviewed)
+
+
+@router.post("/issues/{issue_id}/escalate", response=IssueOut, summary="Escalate an issue")
+def issue_escalate(request: AuthenticatedRequest, issue_id: int, payload: IssueEscalateIn) -> IssueOut:
+    issue = _load_issue_or_404(issue_id)
+    _issues_escalate(request.auth)
+    escalated = escalate_issue(issue=issue, actor=request.auth, reason=payload.reason)
+    return _issue_out(get_issue_or_none(escalated.pk) or escalated)
+
+
+@router.post("/issues/{issue_id}/jobs", response=JobOut, summary="Assign a job from an issue")
+def issue_assign_job(request: AuthenticatedRequest, issue_id: int, payload: JobAssignIn) -> JobOut:
+    issue = _load_issue_or_404(issue_id)
+    _issues_assign(request.auth, issue.site_id)
+    assigned_user = User.objects.filter(pk=payload.assigned_to_user_id).first() if payload.assigned_to_user_id else None
+    assigned_cleaner = (
+        Cleaner.objects.filter(pk=payload.assigned_to_cleaner_id).first() if payload.assigned_to_cleaner_id else None
+    )
+    job = assign_job_from_issue(
+        issue=issue,
+        actor=request.auth,
+        assigned_to_user=assigned_user,
+        assigned_to_cleaner=assigned_cleaner,
+    )
+    return _job_out(get_job_or_none(job.pk) or job)
+
+
+@router.get(
+    "/jobs",
+    response=Paginated[JobOut],
+    summary="List jobs (paginated, filtered)",
+)
+def job_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    issue_id: int | None = None,
+    assigned_to_user_id: int | None = None,
+) -> Paginated[JobOut]:
+    _issues_read(request.auth)
+    spec = JobFilter(
+        site_id=site_id,
+        status=status,
+        priority=priority,
+        issue_id=issue_id,
+        assigned_to_user_id=assigned_to_user_id,
+    )
+    qs = job_list(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_job_out(j) for j in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get(
+    "/jobs/overdue",
+    response=list[JobOut],
+    summary="List overdue jobs",
+)
+def job_overdue_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+) -> list[JobOut]:
+    _issues_read(request.auth)
+    return [_job_out(j) for j in overdue_jobs(request.auth, site_id)]
+
+
+@router.get(
+    "/jobs/summary",
+    response=JobSummaryOut,
+    summary="Job summary counts",
+)
+def job_summary_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    status: str | None = None,
+) -> JobSummaryOut:
+    _issues_read(request.auth)
+    spec = JobFilter(site_id=site_id, status=status)
+    return JobSummaryOut(**job_summary(request.auth, spec))
+
+
+@router.post("/jobs", response=JobOut, summary="Create a job")
+def job_create(request: AuthenticatedRequest, payload: JobCreateIn) -> JobOut:
+    site = _load_site_or_404(payload.site_id)
+    _issues_manage(request.auth, site.pk)
+    issue = None
+    if payload.issue_id:
+        issue = Issue.objects.filter(pk=payload.issue_id).first()
+        if issue is None or issue.site_id != site.pk:
+            raise Http404("Issue not found.")
+    assigned_user = User.objects.filter(pk=payload.assigned_to_user_id).first() if payload.assigned_to_user_id else None
+    assigned_cleaner = (
+        Cleaner.objects.filter(pk=payload.assigned_to_cleaner_id).first() if payload.assigned_to_cleaner_id else None
+    )
+    created = create_job(
+        job_title=payload.job_title,
+        site=site,
+        assigned_by=request.auth,
+        actor=request.auth,
+        description=payload.description,
+        issue=issue,
+        assigned_to_user=assigned_user,
+        assigned_to_cleaner=assigned_cleaner,
+        due_date=payload.due_date,
+        priority=payload.priority,
+    )
+    return _job_out(get_job_or_none(created.pk) or created)
+
+
+@router.get("/jobs/{job_id}", response=JobOut, summary="Job detail")
+def job_detail_endpoint(request: AuthenticatedRequest, job_id: int) -> JobOut:
+    _issues_read(request.auth)
+    job = _load_job_or_404(job_id)
+    if not site_in_user_scope(request.auth, job.site_id):
+        raise PermissionDenied("You do not have access to this job.")
+    return _job_out(job)
+
+
+@router.put("/jobs/{job_id}", response=JobOut, summary="Update a job")
+def job_update(request: AuthenticatedRequest, job_id: int, payload: JobUpdateIn) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_manage(request.auth, job.site_id)
+    updated = update_job(
+        job=job,
+        actor=request.auth,
+        job_title=payload.job_title,
+        description=payload.description,
+        due_date=payload.due_date,
+        priority=payload.priority,
+    )
+    return _job_out(get_job_or_none(updated.pk) or updated)
+
+
+@router.post("/jobs/{job_id}/assign", response=JobOut, summary="Assign a job")
+def job_assign(request: AuthenticatedRequest, job_id: int, payload: JobAssignIn) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_assign(request.auth, job.site_id)
+    assigned_user = User.objects.filter(pk=payload.assigned_to_user_id).first() if payload.assigned_to_user_id else None
+    assigned_cleaner = (
+        Cleaner.objects.filter(pk=payload.assigned_to_cleaner_id).first() if payload.assigned_to_cleaner_id else None
+    )
+    assigned = assign_job(
+        job=job,
+        actor=request.auth,
+        assigned_to_user=assigned_user,
+        assigned_to_cleaner=assigned_cleaner,
+    )
+    return _job_out(get_job_or_none(assigned.pk) or assigned)
+
+
+@router.post("/jobs/{job_id}/start", response=JobOut, summary="Start a job")
+def job_start(request: AuthenticatedRequest, job_id: int) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_manage(request.auth, job.site_id)
+    started = start_job(job=job, actor=request.auth)
+    return _job_out(get_job_or_none(started.pk) or started)
+
+
+@router.post("/jobs/{job_id}/complete", response=JobOut, summary="Complete a job")
+def job_complete(request: AuthenticatedRequest, job_id: int, payload: JobCompleteIn) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_manage(request.auth, job.site_id)
+    completed = complete_job(job=job, actor=request.auth, completion_notes=payload.completion_notes)
+    return _job_out(get_job_or_none(completed.pk) or completed)
+
+
+@router.post(
+    "/jobs/{job_id}/photo",
+    response=JobOut,
+    summary="Upload a private completion photo for a job",
+)
+def job_photo_upload(
+    request: AuthenticatedRequest,
+    job_id: int,
+    file: UploadedFile = FILE_PARAM_DEFAULT,
+) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_manage(request.auth, job.site_id)
+    updated = upload_job_photo(job=job, uploaded_file=file, actor=request.auth)
+    return _job_out(get_job_or_none(updated.pk) or updated)
+
+
+@router.get(
+    "/jobs/{job_id}/photo/download-url",
+    response=DownloadUrlOut,
+    summary="Signed download URL for a job completion photo",
+)
+def job_photo_download_url(request: AuthenticatedRequest, job_id: int) -> DownloadUrlOut:
+    _issues_read(request.auth)
+    job = _load_job_or_404(job_id)
+    if not site_in_user_scope(request.auth, job.site_id):
+        raise PermissionDenied("You do not have access to this job.")
+    if not job.file:
+        raise Http404("This job has no completion photo.")
+    token = create_file_token(
+        user_id=request.auth.pk,
+        app_label="site_management",
+        model_name="job",
+        object_id=job.pk,
+    )
+    return DownloadUrlOut(download_url=f"/{settings.API_V1_PREFIX}/files/signed/{token}/")
+
+
+@router.post("/jobs/{job_id}/verify", response=JobOut, summary="Verify a completed job")
+def job_verify(request: AuthenticatedRequest, job_id: int) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_verify(request.auth, job.site_id)
+    verified = verify_job(job=job, actor=request.auth)
+    return _job_out(get_job_or_none(verified.pk) or verified)
+
+
+@router.post("/jobs/{job_id}/close", response=JobOut, summary="Close a verified job")
+def job_close(request: AuthenticatedRequest, job_id: int) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_review(request.auth)
+    closed = close_job(job=job, actor=request.auth)
+    return _job_out(get_job_or_none(closed.pk) or closed)
+
+
+@router.post("/jobs/{job_id}/reopen", response=JobOut, summary="Reopen a job")
+def job_reopen(request: AuthenticatedRequest, job_id: int, payload: JobReopenIn) -> JobOut:
+    job = _load_job_or_404(job_id)
+    _issues_review(request.auth)
+    reopened = reopen_job(job=job, actor=request.auth, reason=payload.reason)
+    return _job_out(get_job_or_none(reopened.pk) or reopened)

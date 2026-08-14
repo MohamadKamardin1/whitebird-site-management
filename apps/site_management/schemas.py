@@ -948,3 +948,149 @@ class AreaLatestStatusOut(Schema):
     overall_status: str
     score: Decimal | None = None
     template_name: str
+
+
+class IssueOut(Schema):
+    id: int
+    title: str
+    description: str = ""
+    source: str
+    site_id: int
+    site_name: str
+    area_id: int | None = None
+    area_name: str | None = None
+    cleaner_id: int | None = None
+    cleaner_name: str | None = None
+    inspection_id: int | None = None
+    issue_category: str
+    priority: str
+    status: str
+    raised_by: str | None = None
+    assigned_to: str | None = None
+    assigned_to_id: int | None = None
+    due_date: date | None = None
+    resolved_at: datetime | None = None
+    closed_at: datetime | None = None
+    escalation_level: int = 0
+    is_escalated: bool = False
+    job_count: int = 0
+    created_at: datetime
+
+
+class IssueCreateIn(Schema):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    source: str = Field(default="manual", pattern="^(inspection|attendance|store|manual|report)$")
+    site_id: int
+    area_id: int | None = None
+    cleaner_id: int | None = None
+    inspection_id: int | None = None
+    issue_category: str = Field(
+        default="other", pattern="^(cleaning_quality|maintenance|safety|materials|behavior|attendance|other)$"
+    )
+    priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
+    due_date: date | None = None
+
+
+class IssueUpdateIn(Schema):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    issue_category: str | None = Field(
+        default=None, pattern="^(cleaning_quality|maintenance|safety|materials|behavior|attendance|other)$"
+    )
+    priority: str | None = Field(default=None, pattern="^(low|medium|high|urgent)$")
+    area_id: int | None = None
+    cleaner_id: int | None = None
+    due_date: date | None = None
+
+
+class IssueReviewIn(Schema):
+    notes: str = ""
+
+
+class IssueEscalateIn(Schema):
+    reason: str = Field(min_length=1)
+
+
+class JobOut(Schema):
+    id: int
+    issue_id: int | None = None
+    issue_title: str | None = None
+    job_title: str
+    description: str = ""
+    site_id: int
+    site_name: str
+    assigned_to_user: str | None = None
+    assigned_to_user_id: int | None = None
+    assigned_to_cleaner: str | None = None
+    assigned_to_cleaner_id: int | None = None
+    assigned_by: str | None = None
+    due_date: date
+    priority: str
+    status: str
+    completion_notes: str = ""
+    has_completion_photo: bool = False
+    completed_at: datetime | None = None
+    verified_by: str | None = None
+    verified_at: datetime | None = None
+    closed_at: datetime | None = None
+    created_at: datetime
+
+
+class JobCreateIn(Schema):
+    job_title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    site_id: int
+    issue_id: int | None = None
+    assigned_to_user_id: int | None = None
+    assigned_to_cleaner_id: int | None = None
+    due_date: date | None = None
+    priority: str = Field(default="medium", pattern="^(low|medium|high|urgent)$")
+
+
+class JobUpdateIn(Schema):
+    job_title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    due_date: date | None = None
+    priority: str | None = Field(default=None, pattern="^(low|medium|high|urgent)$")
+
+
+class JobAssignIn(Schema):
+    assigned_to_user_id: int | None = None
+    assigned_to_cleaner_id: int | None = None
+
+
+class JobCompleteIn(Schema):
+    completion_notes: str = ""
+
+
+class JobReopenIn(Schema):
+    reason: str = Field(min_length=1)
+
+
+class IssueSummaryOut(Schema):
+    total_issues: int
+    open: int
+    under_review: int
+    assigned: int
+    in_progress: int
+    completed: int
+    verified: int
+    closed: int
+    reopened: int
+    escalated: int
+    high_priority: int
+    urgent: int
+    category_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class JobSummaryOut(Schema):
+    total_jobs: int
+    open: int
+    assigned: int
+    in_progress: int
+    completed: int
+    verified: int
+    closed: int
+    reopened: int
+    overdue: int

@@ -352,3 +352,25 @@ engineering contract.
     `visible_sites`); creating/managing templates and inspections + submit =
     site-scoped (`user_can_manage_site`); return/review = ZONE_SUPERVISOR or
     above.
+
+## Issues, jobs & escalation (Prompt 12)
+
+97. **Issue status follows its jobs**: raising an issue → OPEN; review → 
+    UNDER_REVIEW; once any linked job is assigned/started the issue becomes
+    ASSIGNED; when every linked job is CLOSED the issue becomes CLOSED
+    (`closed_at` set). Escalation increments `escalation_level` and sets
+    `is_escalated` without forcing a status change.
+98. **Verify-before-close**: a job can only close from VERIFIED; verification
+    requires the `verify_job` RBAC permission (General/Assistant/Zone/Site) plus
+    site scope. Assignment requires the `assign_job` permission plus site scope.
+99. **Reopened jobs** preserve history — completion notes are appended with the
+    reopen reason and verification/closure timestamps are cleared; a reopened
+    job must be re-assigned before it can start again.
+100. **Completion photo**: `JOB_COMPLETION_PHOTO_REQUIRED` (constance, default
+    off) enforces photo evidence; photos are stored on the private backend and
+    served only via signed download tokens.
+101. **Overdue** = `due_date` before today and status not in
+    COMPLETED/VERIFIED/CLOSED (jobs) or not CLOSED (issues).
+102. **Permissions**: reads = any management role or viewer (scoped to
+    `visible_sites`); raise/update/complete = site-scoped; review/close/reopen
+    = ZONE_SUPERVISOR or above; escalate = GENERAL/ASSISTANT_GENERAL (or admin).

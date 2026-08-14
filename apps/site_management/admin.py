@@ -32,6 +32,10 @@ from .models import (
     InspectionTemplate,
     InspectionTemplateItem,
     InspectionWorkflowStatus,
+    Issue,
+    IssueStatus,
+    Job,
+    JobStatus,
     Notification,
     OperationalRole,
     Site,
@@ -1128,3 +1132,162 @@ class InspectionAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
             except Exception:
                 continue
         self.message_user(request, f"{updated} inspection(s) reviewed.")
+
+
+class JobInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = Job
+    extra = 0
+    fk_name = "issue"
+    fields = ("job_title", "priority", "status", "assigned_to_user", "assigned_to_cleaner", "due_date")
+    raw_id_fields = ("assigned_to_user", "assigned_to_cleaner", "assigned_by")
+    readonly_fields = ("status",)
+    show_change_link = True
+
+
+@admin.register(Issue)
+class IssueAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "title",
+        "site",
+        "priority_badge",
+        "category_badge",
+        "status_badge",
+        "source",
+        "is_escalated",
+        "escalation_level",
+        "due_date",
+        "assigned_to",
+        "raised_by",
+    )
+    list_filter = ("status", "priority", "issue_category", "source", "site", "is_escalated")
+    search_fields = ("title", "description", "site__name")
+    date_hierarchy = "created_at"
+    raw_id_fields = ("site", "area", "cleaner", "inspection", "raised_by", "assigned_to", "created_by", "updated_by")
+    inlines = [JobInline]
+    actions = ["escalate_issues", "assign_issues", "verify_issues", "reopen_jobs"]
+
+    @admin.display(description="Priority")
+    def priority_badge(self, obj: Issue) -> str:
+        return obj.priority
+
+    @admin.display(description="Category")
+    def category_badge(self, obj: Issue) -> str:
+        return obj.issue_category
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: Issue) -> str:
+        return obj.status
+
+    def get_readonly_fields(self, request: Any, obj: Issue | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = ("created_at", "updated_at")
+        if obj is not None and obj.is_terminal:
+            readonly += ("title", "site", "source", "status", "priority", "issue_category")
+        return readonly
+
+    def has_delete_permission(self, request: Any, obj: Issue | None = None) -> bool:
+        if obj is None:
+            return True
+        return not obj.is_terminal
+
+    @admin.action(description="Escalate selected issues")
+    def escalate_issues(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.issues_services import escalate_issue  # noqa: PLC0415
+
+        updated = 0
+        for issue in queryset.exclude(status=IssueStatus.CLOSED):
+            try:
+                escalate_issue(issue=issue, actor=request.user, reason="Escalated via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} issue(s) escalated.")
+
+    @admin.action(description="Assign selected issues")
+    def assign_issues(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.issues_services import assign_job_from_issue  # noqa: PLC0415
+
+        updated = 0
+        for issue in queryset.filter(status__in=[IssueStatus.OPEN, IssueStatus.UNDER_REVIEW, IssueStatus.REOPENED]):
+            assign_job_from_issue(issue=issue, actor=request.user, assigned_to_user=request.user)
+            updated += 1
+        self.message_user(request, f"{updated} issue(s) assigned.")
+
+    @admin.action(description="Verify jobs for selected issues")
+    def verify_issues(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.issues_services import verify_job  # noqa: PLC0415
+
+        updated = 0
+        for issue in queryset:
+            for job in issue.jobs.filter(status=JobStatus.COMPLETED):
+                try:
+                    verify_job(job=job, actor=request.user)
+                    updated += 1
+                except Exception:
+                    continue
+        self.message_user(request, f"{updated} job(s) verified.")
+
+    @admin.action(description="Reopen jobs of selected issues")
+    def reopen_jobs(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.issues_services import reopen_job  # noqa: PLC0415
+
+        updated = 0
+        for issue in queryset:
+            for job in issue.jobs.filter(status__in=[JobStatus.CLOSED, JobStatus.COMPLETED, JobStatus.VERIFIED]):
+                try:
+                    reopen_job(job=job, actor=request.user, reason="Reopened via admin")
+                    updated += 1
+                except Exception:
+                    continue
+        self.message_user(request, f"{updated} job(s) reopened.")
+
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "job_title",
+        "site",
+        "issue",
+        "priority_badge",
+        "status_badge",
+        "assigned_to_user",
+        "assigned_to_cleaner",
+        "due_date",
+        "completed_at",
+        "verified_at",
+    )
+    list_filter = ("status", "priority", "site", "due_date")
+    search_fields = ("job_title", "description", "site__name")
+    date_hierarchy = "due_date"
+    raw_id_fields = (
+        "issue",
+        "site",
+        "assigned_to_user",
+        "assigned_to_cleaner",
+        "assigned_by",
+        "verified_by",
+        "created_by",
+        "updated_by",
+    )
+    readonly_fields = (
+        "status",
+        "file",
+        "original_filename",
+        "content_type",
+        "size_bytes",
+        "completed_at",
+        "verified_at",
+        "closed_at",
+    )
+
+    @admin.display(description="Priority")
+    def priority_badge(self, obj: Job) -> str:
+        return obj.priority
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: Job) -> str:
+        return obj.status
+
+    def has_delete_permission(self, request: Any, obj: Job | None = None) -> bool:
+        if obj is None:
+            return True
+        return not obj.is_terminal
