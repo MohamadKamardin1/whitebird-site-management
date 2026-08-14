@@ -809,3 +809,172 @@ class CleanerDocument(PrivateFileModel):
             CleanerDocumentType.NIDA,
             CleanerDocumentType.ZANZIBAR_ID,
         }
+
+
+# --------------------------------------------------------------------------- #
+# Cleaner assignment & scheduling
+# --------------------------------------------------------------------------- #
+
+
+class CleanerAssignmentType(models.TextChoices):
+    FULL_TIME = "full_time", "Full Time"
+    SHIFT = "shift", "Shift"
+
+
+class CleanerAssignmentStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    ACTIVE = "active", "Active"
+    ENDED = "ended", "Ended"
+    SUSPENDED = "suspended", "Suspended"
+
+
+def _assignment_type_matches_site(assignment_type: str, site: Site) -> bool:
+    if site.work_mode == WorkMode.FULL_TIME:
+        return assignment_type == CleanerAssignmentType.FULL_TIME.value
+    if site.work_mode == WorkMode.SHIFT:
+        return assignment_type == CleanerAssignmentType.SHIFT.value
+    return assignment_type in {CleanerAssignmentType.FULL_TIME.value, CleanerAssignmentType.SHIFT.value}
+
+
+class CleanerSiteAssignment(UserStampedModel):
+    """Official assignment of a cleaner to a site.
+
+    Only ACTIVE cleaners hold ACTIVE assignments; applicants/trainees are
+    captured as DRAFT. History is protected — assignments are ended, never
+    hard-deleted.
+    """
+
+    cleaner = models.ForeignKey(Cleaner, on_delete=models.CASCADE, related_name="site_assignments")
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="cleaner_assignments")
+    assignment_type = models.CharField(max_length=16, choices=CleanerAssignmentType.choices)
+    start_date = models.DateField(db_index=True)
+    end_date = models.DateField(null=True, blank=True, db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=CleanerAssignmentStatus.choices,
+        default=CleanerAssignmentStatus.DRAFT,
+        db_index=True,
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Cleaner site assignment"
+        verbose_name_plural = "Cleaner site assignments"
+        ordering = ["-start_date", "cleaner__last_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cleaner", "site"],
+                condition=models.Q(status__in=[CleanerAssignmentStatus.ACTIVE, CleanerAssignmentStatus.SUSPENDED]),
+                name="uniq_active_cleaner_site_assignment",
+            )
+        ]
+        indexes = [models.Index(fields=["site", "status", "assignment_type"])]
+
+    def __str__(self) -> str:
+        return f"{self.cleaner.full_name} @ {self.site.name} ({self.status})"
+
+    @property
+    def has_operational_history(self) -> bool:
+        return self.shift_assignments.exists() or self.area_schedules.exists()
+
+    def clean(self) -> None:
+        super().clean()
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValidationError("end_date cannot be earlier than start_date.", code="invalid_dates")
+        if not _assignment_type_matches_site(self.assignment_type, self.site):
+            raise ValidationError(
+                f"Assignment type '{self.assignment_type}' does not match the site's work mode "
+                f"({self.site.get_work_mode_display()}).",
+                code="assignment_type_mismatch",
+            )
+        if self.status == CleanerAssignmentStatus.ACTIVE and self.cleaner.status != CleanerStatus.ACTIVE:
+            raise ValidationError(
+                "Only ACTIVE cleaners can hold ACTIVE assignments.",
+                code="cleaner_not_active",
+            )
+
+
+class CleanerShiftAssignment(UserStampedModel):
+    """Binds a shift to a site assignment (shift-based cleaners only)."""
+
+    assignment = models.ForeignKey(CleanerSiteAssignment, on_delete=models.CASCADE, related_name="shift_assignments")
+    shift = models.ForeignKey(SiteShift, on_delete=models.CASCADE, related_name="cleaner_assignments")
+    effective_from = models.DateField(db_index=True)
+    effective_to = models.DateField(null=True, blank=True, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Cleaner shift assignment"
+        verbose_name_plural = "Cleaner shift assignments"
+        ordering = ["-effective_from"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "shift"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_assignment_shift",
+            )
+        ]
+        indexes = [models.Index(fields=["assignment", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.assignment.cleaner.full_name} -> {self.shift.shift_name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.assignment.site_id != self.shift.site_id:
+            raise ValidationError("Shift must belong to the assignment's site.", code="shift_site_mismatch")
+        if self.assignment.assignment_type != CleanerAssignmentType.SHIFT:
+            raise ValidationError("Shift assignments require a SHIFT-type assignment.", code="not_shift_assignment")
+        if self.effective_from and self.effective_to and self.effective_to < self.effective_from:
+            raise ValidationError("effective_to cannot be earlier than effective_from.", code="invalid_dates")
+
+
+class CleanerAreaSchedule(UserStampedModel):
+    """A dated area/task/time responsibility for an assigned cleaner.
+
+    Supports overnight schedules (``end_time <= start_time``) and multiple
+    area assignments per day as long as time ranges do not overlap.
+    """
+
+    assignment = models.ForeignKey(CleanerSiteAssignment, on_delete=models.CASCADE, related_name="area_schedules")
+    site_area = models.ForeignKey(SiteArea, on_delete=models.CASCADE, related_name="area_schedules")
+    operational_role = models.ForeignKey(OperationalRole, on_delete=models.PROTECT, related_name="area_schedules")
+    date = models.DateField(db_index=True)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    shift = models.ForeignKey(
+        SiteShift, on_delete=models.SET_NULL, null=True, blank=True, related_name="area_schedules"
+    )
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Cleaner area schedule"
+        verbose_name_plural = "Cleaner area schedules"
+        ordering = ["date", "start_time"]
+        indexes = [
+            models.Index(fields=["site_area", "date"]),
+            models.Index(fields=["assignment", "date"]),
+            models.Index(fields=["date", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.assignment.cleaner.full_name} {self.date} {self.site_area.area_name}"
+
+    @property
+    def crosses_midnight(self) -> bool:
+        return self.end_time <= self.start_time
+
+    def clean(self) -> None:
+        super().clean()
+        if self.site_area.site_id != self.assignment.site_id:
+            raise ValidationError("Area must belong to the assignment's site.", code="area_site_mismatch")
+        if self.shift_id and self.shift is not None and self.shift.site_id != self.assignment.site_id:
+            raise ValidationError("Shift must belong to the assignment's site.", code="shift_site_mismatch")

@@ -172,6 +172,33 @@ values. A cleaner becomes `ACTIVE` only after at least one identity document
 is `verified`. Document downloads stream through `/files/signed/{token}/`
 and are audited.
 
+### Assignments & scheduling
+
+| Method | Path                                      | Description                              |
+| ------ | ----------------------------------------- | ---------------------------------------- |
+| GET    | `/assignments`                            | List cleaner-site assignments (paginated)|
+| POST   | `/assignments`                            | Assign a cleaner to a site               |
+| GET    | `/assignments/{id}`                       | Assignment detail                        |
+| PUT    | `/assignments/{id}`                       | Update end-date/notes                    |
+| PATCH  | `/assignments/{id}/end`                   | End an assignment                        |
+| PATCH  | `/assignments/{id}/suspend`               | Suspend an assignment                    |
+| PATCH  | `/assignments/{id}/activate`              | Activate an assignment                   |
+| GET    | `/assignments/{id}/shifts`                | List shift bindings                      |
+| POST   | `/assignments/{id}/shifts`                | Bind a shift                             |
+| DELETE | `/assignments/{id}/shifts/{sid}`          | Remove a shift binding                   |
+| GET    | `/assignments/{id}/area-schedules`        | List area schedules                      |
+| POST   | `/assignments/{id}/area-schedules`        | Create an area schedule                  |
+| PUT    | `/assignments/{id}/area-schedules/{s}`    | Update an area schedule                  |
+| DELETE | `/assignments/{id}/area-schedules/{s}`    | Remove an area schedule                  |
+| GET    | `/schedules`                              | Daily site schedule (`site_id`, `date`, `shift_id`) |
+
+Rules: assignment type must match the site's work mode; only ACTIVE cleaners
+hold ACTIVE assignments (applicants/trainees are DRAFT); one active assignment
+per cleaner+site; shift bindings require a SHIFT assignment and the shift must
+belong to the site; area schedules support overnight ranges and block
+overlapping time slots for the same cleaner/day. `/schedules` returns an
+optimised attendance-ready projection.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

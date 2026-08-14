@@ -5,6 +5,37 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 07] — 2026-08-13
+
+### Added
+
+- **`CleanerSiteAssignment`**: cleaner→site assignment with `assignment_type`
+  (FULL_TIME/SHIFT, validated against site work mode), date window, status
+  lifecycle (DRAFT/ACTIVE/ENDED/SUSPENDED), partial-unique active constraint
+  per cleaner+site, ACTIVE requires an ACTIVE cleaner.
+- **`CleanerShiftAssignment`**: shift bindings (shift must belong to the
+  assignment's site, SHIFT-type only, one active per assignment+shift).
+- **`CleanerAreaSchedule`**: dated area/task/time responsibilities with
+  overnight support and per-cleaner/day overlap blocking.
+- **Services** (transactional + audited): assign/update/end/suspend/activate,
+  bind/unbind shift, create/update/remove area schedules,
+  `copy_schedule_from_date`; domain events `CleanerAssigned`/`CleanerUnassigned`.
+- **Selectors**: `assignment_list_queryset`, `site_daily_schedule`,
+  `cleaner_schedule`, and `scheduled_cleaners_for_attendance` (single-query,
+  attendance-ready projection).
+- **Policies**: `can_assign_cleaner`/`can_edit_assignment`/`can_view_assignment`
+  with role/data scoping.
+- **API**: assignments CRUD + status PATCHes, shift bindings, area schedules,
+  and the `/schedules` daily endpoint.
+- **Admin**: `CleanerSiteAssignmentAdmin` (inlines for shift bindings and
+  area schedules, activate/end/suspend actions, delete guard) plus standalone
+  shift-binding and area-schedule admins.
+- **Factories** for assignments, shift bindings, and area schedules.
+
+### Fixed
+
+- Corrected the overnight time-overlap direction in `_spans_overlap`.
+
 ## [Prompt 06] — 2026-08-13
 
 ### Added

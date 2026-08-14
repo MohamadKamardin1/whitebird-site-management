@@ -418,3 +418,103 @@ class DocumentReviewIn(Schema):
 
 class DownloadUrlOut(Schema):
     download_url: str
+
+
+class CleanerSiteAssignmentOut(Schema):
+    id: int
+    cleaner_id: int
+    cleaner_name: str
+    site_id: int
+    site_name: str
+    assignment_type: str
+    start_date: date
+    end_date: date | None = None
+    status: str
+    assigned_by: str | None = None
+    notes: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class CleanerSiteAssignmentCreateIn(Schema):
+    cleaner_id: int
+    site_id: int
+    assignment_type: str = Field(pattern="^(full_time|shift)$")
+    start_date: date
+    end_date: date | None = None
+    notes: str = ""
+
+
+class CleanerSiteAssignmentUpdateIn(Schema):
+    end_date: date | None = None
+    notes: str | None = None
+
+
+class CleanerShiftAssignmentOut(Schema):
+    id: int
+    assignment_id: int
+    shift_id: int
+    shift_name: str
+    effective_from: date
+    effective_to: date | None = None
+    is_active: bool
+
+
+class ShiftAssignIn(Schema):
+    shift_id: int
+    effective_from: date
+    effective_to: date | None = None
+
+
+class CleanerAreaScheduleOut(Schema):
+    id: int
+    assignment_id: int
+    site_area_id: int
+    area_name: str
+    operational_role_id: int
+    role_name: str
+    date: date
+    start_time: time
+    end_time: time
+    shift_id: int | None = None
+    shift_name: str | None = None
+    notes: str
+    is_active: bool
+    crosses_midnight: bool
+
+
+class AreaScheduleCreateIn(Schema):
+    site_area_id: int
+    operational_role_id: int
+    date: date
+    start_time: time
+    end_time: time
+    shift_id: int | None = None
+    notes: str = ""
+
+
+class AreaScheduleUpdateIn(Schema):
+    site_area_id: int | None = None
+    operational_role_id: int | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    shift_id: int | None = None
+    notes: str | None = None
+
+
+class ScheduleRowOut(Schema):
+    schedule_id: int
+    cleaner_id: int
+    cleaner_name: str
+    assignment_id: int
+    assignment_status: str
+    site_id: int
+    shift_id: int | None = None
+    shift_name: str | None = None
+    area_id: int
+    area_name: str
+    role_id: int
+    role_name: str
+    start_time: str
+    end_time: str
+    crosses_midnight: bool

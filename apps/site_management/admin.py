@@ -15,8 +15,11 @@ from .models import (
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
     Cleaner,
+    CleanerAreaSchedule,
     CleanerDocument,
     CleanerDocumentStatus,
+    CleanerShiftAssignment,
+    CleanerSiteAssignment,
     Department,
     Notification,
     OperationalRole,
@@ -433,3 +436,111 @@ class CleanerDocumentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         response = FileResponse(stream, content_type=document.content_type or "application/octet-stream")
         response["X-Content-Type-Options"] = "nosniff"
         return response
+
+
+class CleanerShiftAssignmentInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = CleanerShiftAssignment
+    extra = 0
+    fk_name = "assignment"
+    fields = ("shift", "effective_from", "effective_to", "is_active")
+
+
+class CleanerAreaScheduleInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = CleanerAreaSchedule
+    extra = 0
+    fk_name = "assignment"
+    fields = ("site_area", "operational_role", "date", "start_time", "end_time", "is_active")
+    show_change_link = True
+
+
+@admin.register(CleanerSiteAssignment)
+class CleanerSiteAssignmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "cleaner",
+        "site",
+        "assignment_type",
+        "status_badge",
+        "start_date",
+        "end_date",
+        "created_at",
+    )
+    list_filter = ("status", "assignment_type", "site", "start_date")
+    search_fields = ("cleaner__first_name", "cleaner__last_name", "site__name")
+    date_hierarchy = "start_date"
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("cleaner", "site", "assigned_by")
+    inlines = [CleanerShiftAssignmentInline, CleanerAreaScheduleInline]
+    actions = ["activate_assignments", "suspend_assignments", "end_assignments"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: CleanerSiteAssignment) -> str:
+        return obj.status
+
+    @admin.action(description="Activate selected assignments")
+    def activate_assignments(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.assignment_services import activate_assignment  # noqa: PLC0415
+
+        updated = 0
+        for assignment in queryset:
+            try:
+                activate_assignment(assignment=assignment, actor=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} assignment(s) activated.")
+
+    @admin.action(description="Suspend selected assignments")
+    def suspend_assignments(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.assignment_services import suspend_assignment  # noqa: PLC0415
+
+        updated = queryset.count()
+        for assignment in queryset:
+            suspend_assignment(assignment=assignment, actor=request.user)
+        self.message_user(request, f"{updated} assignment(s) suspended.")
+
+    @admin.action(description="End selected assignments")
+    def end_assignments(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.assignment_services import end_assignment  # noqa: PLC0415
+
+        updated = queryset.count()
+        for assignment in queryset:
+            end_assignment(assignment=assignment, actor=request.user)
+        self.message_user(request, f"{updated} assignment(s) ended.")
+
+    def delete_model(self, request: Any, obj: CleanerSiteAssignment) -> None:
+        if obj.has_operational_history:
+            raise DjangoValidationError("Assignments with shift/schedule history cannot be deleted. End them instead.")
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            self.delete_model(request, obj)
+
+    def has_delete_permission(self, request: Any, obj: CleanerSiteAssignment | None = None) -> bool:
+        if obj is None:
+            return True
+        return not obj.has_operational_history
+
+
+@admin.register(CleanerShiftAssignment)
+class CleanerShiftAssignmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("assignment", "shift", "effective_from", "effective_to", "is_active")
+    list_filter = ("is_active", "effective_from")
+    search_fields = ("assignment__cleaner__first_name", "assignment__cleaner__last_name", "shift__shift_name")
+    raw_id_fields = ("assignment", "shift")
+
+
+@admin.register(CleanerAreaSchedule)
+class CleanerAreaScheduleAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "assignment",
+        "date",
+        "site_area",
+        "operational_role",
+        "start_time",
+        "end_time",
+        "is_active",
+    )
+    list_filter = ("is_active", "date")
+    search_fields = ("assignment__cleaner__first_name", "assignment__cleaner__last_name", "site_area__area_name")
+    raw_id_fields = ("assignment", "site_area", "operational_role", "shift")

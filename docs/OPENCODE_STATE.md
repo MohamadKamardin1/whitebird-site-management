@@ -12,10 +12,44 @@ Module. Each prompt updates this file before its commit.
 | 3      | Shared kernel: audit, files, events, errors  | Prompt 3 completed | —      |
 | 4      | Organisation hierarchy (zones/sites/supervisors) | Prompt 4 completed | —      |
 | 5      | Site configuration (shifts/areas/roles) | Prompt 5 completed | —      |
-| 6      | Cleaner registry & secure documents | **Prompt 6 completed** | see CHANGELOG |
-| 7–20   | (pending)                                    | —                  | —      |
+| 6      | Cleaner registry & secure documents | Prompt 6 completed | —      |
+| 7      | Assignments & scheduling engine | **Prompt 7 completed** | see CHANGELOG |
+| 8–20   | (pending)                                    | —                  | —      |
+
+## Prompt 7 — completed ✅
+
+Implemented the cleaner assignment and scheduling engine:
+
+- **`CleanerSiteAssignment`**: cleaner→site with FULL_TIME/SHIFT type (must
+  match site work mode), start/end dates, DRAFT/ACTIVE/ENDED/SUSPENDED status,
+  assigned-by, partial-unique active constraint per cleaner+site, ACTIVE
+  requires an ACTIVE cleaner (trainees/applicants are DRAFT).
+- **`CleanerShiftAssignment`**: shift bindings (shift must belong to the
+  assignment's site, SHIFT-type only, one active per assignment+shift).
+- **`CleanerAreaSchedule`**: dated area/task/time responsibilities with
+  overnight support and overlap blocking per cleaner/day.
+- **Services** (transactional + audited): assign/update/end/suspend/activate,
+  shift bind/unbind, area-schedule create/update/remove, and
+  `copy_schedule_from_date`; domain events `CleanerAssigned`/`CleanerUnassigned`.
+- **Selectors**: `assignment_list_queryset`, `site_daily_schedule`,
+  `cleaner_schedule`, and the optimised single-query
+  `scheduled_cleaners_for_attendance` projection.
+- **Policies**: `can_assign_cleaner`/`can_edit_assignment`/`can_view_assignment`
+  with role/data scoping.
+- **API**: assignments CRUD + status, shift bindings, area schedules, and the
+  attendance-ready `/schedules` endpoint.
+- **Admin**: `CleanerSiteAssignmentAdmin` (status badges, shift/schedule
+  inlines, activate/end/suspend actions, delete guard) + standalone
+  shift/schedule admins.
+
+**Quality gates (all green):** Ruff · Mypy strict (122 files) · pytest 310
+passed · coverage 90.1% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 6 — completed ✅
+
+Implemented the cleaner/applicant/trainee registry with secure document
+handling and privacy-conscious design:**Quality gates (all green):** Ruff · Mypy strict (122 files) · pytest 310
+passed · coverage 90.1% ≥ 90 · `makemigrations --check` clean.
 
 Implemented the cleaner/applicant/trainee registry with secure document
 handling and privacy-conscious design:

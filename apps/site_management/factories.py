@@ -13,7 +13,10 @@ from .models import (
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
     Cleaner,
+    CleanerAreaSchedule,
     CleanerDocument,
+    CleanerShiftAssignment,
+    CleanerSiteAssignment,
     OperationalRole,
     Site,
     SiteArea,
@@ -182,3 +185,38 @@ class CleanerDocumentFactory(factory.django.DjangoModelFactory):
     size_bytes = 19
     file_hash = factory.Sequence(lambda n: f"hash{n:064d}")
     status = "pending"
+
+
+class CleanerSiteAssignmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CleanerSiteAssignment
+
+    cleaner = factory.SubFactory(CleanerFactory)
+    site = factory.SubFactory(SiteFactory)
+    assignment_type = "full_time"
+    start_date = date.today()
+    status = "draft"
+    assigned_by = factory.SubFactory(UserFactory)
+
+
+class CleanerShiftAssignmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CleanerShiftAssignment
+
+    assignment = factory.SubFactory(CleanerSiteAssignmentFactory)
+    shift = factory.SubFactory(SiteShiftFactory)
+    effective_from = date.today()
+    is_active = True
+
+
+class CleanerAreaScheduleFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CleanerAreaSchedule
+
+    assignment = factory.SubFactory(CleanerSiteAssignmentFactory)
+    site_area = factory.SubFactory(SiteAreaFactory)
+    operational_role = factory.SubFactory(OperationalRoleFactory)
+    date = date.today()
+    start_time = datetime.time(8, 0)
+    end_time = datetime.time(16, 0)
+    is_active = True

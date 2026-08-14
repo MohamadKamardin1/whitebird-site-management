@@ -21,6 +21,27 @@ from apps.core.files import create_file_token
 from apps.core.pagination import PageParams, Paginated, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
+from .assignment_policies import can_assign_cleaner, can_edit_assignment, can_view_assignment
+from .assignment_selectors import (
+    AssignmentFilter,
+    assignment_area_schedules,
+    assignment_list_queryset,
+    assignment_shift_assignments,
+    get_assignment_or_none,
+    scheduled_cleaners_for_attendance,
+)
+from .assignment_services import (
+    activate_assignment,
+    assign_cleaner_area_schedule,
+    assign_cleaner_shift,
+    assign_cleaner_to_site,
+    deactivate_area_schedule,
+    end_assignment,
+    remove_cleaner_shift,
+    suspend_assignment,
+    update_area_schedule,
+    update_assignment,
+)
 from .cleaner_selectors import (
     CleanerFilter,
     can_view_document,
@@ -42,7 +63,11 @@ from .cleaner_services import (
 from .models import (
     Asset,
     AssetCategory,
+    CleanerAreaSchedule,
+    CleanerAssignmentType,
     CleanerDocumentType,
+    CleanerShiftAssignment,
+    CleanerSiteAssignment,
     CleanerStatus,
     Department,
     Gender,
@@ -60,15 +85,22 @@ from .models import (
     Zone,
 )
 from .schemas import (
+    AreaScheduleCreateIn,
+    AreaScheduleUpdateIn,
     AssetCategoryOut,
     AssetCreateIn,
     AssetOut,
     AssetUpdateIn,
     AssignmentCreateIn,
     AssignmentOut,
+    CleanerAreaScheduleOut,
     CleanerCreateIn,
     CleanerDocumentOut,
     CleanerOut,
+    CleanerShiftAssignmentOut,
+    CleanerSiteAssignmentCreateIn,
+    CleanerSiteAssignmentOut,
+    CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
     DepartmentCreateIn,
@@ -81,6 +113,8 @@ from .schemas import (
     OperationalRoleCreateIn,
     OperationalRoleOut,
     OperationalRoleUpdateIn,
+    ScheduleRowOut,
+    ShiftAssignIn,
     SiteAreaCreateIn,
     SiteAreaOut,
     SiteAreaUpdateIn,
@@ -1256,3 +1290,361 @@ def document_download_url(request: AuthenticatedRequest, cleaner_id: int, docume
         object_id=document.pk,
     )
     return DownloadUrlOut(download_url=f"/{settings.API_V1_PREFIX}/files/signed/{token}/")
+
+
+# --------------------------------------------------------------------------- #
+# Cleaner assignments & scheduling
+# --------------------------------------------------------------------------- #
+
+
+def _assignment_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Assignments require a management role.")
+
+
+def _cleaner_assignment_out(a: CleanerSiteAssignment) -> CleanerSiteAssignmentOut:
+    return CleanerSiteAssignmentOut(
+        id=a.pk,
+        cleaner_id=a.cleaner_id,
+        cleaner_name=a.cleaner.full_name,
+        site_id=a.site_id,
+        site_name=a.site.name,
+        assignment_type=a.assignment_type,
+        start_date=a.start_date,
+        end_date=a.end_date,
+        status=a.status,
+        assigned_by=a.assigned_by.email if a.assigned_by else None,
+        notes=a.notes,
+        created_at=a.created_at,
+        updated_at=a.updated_at,
+    )
+
+
+def _cleaner_shift_out(sa: CleanerShiftAssignment) -> CleanerShiftAssignmentOut:
+    return CleanerShiftAssignmentOut(
+        id=sa.pk,
+        assignment_id=sa.assignment_id,
+        shift_id=sa.shift_id,
+        shift_name=sa.shift.shift_name,
+        effective_from=sa.effective_from,
+        effective_to=sa.effective_to,
+        is_active=sa.is_active,
+    )
+
+
+def _schedule_out(s: CleanerAreaSchedule) -> CleanerAreaScheduleOut:
+    return CleanerAreaScheduleOut(
+        id=s.pk,
+        assignment_id=s.assignment_id,
+        site_area_id=s.site_area_id,
+        area_name=s.site_area.area_name,
+        operational_role_id=s.operational_role_id,
+        role_name=s.operational_role.name,
+        date=s.date,
+        start_time=s.start_time,
+        end_time=s.end_time,
+        shift_id=s.shift_id,
+        shift_name=s.shift.shift_name if s.shift else None,
+        notes=s.notes,
+        is_active=s.is_active,
+        crosses_midnight=s.crosses_midnight,
+    )
+
+
+@router.get(
+    "/assignments",
+    response=Paginated[CleanerSiteAssignmentOut],
+    summary="List cleaner site assignments (paginated, role-scoped)",
+)
+def cleaner_assignment_list(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    cleaner_id: int | None = None,
+    site_id: int | None = None,
+    status: str | None = None,
+    assignment_type: str | None = None,
+    search: str | None = None,
+) -> Paginated[CleanerSiteAssignmentOut]:
+    _assignment_read(request.auth)
+    spec = AssignmentFilter(
+        cleaner_id=cleaner_id, site_id=site_id, status=status, assignment_type=assignment_type, search=search
+    )
+    qs = assignment_list_queryset(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_cleaner_assignment_out(a) for a in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post("/assignments", response=CleanerSiteAssignmentOut, summary="Assign a cleaner to a site")
+def cleaner_assignment_create(
+    request: AuthenticatedRequest, payload: CleanerSiteAssignmentCreateIn
+) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    cleaner = get_cleaner_or_none(payload.cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    site = get_site_or_none(payload.site_id)
+    if site is None:
+        raise Http404("Site not found.")
+    if not can_assign_cleaner(request.auth, site, cleaner):
+        raise PermissionDenied("You cannot assign cleaners to this site.")
+    assignment = assign_cleaner_to_site(
+        cleaner=cleaner,
+        site=site,
+        assignment_type=CleanerAssignmentType(payload.assignment_type),
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        notes=payload.notes,
+        actor=request.auth,
+    )
+    return _cleaner_assignment_out(assignment)
+
+
+@router.get("/assignments/{assignment_id}", response=CleanerSiteAssignmentOut, summary="Assignment detail")
+def cleaner_assignment_detail(request: AuthenticatedRequest, assignment_id: int) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_view_assignment(request.auth, assignment):
+        raise PermissionDenied("You do not have access to this assignment.")
+    return _cleaner_assignment_out(assignment)
+
+
+@router.put("/assignments/{assignment_id}", response=CleanerSiteAssignmentOut, summary="Update an assignment")
+def cleaner_assignment_update(
+    request: AuthenticatedRequest, assignment_id: int, payload: CleanerSiteAssignmentUpdateIn
+) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    updated = update_assignment(
+        assignment=assignment, actor=request.auth, end_date=payload.end_date, notes=payload.notes
+    )
+    return _cleaner_assignment_out(updated)
+
+
+@router.patch("/assignments/{assignment_id}/end", response=CleanerSiteAssignmentOut, summary="End an assignment")
+def cleaner_assignment_end(request: AuthenticatedRequest, assignment_id: int) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    return _cleaner_assignment_out(end_assignment(assignment=assignment, actor=request.auth))
+
+
+@router.patch(
+    "/assignments/{assignment_id}/suspend", response=CleanerSiteAssignmentOut, summary="Suspend an assignment"
+)
+def cleaner_assignment_suspend(request: AuthenticatedRequest, assignment_id: int) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    return _cleaner_assignment_out(suspend_assignment(assignment=assignment, actor=request.auth))
+
+
+@router.patch(
+    "/assignments/{assignment_id}/activate", response=CleanerSiteAssignmentOut, summary="Activate an assignment"
+)
+def cleaner_assignment_activate(request: AuthenticatedRequest, assignment_id: int) -> CleanerSiteAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    return _cleaner_assignment_out(activate_assignment(assignment=assignment, actor=request.auth))
+
+
+@router.get(
+    "/assignments/{assignment_id}/shifts", response=list[CleanerShiftAssignmentOut], summary="List assignment shifts"
+)
+def cleaner_assignment_shifts(request: AuthenticatedRequest, assignment_id: int) -> list[CleanerShiftAssignmentOut]:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_view_assignment(request.auth, assignment):
+        raise PermissionDenied("You do not have access to this assignment.")
+    return [_cleaner_shift_out(sa) for sa in assignment_shift_assignments(assignment_id)]
+
+
+@router.post(
+    "/assignments/{assignment_id}/shifts", response=CleanerShiftAssignmentOut, summary="Assign a shift to the cleaner"
+)
+def cleaner_assignment_shift_create(
+    request: AuthenticatedRequest, assignment_id: int, payload: ShiftAssignIn
+) -> CleanerShiftAssignmentOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    shift = SiteShift.objects.filter(pk=payload.shift_id).first()
+    if shift is None:
+        raise Http404("Shift not found.")
+    sa = assign_cleaner_shift(
+        assignment=assignment,
+        shift=shift,
+        effective_from=payload.effective_from,
+        effective_to=payload.effective_to,
+        actor=request.auth,
+    )
+    return _cleaner_shift_out(sa)
+
+
+@router.delete(
+    "/assignments/{assignment_id}/shifts/{shift_assignment_id}",
+    response=MessageOut,
+    summary="Remove a shift from the assignment",
+)
+def cleaner_assignment_shift_delete(
+    request: AuthenticatedRequest, assignment_id: int, shift_assignment_id: int
+) -> MessageOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    sa = CleanerShiftAssignment.objects.filter(pk=shift_assignment_id, assignment_id=assignment_id).first()
+    if sa is None:
+        raise Http404("Shift assignment not found.")
+    remove_cleaner_shift(shift_assignment=sa, actor=request.auth)
+    return MessageOut(detail="Shift removed.")
+
+
+@router.get(
+    "/assignments/{assignment_id}/area-schedules",
+    response=list[CleanerAreaScheduleOut],
+    summary="List assignment area schedules",
+)
+def cleaner_assignment_schedules(request: AuthenticatedRequest, assignment_id: int) -> list[CleanerAreaScheduleOut]:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_view_assignment(request.auth, assignment):
+        raise PermissionDenied("You do not have access to this assignment.")
+    return [_schedule_out(s) for s in assignment_area_schedules(assignment_id)]
+
+
+@router.post(
+    "/assignments/{assignment_id}/area-schedules",
+    response=CleanerAreaScheduleOut,
+    summary="Schedule a cleaner for an area/task/time",
+)
+def cleaner_assignment_schedule_create(
+    request: AuthenticatedRequest, assignment_id: int, payload: AreaScheduleCreateIn
+) -> CleanerAreaScheduleOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    site_area = SiteArea.objects.filter(pk=payload.site_area_id).first()
+    if site_area is None:
+        raise Http404("Area not found.")
+    role = OperationalRole.objects.filter(pk=payload.operational_role_id).first()
+    if role is None:
+        raise Http404("Operational role not found.")
+    shift = SiteShift.objects.filter(pk=payload.shift_id).first() if payload.shift_id else None
+    schedule = assign_cleaner_area_schedule(
+        assignment=assignment,
+        site_area=site_area,
+        operational_role=role,
+        day=payload.date,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        shift=shift,
+        notes=payload.notes,
+        actor=request.auth,
+    )
+    return _schedule_out(schedule)
+
+
+@router.put(
+    "/assignments/{assignment_id}/area-schedules/{schedule_id}",
+    response=CleanerAreaScheduleOut,
+    summary="Update an area schedule",
+)
+def cleaner_assignment_schedule_update(
+    request: AuthenticatedRequest, assignment_id: int, schedule_id: int, payload: AreaScheduleUpdateIn
+) -> CleanerAreaScheduleOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    schedule = CleanerAreaSchedule.objects.filter(pk=schedule_id, assignment_id=assignment_id).first()
+    if schedule is None:
+        raise Http404("Schedule not found.")
+    site_area = SiteArea.objects.filter(pk=payload.site_area_id).first() if payload.site_area_id else None
+    role = (
+        OperationalRole.objects.filter(pk=payload.operational_role_id).first() if payload.operational_role_id else None
+    )
+    shift = SiteShift.objects.filter(pk=payload.shift_id).first() if payload.shift_id else None
+    updated = update_area_schedule(
+        schedule=schedule,
+        actor=request.auth,
+        site_area=site_area,
+        operational_role=role,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        shift=shift,
+        notes=payload.notes,
+    )
+    return _schedule_out(updated)
+
+
+@router.delete(
+    "/assignments/{assignment_id}/area-schedules/{schedule_id}",
+    response=MessageOut,
+    summary="Remove an area schedule",
+)
+def cleaner_assignment_schedule_delete(
+    request: AuthenticatedRequest, assignment_id: int, schedule_id: int
+) -> MessageOut:
+    _assignment_read(request.auth)
+    assignment = get_assignment_or_none(assignment_id)
+    if assignment is None:
+        raise Http404("Assignment not found.")
+    if not can_edit_assignment(request.auth, assignment):
+        raise PermissionDenied("You cannot edit this assignment.")
+    schedule = CleanerAreaSchedule.objects.filter(pk=schedule_id, assignment_id=assignment_id).first()
+    if schedule is None:
+        raise Http404("Schedule not found.")
+    deactivate_area_schedule(schedule=schedule, actor=request.auth)
+    return MessageOut(detail="Schedule removed.")
+
+
+@router.get(
+    "/schedules",
+    response=list[ScheduleRowOut],
+    summary="Daily site schedule (attendance-ready)",
+)
+def site_schedule(
+    request: AuthenticatedRequest,
+    site_id: int,
+    date: date,
+    shift_id: int | None = None,
+) -> list[ScheduleRowOut]:
+    _assignment_read(request.auth)
+    site = get_site_or_none(site_id)
+    if site is None:
+        raise Http404("Site not found.")
+    if not site_in_user_scope(request.auth, site_id):
+        raise PermissionDenied("You do not have access to this site.")
+    rows = scheduled_cleaners_for_attendance(site_id, date, shift_id)
+    return [ScheduleRowOut(**row) for row in rows]

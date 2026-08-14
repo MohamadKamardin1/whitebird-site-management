@@ -220,3 +220,28 @@ engineering contract.
     auth), not the API signed endpoint.
 60. **Domain events**: `CleanerRegistered`, `CleanerActivated`,
     `CleanerDeactivated` are published through the transactional outbox.
+
+## Assignments & scheduling (Prompt 7)
+
+61. **Assignment type matches site work mode**: FULL_TIME sites only take
+    FULL_TIME assignments, SHIFT sites only SHIFT, FULL_TIME_AND_SHIFT either —
+    enforced in `CleanerSiteAssignment.clean()`.
+62. **ACTIVE assignment requires an ACTIVE cleaner**: applicants/trainees are
+    captured as DRAFT (can't be official active cleaners); inactive cleaners
+    cannot be assigned at all. `activate_assignment` re-validates eligibility.
+63. **One active/suspended assignment per cleaner+site** is enforced by a
+    partial unique constraint; history is preserved (assignments are ended,
+    never hard-deleted).
+64. **Shift bindings** require a SHIFT-type assignment and a shift belonging
+    to the assignment's site; one active binding per assignment+shift.
+65. **Overlap detection** (`_spans_overlap`) supports overnight time ranges and
+    blocks overlapping active area schedules for the same cleaner on the same
+    date; multiple non-overlapping area assignments per day are allowed.
+66. **`scheduled_cleaners_for_attendance`** is the attendance-ready projection
+    (one query, `select_related` on all relations) filtering to
+    active/suspended assignments for the day; used by `/schedules`.
+67. **Domain events** `CleanerAssigned` / `CleanerUnassigned` are emitted on
+    creation/activation and end.
+68. **Read access** to assignments follows the visible-site scope (viewers
+    read-only); **write access** requires management capacity over the
+    assignment's site (policies in `assignment_policies.py`).
