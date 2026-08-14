@@ -19,9 +19,13 @@ from .models import (
     Asset,
     Department,
     Notification,
+    OperationalRole,
     Site,
+    SiteArea,
+    SiteShift,
     SiteStatus,
     SiteType,
+    SiteWorkingRule,
     StaffAssignment,
 )
 
@@ -232,3 +236,28 @@ def list_site_types() -> list[SiteType]:
 
 def list_site_statuses() -> list[SiteStatus]:
     return list(SiteStatus.objects.filter(is_active=True))
+
+
+def list_shifts(site_id: int) -> list[SiteShift]:
+    """Active shifts for a site, ordered by sequence then start time."""
+    return list(
+        SiteShift.objects.filter(site_id=site_id, is_active=True)
+        .select_related("site")
+        .order_by("sequence", "start_time", "shift_name")
+    )
+
+
+def list_areas(site_id: int) -> list[SiteArea]:
+    """Active areas for a site, ordered by name."""
+    return list(SiteArea.objects.filter(site_id=site_id, is_active=True).select_related("site").order_by("area_name"))
+
+
+def list_operational_roles() -> list[OperationalRole]:
+    """Active global operational roles."""
+    return list(OperationalRole.objects.filter(is_active=True).order_by("name"))
+
+
+def get_site_working_rule(site: Site) -> SiteWorkingRule:
+    """Return the site's working rule, creating the default if absent."""
+    rule, _ = SiteWorkingRule.objects.get_or_create(site=site)
+    return rule

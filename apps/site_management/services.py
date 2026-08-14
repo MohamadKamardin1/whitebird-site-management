@@ -7,8 +7,8 @@ invalidates affected caches and schedules asynchronous side effects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, time
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -27,11 +27,15 @@ from .models import (
     AssistantGeneralSupervisorAssignment,
     Department,
     Notification,
+    OperationalRole,
     Site,
+    SiteArea,
+    SiteShift,
     SiteStatus,
     SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    WorkMode,
     Zone,
     ZoneSupervisorAssignment,
 )
@@ -66,9 +70,12 @@ def _unique_code(base: str) -> str:
 @dataclass
 class SiteDraft:
     name: str
+    zone: Zone | None = None
     site_type: SiteType | None = None
     status: SiteStatus | None = None
     description: str = ""
+    building_name: str = ""
+    location: str = ""
     address: str = ""
     city: str = ""
     region: str = ""
@@ -77,15 +84,22 @@ class SiteDraft:
     latitude: float | None = None
     longitude: float | None = None
     capacity: int = 0
+    contact_person: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    work_mode: WorkMode = WorkMode.FULL_TIME
+    working_days: list[str] = field(default_factory=list)
+    notes: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
+            "zone": self.zone,
             "site_type": self.site_type,
             "status": self.status,
             "description": self.description,
+            "building_name": self.building_name,
+            "location": self.location,
             "address": self.address,
             "city": self.city,
             "region": self.region,
@@ -94,8 +108,12 @@ class SiteDraft:
             "latitude": self.latitude,
             "longitude": self.longitude,
             "capacity": self.capacity,
+            "contact_person": self.contact_person,
             "contact_email": self.contact_email,
             "contact_phone": self.contact_phone,
+            "work_mode": self.work_mode,
+            "working_days": self.working_days,
+            "notes": self.notes,
         }
 
 
@@ -133,6 +151,13 @@ def update_site(*, site: Site, draft: SiteDraft, actor: User) -> Site:
         status_change = changes.get("status")
         if isinstance(status_change, dict):
             previous_status_slug = status_change.get("from")
+
+        if site.work_mode == WorkMode.FULL_TIME and site.shifts.filter(is_active=True).exists():
+            raise ValidationError(
+                f"A FULL_TIME site ({site.name}) cannot have active shifts. "
+                "Deactivate the shifts or choose another work mode.",
+                code="work_mode_conflict",
+            )
         site.save()
 
         record_audit(
@@ -682,3 +707,294 @@ def end_assistant_general_supervisor_assignment(
             before_data=model_data(assignment),
         )
     return assignment
+
+
+# --------------------------------------------------------------------------- #
+# Site configuration: shifts, areas, operational roles
+# --------------------------------------------------------------------------- #
+
+
+def _validate_shift_work_mode(site: Site, active_after: int) -> None:
+    """Validate a site's shift count against its work mode.
+
+    * ``FULL_TIME`` sites cannot have any active shifts.
+    * ``SHIFT`` sites must keep at least one active shift (shift staffing).
+    """
+    if site.work_mode == WorkMode.FULL_TIME and active_after > 0:
+        raise ValidationError(
+            f"A FULL_TIME site ({site.name}) cannot have active shifts. Change the work mode or deactivate shifts.",
+            code="work_mode_conflict",
+        )
+    if site.work_mode == WorkMode.SHIFT and active_after == 0:
+        raise ValidationError(
+            f"A SHIFT site ({site.name}) must have at least one active shift before shift staffing.",
+            code="work_mode_conflict",
+        )
+
+
+def create_shift(
+    *,
+    site: Site,
+    shift_name: str,
+    start_time: time,
+    end_time: time,
+    effective_days: list[str],
+    shift_code: str = "",
+    sequence: int = 0,
+    description: str = "",
+    actor: User,
+) -> SiteShift:
+    """Create a manually configured shift for a site."""
+    with transaction.atomic():
+        shift = SiteShift(
+            site=site,
+            shift_name=shift_name,
+            shift_code=shift_code,
+            start_time=start_time,
+            end_time=end_time,
+            effective_days=effective_days,
+            sequence=sequence,
+            description=description,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        shift.full_clean()
+        _validate_shift_work_mode(site, active_after=1)
+        shift.save()
+        record_audit(
+            action=AuditLog.Action.CREATE,
+            actor=actor,
+            entity=shift,
+            summary=f"Created shift {shift_name} for {site.name}",
+            after_data=model_data(shift),
+        )
+        invalidate_site(site.pk)
+    return shift
+
+
+def update_shift(
+    *,
+    shift: SiteShift,
+    actor: User,
+    shift_name: str | None = None,
+    shift_code: str | None = None,
+    start_time: time | None = None,
+    end_time: time | None = None,
+    effective_days: list[str] | None = None,
+    sequence: int | None = None,
+    description: str | None = None,
+) -> SiteShift:
+    """Update a site shift and re-validate its configuration."""
+    with transaction.atomic():
+        before = model_data(shift)
+        if shift_name is not None:
+            shift.shift_name = shift_name
+        if shift_code is not None:
+            shift.shift_code = shift_code
+        if start_time is not None:
+            shift.start_time = start_time
+        if end_time is not None:
+            shift.end_time = end_time
+        if effective_days is not None:
+            shift.effective_days = effective_days
+        if sequence is not None:
+            shift.sequence = sequence
+        if description is not None:
+            shift.description = description
+        shift.updated_by = actor
+        shift.full_clean()
+        active_count = shift.site.shifts.filter(is_active=True).count()
+        _validate_shift_work_mode(shift.site, active_after=active_count)
+        shift.save()
+        record_audit(
+            action=AuditLog.Action.UPDATE,
+            actor=actor,
+            entity=shift,
+            summary=f"Updated shift {shift.shift_name}",
+            before_data=before,
+            after_data=model_data(shift),
+        )
+        invalidate_site(shift.site_id)
+    return shift
+
+
+def deactivate_shift(*, shift: SiteShift, actor: User) -> SiteShift:
+    """Deactivate a shift; refuse when it has operational usage."""
+    with transaction.atomic():
+        if shift.has_operational_usage:
+            raise ValidationError("This shift is in use and cannot be deactivated.")
+        remaining = shift.site.shifts.filter(is_active=True).exclude(pk=shift.pk).count()
+        _validate_shift_work_mode(shift.site, active_after=remaining)
+        shift.is_active = False
+        shift.updated_by = actor
+        shift.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.ARCHIVE,
+            actor=actor,
+            entity=shift,
+            summary=f"Deactivated shift {shift.shift_name}",
+            before_data=model_data(shift),
+        )
+        invalidate_site(shift.site_id)
+    return shift
+
+
+def create_area(
+    *,
+    site: Site,
+    area_name: str,
+    area_code: str = "",
+    floor: str = "",
+    description: str = "",
+    actor: User,
+) -> SiteArea:
+    """Create an area within a site."""
+    with transaction.atomic():
+        area = SiteArea(
+            site=site,
+            area_name=area_name,
+            area_code=area_code,
+            floor=floor,
+            description=description,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        area.full_clean()
+        area.save()
+        record_audit(
+            action=AuditLog.Action.CREATE,
+            actor=actor,
+            entity=area,
+            summary=f"Created area {area_name} for {site.name}",
+            after_data=model_data(area),
+        )
+        invalidate_site(site.pk)
+    return area
+
+
+def update_area(
+    *,
+    area: SiteArea,
+    actor: User,
+    area_name: str | None = None,
+    area_code: str | None = None,
+    floor: str | None = None,
+    description: str | None = None,
+) -> SiteArea:
+    """Update a site area."""
+    with transaction.atomic():
+        before = model_data(area)
+        if area_name is not None:
+            area.area_name = area_name
+        if area_code is not None:
+            area.area_code = area_code
+        if floor is not None:
+            area.floor = floor
+        if description is not None:
+            area.description = description
+        area.updated_by = actor
+        area.full_clean()
+        area.save()
+        record_audit(
+            action=AuditLog.Action.UPDATE,
+            actor=actor,
+            entity=area,
+            summary=f"Updated area {area.area_name}",
+            before_data=before,
+            after_data=model_data(area),
+        )
+        invalidate_site(area.site_id)
+    return area
+
+
+def deactivate_area(*, area: SiteArea, actor: User) -> SiteArea:
+    """Deactivate an area; refuse when schedules/inspections exist."""
+    with transaction.atomic():
+        if area.has_operational_usage:
+            raise ValidationError("This area is in use and cannot be deactivated.")
+        area.is_active = False
+        area.updated_by = actor
+        area.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.ARCHIVE,
+            actor=actor,
+            entity=area,
+            summary=f"Deactivated area {area.area_name}",
+            before_data=model_data(area),
+        )
+        invalidate_site(area.site_id)
+    return area
+
+
+def create_operational_role(*, name: str, code: str, description: str = "", actor: User) -> OperationalRole:
+    """Create a globally configurable operational role."""
+    with transaction.atomic():
+        role = OperationalRole(
+            name=name,
+            code=code,
+            description=description,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        role.full_clean()
+        role.save()
+        record_audit(
+            action=AuditLog.Action.CREATE,
+            actor=actor,
+            entity=role,
+            summary=f"Created operational role {name}",
+            after_data=model_data(role),
+        )
+    return role
+
+
+def update_operational_role(
+    *,
+    role: OperationalRole,
+    actor: User,
+    name: str | None = None,
+    code: str | None = None,
+    description: str | None = None,
+) -> OperationalRole:
+    """Update an operational role."""
+    with transaction.atomic():
+        before = model_data(role)
+        if name is not None:
+            role.name = name
+        if code is not None:
+            role.code = code
+        if description is not None:
+            role.description = description
+        role.updated_by = actor
+        role.full_clean()
+        role.save()
+        record_audit(
+            action=AuditLog.Action.UPDATE,
+            actor=actor,
+            entity=role,
+            summary=f"Updated operational role {role.name}",
+            before_data=before,
+            after_data=model_data(role),
+        )
+    return role
+
+
+def deactivate_operational_role(*, role: OperationalRole, actor: User) -> OperationalRole:
+    """Deactivate an operational role; refuse when used in assignments."""
+    with transaction.atomic():
+        if role.has_operational_usage:
+            raise ValidationError("This operational role is in use and cannot be deactivated.")
+        role.is_active = False
+        role.updated_by = actor
+        role.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.ARCHIVE,
+            actor=actor,
+            entity=role,
+            summary=f"Deactivated operational role {role.name}",
+            before_data=model_data(role),
+        )
+    return role

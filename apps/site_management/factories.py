@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from datetime import date, timedelta
 
 import factory
@@ -11,7 +12,10 @@ from apps.accounts.factories import UserFactory
 from .models import (
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
+    OperationalRole,
     Site,
+    SiteArea,
+    SiteShift,
     SiteStatus,
     SiteSupervisorAssignment,
     SiteType,
@@ -110,4 +114,39 @@ class AssistantGeneralSupervisorAssignmentFactory(factory.django.DjangoModelFact
     zone = factory.SubFactory(ZoneFactory)
     assigned_from = date.today() - timedelta(days=30)
     assigned_to = None
+    is_active = True
+
+
+class SiteShiftFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SiteShift
+
+    site = factory.SubFactory(SiteFactory)
+    shift_name = factory.Sequence(lambda n: f"Shift {n}")
+    shift_code = factory.Sequence(lambda n: f"SH{n:02d}")
+    start_time = datetime.time(8, 0)
+    end_time = datetime.time(16, 0)
+    effective_days = ["mon", "tue", "wed", "thu", "fri"]
+    sequence = 0
+    is_active = True
+
+
+class SiteAreaFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SiteArea
+
+    site = factory.SubFactory(SiteFactory)
+    area_name = factory.Sequence(lambda n: f"Area {n}")
+    area_code = factory.Sequence(lambda n: f"AR{n:02d}")
+    floor = ""
+    is_active = True
+
+
+class OperationalRoleFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = OperationalRole
+        django_get_or_create = ("code",)
+
+    name = factory.Sequence(lambda n: f"Role {n}")
+    code = factory.Sequence(lambda n: f"role-{n}")
     is_active = True

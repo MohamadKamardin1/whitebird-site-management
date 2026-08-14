@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from ninja import Field, ModelSchema, Schema
 
@@ -82,9 +82,12 @@ class SiteSupervisorOut(Schema):
 
 class SiteCreateIn(Schema):
     name: str = Field(min_length=1, max_length=160)
+    zone_id: int | None = None
     site_type_id: int | None = None
     status_id: int | None = None
     description: str = ""
+    building_name: str = ""
+    location: str = ""
     address: str = ""
     city: str = ""
     region: str = ""
@@ -93,15 +96,22 @@ class SiteCreateIn(Schema):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int = Field(default=0, ge=0)
+    contact_person: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    work_mode: WorkMode = WorkMode.FULL_TIME
+    working_days: list[str] = Field(default_factory=list)
+    notes: str = ""
 
 
 class SiteUpdateIn(Schema):
     name: str | None = Field(default=None, max_length=160)
+    zone_id: int | None = None
     site_type_id: int | None = None
     status_id: int | None = None
     description: str | None = None
+    building_name: str | None = None
+    location: str | None = None
     address: str | None = None
     city: str | None = None
     region: str | None = None
@@ -110,8 +120,12 @@ class SiteUpdateIn(Schema):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int | None = Field(default=None, ge=0)
+    contact_person: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
+    work_mode: WorkMode | None = None
+    working_days: list[str] | None = Field(default=None, min_length=1)
+    notes: str | None = None
 
 
 class DepartmentOut(ModelSchema):
@@ -229,3 +243,99 @@ class AssetCategoryOut(ModelSchema):
 
 class MessageOut(Schema):
     detail: str
+
+
+class SiteShiftOut(Schema):
+    id: int
+    site_id: int
+    shift_name: str
+    shift_code: str
+    start_time: time
+    end_time: time
+    effective_days: list[str]
+    sequence: int
+    description: str
+    is_active: bool
+    crosses_midnight: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class SiteShiftCreateIn(Schema):
+    shift_name: str = Field(min_length=1, max_length=160)
+    shift_code: str = ""
+    start_time: time
+    end_time: time
+    effective_days: list[str] = Field(min_length=1)
+    sequence: int = Field(default=0, ge=0)
+    description: str = ""
+
+
+class SiteShiftUpdateIn(Schema):
+    shift_name: str | None = Field(default=None, max_length=160)
+    shift_code: str | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    effective_days: list[str] | None = Field(default=None, min_length=1)
+    sequence: int | None = Field(default=None, ge=0)
+    description: str | None = None
+
+
+class StatusUpdateIn(Schema):
+    is_active: bool
+
+
+class SiteAreaOut(Schema):
+    id: int
+    site_id: int
+    area_name: str
+    area_code: str
+    floor: str
+    description: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class SiteAreaCreateIn(Schema):
+    area_name: str = Field(min_length=1, max_length=160)
+    area_code: str = ""
+    floor: str = ""
+    description: str = ""
+
+
+class SiteAreaUpdateIn(Schema):
+    area_name: str | None = Field(default=None, max_length=160)
+    area_code: str | None = None
+    floor: str | None = None
+    description: str | None = None
+
+
+class OperationalRoleOut(Schema):
+    id: int
+    name: str
+    code: str
+    description: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class OperationalRoleCreateIn(Schema):
+    name: str = Field(min_length=1, max_length=120)
+    code: str = Field(min_length=1, max_length=24)
+    description: str = ""
+
+
+class OperationalRoleUpdateIn(Schema):
+    name: str | None = Field(default=None, max_length=120)
+    code: str | None = Field(default=None, max_length=24)
+    description: str | None = None
+
+
+class SiteWorkingRuleOut(Schema):
+    site_id: int
+    allowed_assignment_types: list[str]
+    attendance_locked: bool
+    require_shift_area_assignment: bool
+    allow_temporary_transfers: bool

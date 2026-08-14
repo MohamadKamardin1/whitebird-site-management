@@ -5,6 +5,34 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 05] — 2026-08-13
+
+### Added
+
+- **`SiteShift`**: manual per-site shift configuration (`shift_name`,
+  `shift_code`, `start_time`, `end_time`, `effective_days`, `sequence`,
+  `description`) with partial-unique active name/code constraints,
+  `crosses_midnight` (overnight support), and deactivate-instead-of-delete.
+- **`SiteArea`**: per-site areas (`area_name`, `area_code`, `floor`,
+  `description`) unique per site; soft deactivation.
+- **`OperationalRole`**: globally configurable operational roles with unique
+  name/code and deactivation protection.
+- **`SiteWorkingRule`**: per-site operational flags
+  (`allowed_assignment_types`, `attendance_locked`,
+  `require_shift_area_assignment`, `allow_temporary_transfers`).
+- **Validation**: `validate_effective_days`, `validate_shift_time_logic`,
+  `validate_site_work_mode`, `validate_shift_belongs_to_site`,
+  `validate_area_belongs_to_site`, `validate_site_configuration_consistency`
+  (incl. duplicate-shift detection).
+- **Services** (transactional + audited): shift/area/role
+  create/update/deactivate.
+- **API**: shift, area, and operational-role list/create/update/status
+  endpoints with role-scoped write permissions (SYSTEM_ADMIN /
+  GENERAL_SUPERVISOR / `manage_site_configuration`).
+- **Admin**: `SiteShift` and `SiteArea` inlines under Site; standalone
+  `OperationalRole` admin with status badge, actions, and hard-delete guard.
+- **Factories** for shifts, areas, roles, and working rules (tests).
+
 ## [Prompt 04] — 2026-08-13
 
 ### Added

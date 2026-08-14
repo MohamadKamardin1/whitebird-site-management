@@ -14,7 +14,7 @@ from django.http import Http404
 from ninja import Query, Router
 
 from apps.accounts.models import RoleCode, User
-from apps.accounts.permissions import role_required, user_can_manage_site
+from apps.accounts.permissions import management_required, role_required, user_can_manage_site
 from apps.core.pagination import PageParams, Paginated, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
@@ -23,7 +23,10 @@ from .models import (
     AssetCategory,
     Department,
     Notification,
+    OperationalRole,
     Site,
+    SiteArea,
+    SiteShift,
     SiteStatus,
     SiteSupervisorAssignment,
     SiteType,
@@ -43,8 +46,17 @@ from .schemas import (
     DepartmentUpdateIn,
     MessageOut,
     NotificationOut,
+    OperationalRoleCreateIn,
+    OperationalRoleOut,
+    OperationalRoleUpdateIn,
+    SiteAreaCreateIn,
+    SiteAreaOut,
+    SiteAreaUpdateIn,
     SiteCreateIn,
     SiteDetailOut,
+    SiteShiftCreateIn,
+    SiteShiftOut,
+    SiteShiftUpdateIn,
     SiteStatsOut,
     SiteStatusOut,
     SiteSummaryOut,
@@ -52,6 +64,7 @@ from .schemas import (
     SiteTypeOut,
     SiteUpdateIn,
     StatusRef,
+    StatusUpdateIn,
     ZoneOut,
 )
 from .scoping import site_in_user_scope, visible_sites, visible_zones
@@ -61,10 +74,13 @@ from .selectors import (
     get_site_detail,
     get_site_or_none,
     get_site_stats,
+    list_areas,
     list_assets,
     list_assignments,
     list_departments,
     list_notifications,
+    list_operational_roles,
+    list_shifts,
     list_site_statuses,
     list_site_types,
     list_sites_queryset,
@@ -74,17 +90,26 @@ from .services import (
     SiteDraft,
     archive_site,
     assign_staff,
+    create_area,
     create_asset,
     create_department,
+    create_operational_role,
+    create_shift,
     create_site,
+    deactivate_area,
     deactivate_asset,
     deactivate_department,
+    deactivate_operational_role,
+    deactivate_shift,
     mark_notifications_read,
     restore_site,
     set_primary_assignment,
     unassign_staff,
+    update_area,
     update_asset,
     update_department,
+    update_operational_role,
+    update_shift,
     update_site,
 )
 
@@ -190,6 +215,12 @@ def _type_or_none(site_type_id: int | None) -> SiteType | None:
     return SiteType.objects.filter(pk=site_type_id).first()
 
 
+def _zone_or_none(zone_id: int | None) -> Zone | None:
+    if zone_id is None:
+        return None
+    return Zone.objects.filter(pk=zone_id).first()
+
+
 def _status_or_none(status_id: int | None) -> SiteStatus | None:
     if status_id is None:
         return None
@@ -267,9 +298,12 @@ def site_create(request: AuthenticatedRequest, payload: SiteCreateIn) -> SiteDet
     )
     draft = SiteDraft(
         name=payload.name,
+        zone=_zone_or_none(payload.zone_id),
         site_type=_type_or_none(payload.site_type_id),
         status=_status_or_none(payload.status_id),
         description=payload.description,
+        building_name=payload.building_name,
+        location=payload.location,
         address=payload.address,
         city=payload.city,
         region=payload.region,
@@ -278,8 +312,12 @@ def site_create(request: AuthenticatedRequest, payload: SiteCreateIn) -> SiteDet
         latitude=payload.latitude,
         longitude=payload.longitude,
         capacity=payload.capacity,
+        contact_person=payload.contact_person,
         contact_email=payload.contact_email,
         contact_phone=payload.contact_phone,
+        work_mode=payload.work_mode,
+        working_days=payload.working_days,
+        notes=payload.notes,
     )
     site = create_site(draft=draft, actor=request.auth)
     return _reload_detail(site.pk)
@@ -310,9 +348,12 @@ def _draft_from_update(payload: SiteUpdateIn, current: Site) -> SiteDraft:
 
     return SiteDraft(
         name=pick(payload.name, current.name),
+        zone=(_zone_or_none(payload.zone_id) if payload.zone_id is not None else current.zone),
         site_type=(_type_or_none(payload.site_type_id) if payload.site_type_id is not None else current.site_type),
         status=(_status_or_none(payload.status_id) if payload.status_id is not None else current.status),
         description=pick(payload.description, current.description),
+        building_name=pick(payload.building_name, current.building_name),
+        location=pick(payload.location, current.location),
         address=pick(payload.address, current.address),
         city=pick(payload.city, current.city),
         region=pick(payload.region, current.region),
@@ -321,8 +362,12 @@ def _draft_from_update(payload: SiteUpdateIn, current: Site) -> SiteDraft:
         latitude=pick(payload.latitude, current.latitude),
         longitude=pick(payload.longitude, current.longitude),
         capacity=pick(payload.capacity, current.capacity),
+        contact_person=pick(payload.contact_person, current.contact_person),
         contact_email=pick(payload.contact_email, current.contact_email),
         contact_phone=pick(payload.contact_phone, current.contact_phone),
+        work_mode=pick(payload.work_mode, WorkMode(current.work_mode)),
+        working_days=pick(payload.working_days, list(current.working_days)),
+        notes=pick(payload.notes, current.notes),
     )
 
 
@@ -416,6 +461,258 @@ def site_supervisors(request: AuthenticatedRequest, site_id: int) -> list[SiteSu
         )
         for assignment in qs.order_by("-is_primary", "assigned_from")
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Site configuration: shifts, areas, operational roles
+# --------------------------------------------------------------------------- #
+
+
+def _can_configure_site(user: User) -> bool:
+    """Users permitted to change site configuration.
+
+    System admin, the general supervisor, and any user holding the
+    ``manage_site_configuration`` permission (granted to assistant/zone/site
+    supervisors via RBAC).
+    """
+    return (
+        user.is_system_admin
+        or user.role == RoleCode.GENERAL_SUPERVISOR
+        or user.has_perm("accounts.manage_site_configuration")
+    )
+
+
+def _site_config_write(user: User, site_id: int) -> None:
+    if not _can_configure_site(user):
+        raise PermissionDenied("You do not have permission to configure this site.")
+    _write_access(user, site_id)
+
+
+def _shift_out(shift: SiteShift) -> SiteShiftOut:
+    return SiteShiftOut(
+        id=shift.pk,
+        site_id=shift.site_id,
+        shift_name=shift.shift_name,
+        shift_code=shift.shift_code,
+        start_time=shift.start_time,
+        end_time=shift.end_time,
+        effective_days=list(shift.effective_days),
+        sequence=shift.sequence,
+        description=shift.description,
+        is_active=shift.is_active,
+        crosses_midnight=shift.crosses_midnight,
+        created_at=shift.created_at,
+        updated_at=shift.updated_at,
+    )
+
+
+@router.get("/sites/{site_id}/shifts", response=list[SiteShiftOut], summary="List site shifts")
+def shift_list(request: AuthenticatedRequest, site_id: int) -> list[SiteShiftOut]:
+    _read_access(request.auth, site_id)
+    return [_shift_out(shift) for shift in list_shifts(site_id)]
+
+
+@router.post("/sites/{site_id}/shifts", response=SiteShiftOut, summary="Create a site shift")
+def shift_create(request: AuthenticatedRequest, site_id: int, payload: SiteShiftCreateIn) -> SiteShiftOut:
+    _site_config_write(request.auth, site_id)
+    site = _load_site_or_404(site_id)
+    shift = create_shift(
+        site=site,
+        shift_name=payload.shift_name,
+        shift_code=payload.shift_code,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        effective_days=payload.effective_days,
+        sequence=payload.sequence,
+        description=payload.description,
+        actor=request.auth,
+    )
+    return _shift_out(shift)
+
+
+@router.put(
+    "/sites/{site_id}/shifts/{shift_id}",
+    response=SiteShiftOut,
+    summary="Update a site shift",
+)
+def shift_update(
+    request: AuthenticatedRequest, site_id: int, shift_id: int, payload: SiteShiftUpdateIn
+) -> SiteShiftOut:
+    _site_config_write(request.auth, site_id)
+    shift = SiteShift.objects.filter(pk=shift_id, site_id=site_id).first()
+    if shift is None:
+        raise Http404("Shift not found.")
+    updated = update_shift(
+        shift=shift,
+        actor=request.auth,
+        shift_name=payload.shift_name,
+        shift_code=payload.shift_code,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        effective_days=payload.effective_days,
+        sequence=payload.sequence,
+        description=payload.description,
+    )
+    return _shift_out(updated)
+
+
+@router.patch(
+    "/sites/{site_id}/shifts/{shift_id}/status",
+    response=SiteShiftOut,
+    summary="Activate or deactivate a site shift",
+)
+def shift_status(request: AuthenticatedRequest, site_id: int, shift_id: int, payload: StatusUpdateIn) -> SiteShiftOut:
+    _site_config_write(request.auth, site_id)
+    shift = SiteShift.objects.filter(pk=shift_id, site_id=site_id).first()
+    if shift is None:
+        raise Http404("Shift not found.")
+    updated = (
+        update_shift(shift=shift, actor=request.auth)
+        if payload.is_active
+        else deactivate_shift(shift=shift, actor=request.auth)
+    )
+    return _shift_out(updated)
+
+
+def _area_out(area: SiteArea) -> SiteAreaOut:
+    return SiteAreaOut(
+        id=area.pk,
+        site_id=area.site_id,
+        area_name=area.area_name,
+        area_code=area.area_code,
+        floor=area.floor,
+        description=area.description,
+        is_active=area.is_active,
+        created_at=area.created_at,
+        updated_at=area.updated_at,
+    )
+
+
+@router.get("/sites/{site_id}/areas", response=list[SiteAreaOut], summary="List site areas")
+def area_list(request: AuthenticatedRequest, site_id: int) -> list[SiteAreaOut]:
+    _read_access(request.auth, site_id)
+    return [_area_out(area) for area in list_areas(site_id)]
+
+
+@router.post("/sites/{site_id}/areas", response=SiteAreaOut, summary="Create a site area")
+def area_create(request: AuthenticatedRequest, site_id: int, payload: SiteAreaCreateIn) -> SiteAreaOut:
+    _site_config_write(request.auth, site_id)
+    site = _load_site_or_404(site_id)
+    area = create_area(
+        site=site,
+        area_name=payload.area_name,
+        area_code=payload.area_code,
+        floor=payload.floor,
+        description=payload.description,
+        actor=request.auth,
+    )
+    return _area_out(area)
+
+
+@router.put(
+    "/sites/{site_id}/areas/{area_id}",
+    response=SiteAreaOut,
+    summary="Update a site area",
+)
+def area_update(request: AuthenticatedRequest, site_id: int, area_id: int, payload: SiteAreaUpdateIn) -> SiteAreaOut:
+    _site_config_write(request.auth, site_id)
+    area = SiteArea.objects.filter(pk=area_id, site_id=site_id).first()
+    if area is None:
+        raise Http404("Area not found.")
+    updated = update_area(
+        area=area,
+        actor=request.auth,
+        area_name=payload.area_name,
+        area_code=payload.area_code,
+        floor=payload.floor,
+        description=payload.description,
+    )
+    return _area_out(updated)
+
+
+@router.patch(
+    "/sites/{site_id}/areas/{area_id}/status",
+    response=SiteAreaOut,
+    summary="Activate or deactivate a site area",
+)
+def area_status(request: AuthenticatedRequest, site_id: int, area_id: int, payload: StatusUpdateIn) -> SiteAreaOut:
+    _site_config_write(request.auth, site_id)
+    area = SiteArea.objects.filter(pk=area_id, site_id=site_id).first()
+    if area is None:
+        raise Http404("Area not found.")
+    updated = (
+        update_area(area=area, actor=request.auth)
+        if payload.is_active
+        else deactivate_area(area=area, actor=request.auth)
+    )
+    return _area_out(updated)
+
+
+def _role_out(role: OperationalRole) -> OperationalRoleOut:
+    return OperationalRoleOut(
+        id=role.pk,
+        name=role.name,
+        code=role.code,
+        description=role.description,
+        is_active=role.is_active,
+        created_at=role.created_at,
+        updated_at=role.updated_at,
+    )
+
+
+@router.get("/operational-roles", response=list[OperationalRoleOut], summary="List operational roles")
+def operational_role_list(request: AuthenticatedRequest) -> list[OperationalRoleOut]:
+    if not management_required(request.auth):
+        raise PermissionDenied("Operational roles require a management role.")
+    return [_role_out(role) for role in list_operational_roles()]
+
+
+@router.post("/operational-roles", response=OperationalRoleOut, summary="Create an operational role")
+def operational_role_create(request: AuthenticatedRequest, payload: OperationalRoleCreateIn) -> OperationalRoleOut:
+    if not _can_configure_site(request.auth):
+        raise PermissionDenied("You do not have permission to configure operational roles.")
+    role = create_operational_role(
+        name=payload.name, code=payload.code, description=payload.description, actor=request.auth
+    )
+    return _role_out(role)
+
+
+@router.put("/operational-roles/{role_id}", response=OperationalRoleOut, summary="Update an operational role")
+def operational_role_update(
+    request: AuthenticatedRequest, role_id: int, payload: OperationalRoleUpdateIn
+) -> OperationalRoleOut:
+    if not _can_configure_site(request.auth):
+        raise PermissionDenied("You do not have permission to configure operational roles.")
+    role = OperationalRole.objects.filter(pk=role_id).first()
+    if role is None:
+        raise Http404("Operational role not found.")
+    updated = update_operational_role(
+        role=role,
+        actor=request.auth,
+        name=payload.name,
+        code=payload.code,
+        description=payload.description,
+    )
+    return _role_out(updated)
+
+
+@router.patch(
+    "/operational-roles/{role_id}/status",
+    response=OperationalRoleOut,
+    summary="Activate or deactivate an operational role",
+)
+def operational_role_status(request: AuthenticatedRequest, role_id: int, payload: StatusUpdateIn) -> OperationalRoleOut:
+    if not _can_configure_site(request.auth):
+        raise PermissionDenied("You do not have permission to configure operational roles.")
+    role = OperationalRole.objects.filter(pk=role_id).first()
+    if role is None:
+        raise Http404("Operational role not found.")
+    updated = (
+        update_operational_role(role=role, actor=request.auth)
+        if payload.is_active
+        else deactivate_operational_role(role=role, actor=request.auth)
+    )
+    return _role_out(updated)
 
 
 # --------------------------------------------------------------------------- #

@@ -106,6 +106,31 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
 | GET    | `/sites/{id}`                       | Site detail (role-scoped)                     |
 | GET    | `/sites/{id}/supervisors`           | Active site-supervisor assignments            |
 
+### Site configuration endpoints
+
+| Method | Path                                        | Description                          |
+| ------ | ------------------------------------------- | ------------------------------------ |
+| GET    | `/sites/{id}/shifts`                         | List a site's shifts                 |
+| POST   | `/sites/{id}/shifts`                         | Create a shift                       |
+| PUT    | `/sites/{id}/shifts/{shift_id}`              | Update a shift                       |
+| PATCH  | `/sites/{id}/shifts/{shift_id}/status`       | Activate/deactivate a shift          |
+| GET    | `/sites/{id}/areas`                          | List a site's areas                  |
+| POST   | `/sites/{id}/areas`                          | Create an area                       |
+| PUT    | `/sites/{id}/areas/{area_id}`                | Update an area                       |
+| PATCH  | `/sites/{id}/areas/{area_id}/status`         | Activate/deactivate an area          |
+| GET    | `/operational-roles`                         | List operational roles               |
+| POST   | `/operational-roles`                         | Create an operational role           |
+| PUT    | `/operational-roles/{id}`                    | Update an operational role           |
+| PATCH  | `/operational-roles/{id}/status`             | Activate/deactivate a role           |
+
+Shift payload: `shift_name`, `shift_code`, `start_time`, `end_time`,
+`effective_days` (day codes), `sequence`, `description`. Overnight shifts
+(`end_time <= start_time`) are supported; responses include
+`crosses_midnight`. Work-mode rules (FULL_TIME cannot have shifts, SHIFT must
+keep ≥1) are enforced on every write. Writes require SYSTEM_ADMIN /
+GENERAL_SUPERVISOR / `manage_site_configuration` permission scoped to the
+site; reads follow the visible scope.
+
 Site list filters: `search`, `status` (slug), `site_type` (slug), `region`,
 `country`, `zone_id`, `work_mode`, `capacity_min`, plus pagination
 (`page`, `page_size`). Responses use the `Paginated` envelope

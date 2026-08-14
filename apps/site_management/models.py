@@ -23,7 +23,7 @@ from django.utils import timezone
 from apps.core.managers import SoftDeleteManager
 from apps.core.models import ActivatableModel, TimeStampedModel, UserStampedModel
 
-from .validators import validate_working_days
+from .validators import validate_effective_days, validate_shift_time_logic, validate_working_days
 
 
 class WorkMode(models.TextChoices):
@@ -450,3 +450,170 @@ class Notification(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"[{self.recipient}] {self.title}"
+
+
+# --------------------------------------------------------------------------- #
+# Site configuration: shifts, areas, operational roles, working rules
+# --------------------------------------------------------------------------- #
+
+
+class SiteShift(UserStampedModel):
+    """A manually configured shift window for a site.
+
+    Shift names, codes, times and effective days are fully manual — nothing is
+    hardcoded. Overnight shifts (``end_time <= start_time``) are supported and
+    flagged by :attr:`crosses_midnight`.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="shifts")
+    shift_name = models.CharField(max_length=160)
+    shift_code = models.CharField(max_length=16, blank=True, default="")
+    start_time = models.TimeField(db_index=True)
+    end_time = models.TimeField(db_index=True)
+    effective_days = models.JSONField(
+        default=list,
+        validators=[validate_effective_days],
+        help_text="Day codes the shift runs (mon..sun). At least one required.",
+    )
+    sequence = models.PositiveSmallIntegerField(default=0, help_text="Display order within the site.")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    objects = SoftDeleteManager()
+
+    class Meta:
+        verbose_name = "Site shift"
+        verbose_name_plural = "Site shifts"
+        ordering = ["site__name", "sequence", "start_time"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["site", "shift_name"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_shift_name",
+            ),
+            models.UniqueConstraint(
+                fields=["site", "shift_code"],
+                condition=models.Q(is_active=True, shift_code__gt=""),
+                name="uniq_active_shift_code",
+            ),
+        ]
+        indexes = [models.Index(fields=["site", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.shift_name} @ {self.site.name}"
+
+    @property
+    def crosses_midnight(self) -> bool:
+        return self.end_time <= self.start_time
+
+    @property
+    def has_operational_usage(self) -> bool:
+        """True once future attendance/task records reference this shift."""
+        for related in ("attendance_records", "task_assignments", "job_records"):
+            manager = getattr(self, related, None)
+            if manager is not None and manager.exists():
+                return True
+        return False
+
+    def clean(self) -> None:
+        super().clean()
+        validate_shift_time_logic(self.start_time, self.end_time)
+        validate_effective_days(self.effective_days)
+
+
+class SiteArea(UserStampedModel):
+    """A physically/functionally distinct area within a site (e.g. a floor)."""
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="areas")
+    area_name = models.CharField(max_length=160)
+    area_code = models.CharField(max_length=16, blank=True, default="")
+    floor = models.CharField(max_length=32, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    objects = SoftDeleteManager()
+
+    class Meta:
+        verbose_name = "Site area"
+        verbose_name_plural = "Site areas"
+        ordering = ["site__name", "area_name"]
+        constraints = [models.UniqueConstraint(fields=["site", "area_name"], name="uniq_area_name_per_site")]
+        indexes = [models.Index(fields=["site", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.area_name} @ {self.site.name}"
+
+    @property
+    def has_operational_usage(self) -> bool:
+        """True once future schedules/inspections reference this area."""
+        for related in ("schedules", "inspections", "task_assignments"):
+            manager = getattr(self, related, None)
+            if manager is not None and manager.exists():
+                return True
+        return False
+
+
+class OperationalRole(UserStampedModel):
+    """Globally configurable operational role a cleaner/trainee can hold.
+
+    Examples (all configurable, never hardcoded): Toilet Cleaner, Floor
+    Cleaner, Garbage Collector, Window Cleaner, Compound Sweeper.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    code = models.CharField(max_length=24, unique=True, db_index=True)
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    objects = SoftDeleteManager()
+
+    class Meta:
+        verbose_name = "Operational role"
+        verbose_name_plural = "Operational roles"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def has_operational_usage(self) -> bool:
+        """True once future assignments reference this role."""
+        for related in ("role_assignments", "task_assignments"):
+            manager = getattr(self, related, None)
+            if manager is not None and manager.exists():
+                return True
+        return False
+
+
+class SiteWorkingRule(UserStampedModel):
+    """Per-site operational configuration flags.
+
+    Keeps site behaviour explicit and admin-configurable instead of hardcoded
+    assumptions about how a site runs.
+    """
+
+    site = models.OneToOneField(Site, on_delete=models.CASCADE, related_name="working_rule")
+    allowed_assignment_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Configurable assignment type codes permitted at this site.",
+    )
+    attendance_locked = models.BooleanField(
+        default=False,
+        help_text="Prevents attendance edits outside authorised flows.",
+    )
+    require_shift_area_assignment = models.BooleanField(
+        default=False,
+        help_text="Staff must be assigned to both a shift and an area.",
+    )
+    allow_temporary_transfers = models.BooleanField(
+        default=False,
+        help_text="Permits temporary staff transfers between sites.",
+    )
+
+    class Meta:
+        verbose_name = "Site working rule"
+        verbose_name_plural = "Site working rules"
+
+    def __str__(self) -> str:
+        return f"Working rules for {self.site.name}"

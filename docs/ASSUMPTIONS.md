@@ -160,3 +160,35 @@ engineering contract.
     `created_by`/`updated_by` on every assignment.
 43. **Admin hard-delete guards**: zones with sites, and sites with operational
     history, cannot be hard-deleted via the admin — deactivate/archive instead.
+
+## Site configuration (Prompt 5)
+
+44. **Shifts/areas/roles are fully manual** — shift names, codes, times,
+    effective days, areas, and operational roles are all admin-configurable
+    rows. Nothing is hardcoded (even the prompt's example roles are seeded
+    only by demo data, never by code constants).
+45. **`working_days`/`effective_days` use validated `JSONField` lists** of
+    `mon..sun` codes (portable PostgreSQL-`ArrayField` equivalent for the
+    SQLite-hermetic test suite).
+46. **Overnight shifts are valid**: `crosses_midnight` is `end_time <=
+    start_time`; the time-logic validator only rejects missing times.
+47. **Work-mode enforcement** (`_validate_shift_work_mode`): a `FULL_TIME` site
+    cannot have active shifts; a `SHIFT` site must keep at least one active
+    shift (so creating the first shift is allowed, and deactivating the last
+    is blocked). `FULL_TIME_AND_SHIFT` allows both.
+48. **Duplicate-shift detection** (`validate_site_configuration_consistency`)
+    flags active shifts with identical times + effective days as a
+    configuration error (422).
+49. **`SiteWorkingRule`** is a per-site config (one-to-one) for
+    `allowed_assignment_types`, `attendance_locked`,
+    `require_shift_area_assignment`, `allow_temporary_transfers` — created
+    lazily via `get_site_working_rule`.
+50. **Deactivation protection** uses `has_operational_usage` properties that
+    inspect future related managers (attendance/tasks/schedules/inspections);
+    while those modules do not exist yet the properties return `False`, but
+    the service/admin guards are in place and exercised via tests that force
+    usage.
+51. **Write access to site configuration**: SYSTEM_ADMIN, GENERAL_SUPERVISOR,
+    or anyone holding the `manage_site_configuration` RBAC permission
+    (assistant/zone/site supervisors), scoped to sites they can manage. Reads
+    follow the visible scope.

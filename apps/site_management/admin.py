@@ -14,7 +14,10 @@ from .models import (
     AssistantGeneralSupervisorAssignment,
     Department,
     Notification,
+    OperationalRole,
     Site,
+    SiteArea,
+    SiteShift,
     SiteStatus,
     SiteSupervisorAssignment,
     SiteType,
@@ -65,6 +68,22 @@ class SiteSupervisorInline(admin.TabularInline):  # type: ignore[type-arg]
     show_change_link = True
 
 
+class SiteShiftInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = SiteShift
+    extra = 0
+    fk_name = "site"
+    fields = ("shift_name", "shift_code", "start_time", "end_time", "effective_days", "sequence", "is_active")
+    show_change_link = True
+
+
+class SiteAreaInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = SiteArea
+    extra = 0
+    fk_name = "site"
+    fields = ("area_name", "area_code", "floor", "is_active")
+    show_change_link = True
+
+
 @admin.register(Site)
 class SiteAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
@@ -86,7 +105,7 @@ class SiteAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("site_type", "status", "zone")
     date_hierarchy = "start_date"
-    inlines = [SiteSupervisorInline]
+    inlines = [SiteSupervisorInline, SiteShiftInline, SiteAreaInline]
     actions = ["archive", "restore"]
 
     @admin.action(description="Archive selected sites")
@@ -212,3 +231,42 @@ class NotificationAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_filter = ("is_read", "created_at")
     search_fields = ("recipient__email", "title")
     readonly_fields = ("recipient", "title", "body", "entity_type", "entity_id", "created_at")
+
+
+@admin.register(OperationalRole)
+class OperationalRoleAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("name", "code", "description", "status_badge", "is_active", "created_at")
+    list_filter = ("is_active", "created_at")
+    search_fields = ("name", "code", "description")
+    readonly_fields = ("created_at", "updated_at")
+    actions = ["activate_roles", "deactivate_roles"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: OperationalRole) -> str:
+        return "Active" if obj.is_active else "Inactive"
+
+    @admin.action(description="Activate selected roles")
+    def activate_roles(self, request: Any, queryset: Any) -> None:
+        updated = queryset.update(is_active=True, updated_at=timezone.now())
+        self.message_user(request, f"{updated} role(s) activated.")
+
+    @admin.action(description="Deactivate selected roles")
+    def deactivate_roles(self, request: Any, queryset: Any) -> None:
+        updated = queryset.update(is_active=False, updated_at=timezone.now())
+        self.message_user(request, f"{updated} role(s) deactivated.")
+
+    def delete_model(self, request: Any, obj: OperationalRole) -> None:
+        if obj.has_operational_usage:
+            raise DjangoValidationError(
+                f"Cannot delete operational role {obj.name}: it is in use. Deactivate it instead."
+            )
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            self.delete_model(request, obj)
+
+    def has_delete_permission(self, request: Any, obj: OperationalRole | None = None) -> bool:
+        if obj is None:
+            return True
+        return not obj.has_operational_usage
