@@ -17,6 +17,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from ninja import NinjaAPI
+from ninja.errors import AuthenticationError, AuthorizationError, Throttled, ValidationError
 
 from .context import current_request_id
 from .errors import DomainError
@@ -70,6 +71,43 @@ def register_error_handlers(api: NinjaAPI) -> None:
             request,
             error_payload("validation_error", str(message), _validation_fields(exc)),
             status=422,
+        )
+
+    @api.exception_handler(AuthenticationError)
+    def handle_authentication_error(request: Any, exc: AuthenticationError) -> Any:
+        return api.create_response(
+            request,
+            error_payload("unauthorized", str(exc) or "Unauthorized."),
+            status=401,
+        )
+
+    @api.exception_handler(ValidationError)
+    def handle_request_validation_error(request: Any, exc: ValidationError) -> Any:
+        fields: dict[str, Any] = {}
+        for error in exc.errors:
+            key = ".".join(str(part) for part in error.get("loc", [])) or "_"
+            fields.setdefault(key, []).append(str(error.get("msg", "Invalid value.")))
+        message = next(iter(fields.values()), ["Validation failed."])[0]
+        return api.create_response(
+            request,
+            error_payload("validation_error", str(message), fields),
+            status=422,
+        )
+
+    @api.exception_handler(AuthorizationError)
+    def handle_authorization_error(request: Any, exc: AuthorizationError) -> Any:
+        return api.create_response(
+            request,
+            error_payload("forbidden", str(exc) or "Forbidden."),
+            status=403,
+        )
+
+    @api.exception_handler(Throttled)
+    def handle_throttled(request: Any, exc: Throttled) -> Any:
+        return api.create_response(
+            request,
+            error_payload("rate_limited", str(exc) or "Too many requests."),
+            status=429,
         )
 
     @api.exception_handler(ObjectDoesNotExist)

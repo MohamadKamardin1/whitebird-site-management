@@ -40,6 +40,7 @@ scheme.
 | POST   | `/auth/logout`                | Revoke a refresh token               |
 | POST   | `/auth/password-change`       | Change the current user's password (authenticated) |
 | GET    | `/auth/me`                    | Current user profile                 |
+| GET    | `/auth/me/permissions`        | Action/resource permission set for UI gating |
 | GET    | `/auth/me/stats`              | Dashboard aggregates for the user    |
 
 ## Authorization
@@ -55,8 +56,12 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
   `Paginated` envelope: `count`, `next`, `previous`, `results`.
 - **Filtering:** query parameters scoped to the resource (e.g.
   `?status=active&region=...&capacity_min=...`).
-- **Sorting:** whitelisted sort keys via `apply_ordering` (unknown keys are
-  ignored).
+- **Sorting:** whitelisted `ordering` sort keys via `apply_ordering` (unknown
+  keys are ignored). Currently supported on the issue, job, inspection, store,
+  trainee, cleaner, and site-report list endpoints.
+- **Status codes:** `200` reads/updates, `201` creation, `204` delete/no
+  content, `401` unauthenticated, `403` forbidden, `404` not found, `409`
+  conflict, `422` validation, `429` rate limited.
 - **Errors:** consistent envelope, identical for every endpoint:
 
   ```json
@@ -358,6 +363,21 @@ reports aggregate attendance/store/inspection/trainee/issues data and freeze an
 immutable snapshot at submission; returns preserve history. Permissions: read =
 management/viewer; site report generate/submit = site scope; return/review =
 zone supervisor+; assistant authoring = AGS/GS; general authoring = GS.
+
+### Theme & platform
+
+| Method | Path                            | Description                                    |
+| ------ | ------------------------------- | ---------------------------------------------- |
+| GET    | `/theme`                        | Brand identity: `brand_name`, primary/accent/background colours |
+
+OpenAPI is grouped into domain tags (Auth, Zones, Sites, Site Configuration,
+Cleaners, Assignments, Attendance, Trainees, Stores, Inspections, Issues & Jobs,
+Reports, Notifications, Theme, Dashboard). Interactive docs and `openapi.json`
+are available when `API_DOCS_ENABLED` is true. The API is rate limited
+(anonymous `API_THROTTLE_ANON_RATE`, authenticated `API_THROTTLE_AUTH_RATE`,
+returns `429` with `code: "rate_limited"`). CORS is enabled for `/api/*` with a
+configurable `CORS_ALLOWED_ORIGINS`. See `docs/FRONTEND_INTEGRATION.md` for
+client guidance.
 
 ## Outside the API
 

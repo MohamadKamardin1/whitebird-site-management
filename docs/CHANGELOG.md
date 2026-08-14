@@ -5,6 +5,40 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 14] — 2026-08-14
+
+### Added
+
+- **Theme endpoint** `GET /theme`: brand name + primary/accent/background
+  colours from constance for frontend theming.
+- **`/auth/me/permissions`**: action/resource permission set (mirrors the
+  mobile `PermissionSet` contract) for client-side UI gating.
+- **OpenAPI polish**: every operation is grouped under a domain tag
+  (Auth, Zones, Sites, Site Configuration, Cleaners, Assignments, Attendance,
+  Trainees, Stores, Inspections, Issues & Jobs, Reports, Notifications, Theme,
+  Dashboard); Bearer security scheme documented; docs and `openapi.json` gated
+  by `API_DOCS_ENABLED`.
+- **Consistent error envelope for all statuses**: 401/403/422/429 now use the
+  shared `{"error": {code, message, trace_id, fields}}` envelope (Ninja
+  `AuthenticationError`/`AuthorizationError`/`ValidationError`/`Throttled`
+  handlers); every response carries `X-Request-ID`.
+- **Whitelisted sorting** (`ordering`) on the issue, job, inspection, store,
+  trainee, cleaner, and site-report list endpoints via `apply_ordering`.
+- **API rate limiting**: fixed-window middleware (`apps/core/throttling.py`)
+  with configurable `API_THROTTLE_ANON_RATE`/`API_THROTTLE_AUTH_RATE`/
+  `API_THROTTLE_ENABLED`, returning `429` with the standard envelope.
+- **Contract tests** (`apps/core/tests/test_api_contract.py`): OpenAPI schema
+  generation + tags + responses, docs page, pagination envelope + page-size
+  cap, ordering whitelist (injection-safe), error shapes (401/404/422), auth
+  flow (login/refresh/logout/me/me-permissions), management-viewer read-only,
+  throttling 429, theme endpoint, request-id header.
+
+### Changed
+
+- Documented API standards: snake_case JSON, HTTP status codes (201/204/409/
+  429), pagination, filtering/sorting, CORS, throttling, and frontend guidance
+  in `docs/API.md` and the new `docs/FRONTEND_INTEGRATION.md`.
+
 ## [Prompt 13] — 2026-08-14
 
 ### Added

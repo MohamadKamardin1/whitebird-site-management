@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, cast
 
+from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -18,7 +19,7 @@ from ninja import File, Form, Query, Router, UploadedFile
 from apps.accounts.models import RoleCode, User
 from apps.accounts.permissions import management_required, role_required, user_can_manage_site
 from apps.core.files import create_file_token
-from apps.core.pagination import PageParams, Paginated, paginate, paginated_response
+from apps.core.pagination import PageParams, Paginated, apply_ordering, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
 from .assignment_policies import can_assign_cleaner, can_edit_assignment, can_view_assignment
@@ -297,6 +298,7 @@ from .schemas import (
     StoreOut,
     TemplateItemIn,
     TemplateItemOut,
+    ThemeOut,
     TraineeDecisionIn,
     TraineeEvaluationCreateIn,
     TraineeEvaluationOut,
@@ -1324,10 +1326,11 @@ def cleaner_list(
     status: str | None = None,
     id_type: str | None = None,
     gender: str | None = None,
+    ordering: str | None = None,
 ) -> Paginated[CleanerOut]:
     _cleaner_read(request.auth)
     spec = CleanerFilter(search=search, status=status, id_type=id_type, gender=gender)
-    qs = cleaner_list_queryset(request.auth, spec)
+    qs = apply_ordering(cleaner_list_queryset(request.auth, spec), ordering, ["first_name", "last_name", "created_at"])
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [CleanerOut(**cleaner_serialize(c, request.auth)) for c in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -2140,10 +2143,13 @@ def trainee_list(
     site_id: int | None = None,
     status: str | None = None,
     search: str | None = None,
+    ordering: str | None = None,
 ) -> Paginated[TraineeProgramOut]:
     _trainee_read(request.auth)
     spec = TraineeFilter(site_id=site_id, status=status, search=search)
-    qs = trainee_list_queryset(request.auth, spec)
+    qs = apply_ordering(
+        trainee_list_queryset(request.auth, spec), ordering, ["start_date", "expected_end_date", "created_at"]
+    )
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_trainee_out(p) for p in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -2469,10 +2475,13 @@ def store_list_endpoint(
     filters: PageParams = PAGE_PARAMS_DEFAULT,
     site_id: int | None = None,
     search: str | None = None,
+    ordering: str | None = None,
 ) -> Paginated[StoreOut]:
     if not (management_required(request.auth) or request.auth.is_management_viewer):
         raise PermissionDenied("Store records require a management role.")
-    qs = store_list(request.auth, StoreFilter(site_id=site_id, search=search))
+    qs = apply_ordering(
+        store_list(request.auth, StoreFilter(site_id=site_id, search=search)), ordering, ["store_name", "created_at"]
+    )
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_store_out(s) for s in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -2984,6 +2993,7 @@ def inspection_list_endpoint(
     overall_status: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    ordering: str | None = None,
 ) -> Paginated[InspectionOut]:
     _inspection_read(request.auth)
     spec = InspectionFilter(
@@ -2995,7 +3005,7 @@ def inspection_list_endpoint(
         date_from=date_from,
         date_to=date_to,
     )
-    qs = inspection_list(request.auth, spec)
+    qs = apply_ordering(inspection_list(request.auth, spec), ordering, ["inspection_date", "created_at"])
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_inspection_out(i) for i in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -3338,6 +3348,7 @@ def issue_list_endpoint(
     source: str | None = None,
     assigned_to_id: int | None = None,
     escalated: bool | None = None,
+    ordering: str | None = None,
 ) -> Paginated[IssueOut]:
     _issues_read(request.auth)
     spec = IssueFilter(
@@ -3349,7 +3360,9 @@ def issue_list_endpoint(
         assigned_to_id=assigned_to_id,
         escalated=escalated,
     )
-    qs = issue_list(request.auth, spec)
+    qs = apply_ordering(
+        issue_list(request.auth, spec), ordering, ["created_at", "due_date", "priority", "escalation_level"]
+    )
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_issue_out(i) for i in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -3475,6 +3488,7 @@ def job_list_endpoint(
     priority: str | None = None,
     issue_id: int | None = None,
     assigned_to_user_id: int | None = None,
+    ordering: str | None = None,
 ) -> Paginated[JobOut]:
     _issues_read(request.auth)
     spec = JobFilter(
@@ -3484,7 +3498,7 @@ def job_list_endpoint(
         issue_id=issue_id,
         assigned_to_user_id=assigned_to_user_id,
     )
-    qs = job_list(request.auth, spec)
+    qs = apply_ordering(job_list(request.auth, spec), ordering, ["due_date", "created_at", "priority"])
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_job_out(j) for j in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -3803,6 +3817,7 @@ def site_report_list_endpoint(
     report_date: date | None = None,
     site_id: int | None = None,
     status: str | None = None,
+    ordering: str | None = None,
 ) -> Paginated[DailySiteReportOut]:
     _report_read(request.auth)
     qs = site_reports_for_day(request.auth, report_date or date.today())
@@ -3810,6 +3825,7 @@ def site_report_list_endpoint(
         qs = qs.filter(site_id=site_id)
     if status:
         qs = qs.filter(status=status)
+    qs = apply_ordering(qs, ordering, ["report_date", "created_at"])
     items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
     results = [_site_report_out(r) for r in items]
     return paginated_response(request, qs, page, page_size, results, count)
@@ -4026,3 +4042,15 @@ def missing_site_reports_endpoint(
 ) -> list[MissingSiteReportOut]:
     _report_read(request.auth)
     return [MissingSiteReportOut(**m) for m in missing_site_reports(request.auth, report_date or date.today())]
+
+
+@router.get("/theme", response=ThemeOut, summary="Brand theme metadata", tags=["Theme"])
+def theme_endpoint(request: AuthenticatedRequest) -> ThemeOut:
+    """Return brand identity for the frontend (name + colours)."""
+    _report_read(request.auth)
+    return ThemeOut(
+        brand_name=config.BRAND_NAME,
+        brand_primary_color=config.BRAND_PRIMARY_COLOR,
+        brand_accent_color=config.BRAND_ACCENT_COLOR,
+        brand_background_color=config.BRAND_BACKGROUND_COLOR,
+    )

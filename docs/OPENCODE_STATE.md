@@ -20,7 +20,32 @@ Module. Each prompt updates this file before its commit.
 | 11     | Inspections & templates | **Prompt 11 completed** | see CHANGELOG |
 | 12     | Issues, jobs & escalation | **Prompt 12 completed** | see CHANGELOG |
 | 13     | Reporting chain engine | **Prompt 13 completed** | see CHANGELOG |
-| 14–20  | (pending)                                    | —                  | —      |
+| 14     | Complete API surface | **Prompt 14 completed** | see CHANGELOG |
+| 15–20  | (pending)                                    | —                  | —      |
+
+## Prompt 14 — completed ✅
+
+Completed and polished the entire Site Management API surface to a premium,
+frontend-ready standard:
+
+- **Theme endpoint** `GET /theme` (brand name + colours) and
+  `/auth/me/permissions` (action/resource set for UI gating).
+- **OpenAPI polish**: all 139 operations grouped under domain tags, Bearer
+  security scheme, docs/`openapi.json` gated by `API_DOCS_ENABLED`.
+- **Consistent error envelope**: 401/403/422/429 now share
+  `{"error": {code, message, trace_id, fields}}`; every response carries
+  `X-Request-ID`.
+- **Whitelisted sorting** on issue/job/inspection/store/trainee/cleaner/
+  site-report list endpoints.
+- **Rate limiting**: fixed-window middleware (`apps/core/throttling.py`,
+  `API_THROTTLE_*` settings) returning `429` with the standard envelope.
+- **Contract tests** (`test_api_contract.py`): OpenAPI generation, docs page,
+  pagination, ordering whitelist, error shapes, auth flow, viewer read-only,
+  throttling, theme, request-id.
+- **Docs**: `docs/API.md` standards and the new `docs/FRONTEND_INTEGRATION.md`.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 444 passed ·
+coverage 90.44% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 13 — completed ✅
 

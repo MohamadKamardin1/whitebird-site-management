@@ -1200,3 +1200,10 @@ class GeneralReportGenerateIn(Schema):
 
 class AssistantSummaryGenerateInDate(Schema):
     report_date: date
+
+
+class ThemeOut(Schema):
+    brand_name: str
+    brand_primary_color: str
+    brand_accent_color: str
+    brand_background_color: str

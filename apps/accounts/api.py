@@ -23,7 +23,7 @@ from apps.accounts.schemas import (
     TokenOut,
     UserOut,
 )
-from apps.accounts.selectors import list_active_tokens, staff_directory, user_stats
+from apps.accounts.selectors import list_active_tokens, staff_directory, user_permissions, user_stats
 from apps.accounts.services import (
     create_user,
     issue_api_token,
@@ -90,6 +90,11 @@ def refresh(request: AuthenticatedRequest, payload: RefreshIn) -> RefreshOut:
 @router.get("/me", response=UserOut, summary="Current authenticated user")
 def me(request: AuthenticatedRequest) -> User:
     return request.auth
+
+
+@router.get("/me/permissions", response=dict, summary="Permission set for the current user")
+def my_permissions(request: AuthenticatedRequest) -> dict[str, object]:
+    return user_permissions(request.auth)
 
 
 @router.get("/me/stats", response=dict, summary="Authenticated user dashboard aggregates")
