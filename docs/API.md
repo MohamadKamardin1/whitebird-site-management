@@ -199,6 +199,26 @@ belong to the site; area schedules support overnight ranges and block
 overlapping time slots for the same cleaner/day. `/schedules` returns an
 optimised attendance-ready projection.
 
+### Attendance
+
+| Method | Path                          | Description                                   |
+| ------ | ----------------------------- | --------------------------------------------- |
+| GET    | `/attendance/daily`           | Daily sheet (`site_id`, `date`, `shift_id`)   |
+| POST   | `/attendance/bulk`            | Bulk entry (many records in one request)      |
+| PUT    | `/attendance/{id}`            | Record single attendance                      |
+| POST   | `/attendance/submit`          | Submit a day (`site_id`, `date`, `shift_id`)  |
+| POST   | `/attendance/return`          | Return records/group for correction (`reason`)|
+| POST   | `/attendance/review`          | Review a submitted day                        |
+| GET    | `/attendance/history`         | Paginated history (site/date/status/review filters) |
+| GET    | `/attendance/summary`         | Aggregates + `attendance_rate`                |
+| GET    | `/attendance/missing`         | Sites with unsubmitted attendance for a date  |
+| GET    | `/attendance/exceptions`      | Late/absent/sick/leave/permission records     |
+
+Workflow: DRAFT → SUBMITTED → REVIEWED → LOCKED (RETURNED for corrections).
+Submission requires all scheduled cleaners to be marked. Bulk payload:
+`{site_id, attendance_date, entries: [{record_id | cleaner_id, status,
+check_in_time, check_out_time, notes}]}`.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

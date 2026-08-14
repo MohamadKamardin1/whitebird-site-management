@@ -14,6 +14,8 @@ from .models import (
     Asset,
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
+    AttendanceRecord,
+    AttendanceReviewStatus,
     Cleaner,
     CleanerAreaSchedule,
     CleanerDocument,
@@ -544,3 +546,79 @@ class CleanerAreaScheduleAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_filter = ("is_active", "date")
     search_fields = ("assignment__cleaner__first_name", "assignment__cleaner__last_name", "site_area__area_name")
     raw_id_fields = ("assignment", "site_area", "operational_role", "shift")
+
+
+@admin.register(AttendanceRecord)
+class AttendanceRecordAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "attendance_date",
+        "site",
+        "cleaner",
+        "shift",
+        "status_badge",
+        "review_status_badge",
+        "check_in_time",
+        "check_out_time",
+        "recorded_by",
+    )
+    list_filter = ("review_status", "status", "site", "attendance_date", "shift")
+    search_fields = ("cleaner__first_name", "cleaner__last_name", "site__name", "notes")
+    date_hierarchy = "attendance_date"
+    raw_id_fields = ("cleaner", "site", "shift", "recorded_by", "created_by", "updated_by")
+    actions = ["submit_records", "return_records", "review_records"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: AttendanceRecord) -> str:
+        return obj.status
+
+    @admin.display(description="Review")
+    def review_status_badge(self, obj: AttendanceRecord) -> str:
+        return obj.review_status
+
+    def get_readonly_fields(self, request: Any, obj: AttendanceRecord | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = ("created_at", "updated_at")
+        if obj is not None and not obj.is_editable:
+            readonly += (
+                "cleaner",
+                "site",
+                "shift",
+                "attendance_date",
+                "status",
+                "check_in_time",
+                "check_out_time",
+                "notes",
+            )
+        return readonly
+
+    def has_delete_permission(self, request: Any, obj: AttendanceRecord | None = None) -> bool:
+        if obj is None:
+            return True
+        return obj.review_status in ("draft", "returned")
+
+    @admin.action(description="Submit selected records")
+    def submit_records(self, request: Any, queryset: Any) -> None:
+        from django.utils import timezone as dj_tz  # noqa: PLC0415
+
+        updated = queryset.exclude(review_status__in=["submitted", "reviewed", "locked"]).update(
+            review_status=AttendanceReviewStatus.SUBMITTED,
+            submitted_at=dj_tz.now(),
+            recorded_by=request.user,
+        )
+        self.message_user(request, f"{updated} record(s) submitted.")
+
+    @admin.action(description="Return selected records")
+    def return_records(self, request: Any, queryset: Any) -> None:
+        updated = queryset.exclude(review_status=AttendanceReviewStatus.LOCKED).update(
+            review_status=AttendanceReviewStatus.RETURNED,
+            return_reason="Returned from admin",
+            updated_by=request.user,
+        )
+        self.message_user(request, f"{updated} record(s) returned.")
+
+    @admin.action(description="Review selected records")
+    def review_records(self, request: Any, queryset: Any) -> None:
+        updated = queryset.filter(review_status=AttendanceReviewStatus.SUBMITTED).update(
+            review_status=AttendanceReviewStatus.REVIEWED,
+            updated_by=request.user,
+        )
+        self.message_user(request, f"{updated} record(s) reviewed.")

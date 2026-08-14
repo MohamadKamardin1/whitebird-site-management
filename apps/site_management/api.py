@@ -7,7 +7,7 @@ services (writes) or selectors (reads), and shape output schemas.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -42,6 +42,23 @@ from .assignment_services import (
     update_area_schedule,
     update_assignment,
 )
+from .attendance_selectors import (
+    AttendanceFilter,
+    attendance_daily_sheet,
+    attendance_exceptions,
+    attendance_history_queryset,
+    attendance_summary,
+    missing_attendance_sites,
+)
+from .attendance_services import (
+    bulk_upsert_attendance,
+    generate_daily_attendance_sheet,
+    record_single_attendance,
+    return_attendance_group,
+    return_attendance_record,
+    review_attendance_group,
+    submit_daily_attendance,
+)
 from .cleaner_selectors import (
     CleanerFilter,
     can_view_document,
@@ -63,6 +80,8 @@ from .cleaner_services import (
 from .models import (
     Asset,
     AssetCategory,
+    AttendanceRecord,
+    AttendanceStatus,
     CleanerAreaSchedule,
     CleanerAssignmentType,
     CleanerDocumentType,
@@ -93,6 +112,13 @@ from .schemas import (
     AssetUpdateIn,
     AssignmentCreateIn,
     AssignmentOut,
+    AttendanceBulkIn,
+    AttendanceGroupIn,
+    AttendanceRecordOut,
+    AttendanceReturnIn,
+    AttendanceSingleIn,
+    AttendanceSubmitOut,
+    AttendanceSummaryOut,
     CleanerAreaScheduleOut,
     CleanerCreateIn,
     CleanerDocumentOut,
@@ -1648,3 +1674,210 @@ def site_schedule(
         raise PermissionDenied("You do not have access to this site.")
     rows = scheduled_cleaners_for_attendance(site_id, date, shift_id)
     return [ScheduleRowOut(**row) for row in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Attendance
+# --------------------------------------------------------------------------- #
+
+
+def _attendance_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Attendance requires a management role.")
+
+
+def _attendance_write(user: User, site_id: int) -> None:
+    _attendance_read(user)
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You cannot manage attendance for this site.")
+
+
+def _attendance_out(r: AttendanceRecord) -> AttendanceRecordOut:
+    return AttendanceRecordOut(
+        id=r.pk,
+        cleaner_id=r.cleaner_id,
+        cleaner_name=r.cleaner.full_name,
+        site_id=r.site_id,
+        site_name=r.site.name,
+        shift_id=r.shift_id,
+        shift_name=r.shift.shift_name if r.shift else None,
+        attendance_date=r.attendance_date,
+        status=r.status,
+        check_in_time=r.check_in_time,
+        check_out_time=r.check_out_time,
+        notes=r.notes,
+        review_status=r.review_status,
+        return_reason=r.return_reason,
+        submitted_at=r.submitted_at,
+        is_editable=r.is_editable,
+    )
+
+
+@router.get(
+    "/attendance/daily",
+    response=list[AttendanceRecordOut],
+    summary="Daily attendance sheet for a site",
+)
+def attendance_daily(
+    request: AuthenticatedRequest,
+    site_id: int,
+    date: date,
+    shift_id: int | None = None,
+) -> list[AttendanceRecordOut]:
+    _attendance_read(request.auth)
+    site = get_site_or_none(site_id)
+    if site is None:
+        raise Http404("Site not found.")
+    if not site_in_user_scope(request.auth, site_id):
+        raise PermissionDenied("You do not have access to this site.")
+    generate_daily_attendance_sheet(site_id=site_id, day=date, shift_id=shift_id, actor=request.auth)
+    records = attendance_daily_sheet(request.auth, site_id, date, shift_id)
+    return [_attendance_out(r) for r in records]
+
+
+@router.post("/attendance/bulk", response=list[AttendanceRecordOut], summary="Bulk attendance entry")
+def attendance_bulk(request: AuthenticatedRequest, payload: AttendanceBulkIn) -> list[AttendanceRecordOut]:
+    _attendance_write(request.auth, payload.site_id)
+    allow_future = request.auth.is_system_admin or request.auth.role == RoleCode.GENERAL_SUPERVISOR
+    records = bulk_upsert_attendance(
+        site_id=payload.site_id,
+        day=payload.attendance_date,
+        entries=[e.model_dump() for e in payload.entries],
+        user=request.auth,
+        shift_id=payload.shift_id,
+        allow_future=allow_future,
+    )
+    return [_attendance_out(r) for r in records]
+
+
+@router.post("/attendance/submit", response=AttendanceSubmitOut, summary="Submit a day's attendance")
+def attendance_submit(request: AuthenticatedRequest, payload: AttendanceGroupIn) -> AttendanceSubmitOut:
+    _attendance_write(request.auth, payload.site_id)
+    submitted = submit_daily_attendance(
+        site_id=payload.site_id, day=payload.attendance_date, user=request.auth, shift_id=payload.shift_id
+    )
+    return AttendanceSubmitOut(submitted=submitted)
+
+
+@router.post("/attendance/return", response=dict, summary="Return attendance for correction")
+def attendance_return(request: AuthenticatedRequest, payload: AttendanceReturnIn) -> dict[str, object]:
+    if payload.record_id is not None:
+        record = AttendanceRecord.objects.filter(pk=payload.record_id).select_related("site").first()
+        if record is None:
+            raise Http404("Attendance record not found.")
+        _attendance_write(request.auth, record.site_id)
+        returned = return_attendance_record(record=record, user=request.auth, reason=payload.reason)
+        return {"returned": 1, "record_id": returned.pk}
+    if payload.site_id is None or payload.attendance_date is None:
+        raise PermissionDenied("Provide a record_id or a site_id + date.")
+    _attendance_write(request.auth, payload.site_id)
+    returned_count = return_attendance_group(
+        site_id=payload.site_id,
+        day=payload.attendance_date,
+        user=request.auth,
+        reason=payload.reason,
+        shift_id=payload.shift_id,
+    )
+    return {"returned": returned_count}
+
+
+@router.post("/attendance/review", response=dict, summary="Review a submitted day's attendance")
+def attendance_review(request: AuthenticatedRequest, payload: AttendanceGroupIn) -> dict[str, object]:
+    _attendance_write(request.auth, payload.site_id)
+    reviewed = review_attendance_group(
+        site_id=payload.site_id, day=payload.attendance_date, user=request.auth, shift_id=payload.shift_id
+    )
+    return {"reviewed": reviewed}
+
+
+@router.get(
+    "/attendance/history",
+    response=Paginated[AttendanceRecordOut],
+    summary="Attendance history (paginated, filtered)",
+)
+def attendance_history(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    date: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    shift_id: int | None = None,
+    cleaner_id: int | None = None,
+    status: str | None = None,
+    review_status: str | None = None,
+) -> Paginated[AttendanceRecordOut]:
+    _attendance_read(request.auth)
+    spec = AttendanceFilter(
+        site_id=site_id,
+        date=date,
+        date_from=date_from,
+        date_to=date_to,
+        shift_id=shift_id,
+        cleaner_id=cleaner_id,
+        status=status,
+        review_status=review_status,
+    )
+    qs = attendance_history_queryset(request.auth, spec).order_by("-attendance_date", "site__name")
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_attendance_out(r) for r in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get("/attendance/summary", response=AttendanceSummaryOut, summary="Attendance summary")
+def attendance_summary_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    date: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    shift_id: int | None = None,
+    cleaner_id: int | None = None,
+) -> AttendanceSummaryOut:
+    _attendance_read(request.auth)
+    spec = AttendanceFilter(
+        site_id=site_id, date=date, date_from=date_from, date_to=date_to, shift_id=shift_id, cleaner_id=cleaner_id
+    )
+    return AttendanceSummaryOut(**cast(dict[str, Any], attendance_summary(request.auth, spec)))
+
+
+@router.get("/attendance/missing", response=list[dict[str, object]], summary="Sites missing attendance submission")
+def attendance_missing(request: AuthenticatedRequest, date: date) -> list[dict[str, object]]:
+    _attendance_read(request.auth)
+    return missing_attendance_sites(request.auth, date)
+
+
+@router.get("/attendance/exceptions", response=list[AttendanceRecordOut], summary="Attendance exceptions")
+def attendance_exceptions_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    date: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    shift_id: int | None = None,
+    cleaner_id: int | None = None,
+) -> list[AttendanceRecordOut]:
+    _attendance_read(request.auth)
+    spec = AttendanceFilter(
+        site_id=site_id, date=date, date_from=date_from, date_to=date_to, shift_id=shift_id, cleaner_id=cleaner_id
+    )
+    return [_attendance_out(r) for r in attendance_exceptions(request.auth, spec)]
+
+
+@router.put("/attendance/{record_id}", response=AttendanceRecordOut, summary="Record single attendance")
+def attendance_single(
+    request: AuthenticatedRequest, record_id: int, payload: AttendanceSingleIn
+) -> AttendanceRecordOut:
+    record = AttendanceRecord.objects.filter(pk=record_id).select_related("site").first()
+    if record is None:
+        raise Http404("Attendance record not found.")
+    _attendance_write(request.auth, record.site_id)
+    updated = record_single_attendance(
+        record_id=record_id,
+        status=AttendanceStatus(payload.status),
+        user=request.auth,
+        check_in_time=payload.check_in_time,
+        check_out_time=payload.check_out_time,
+        notes=payload.notes,
+    )
+    return _attendance_out(updated)

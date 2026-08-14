@@ -174,6 +174,7 @@ CONSTANCE_CONFIG = {
     "MAX_SITE_SUPERVISORS_PER_SITE": (2, "Maximum supervisor assignments per site."),
     "MAX_UPLOAD_MB": (10, "Maximum upload size in megabytes."),
     "MIN_CLEANER_AGE": (18, "Minimum legal age for a registered cleaner."),
+    "ATTENDANCE_LOCK_AFTER_DAYS": (7, "Days after review before attendance auto-locks."),
     "DEFAULT_PAGE_SIZE": (25, "Default API page size."),
     "MAX_PAGE_SIZE": (100, "Maximum allowed API page size."),
     "DASHBOARD_CACHE_TTL": (300, "Dashboard aggregate cache lifetime (seconds)."),

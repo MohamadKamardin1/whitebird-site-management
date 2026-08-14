@@ -245,3 +245,28 @@ engineering contract.
 68. **Read access** to assignments follows the visible-site scope (viewers
     read-only); **write access** requires management capacity over the
     assignment's site (policies in `assignment_policies.py`).
+
+## Attendance engine (Prompt 8)
+
+69. **Uniqueness**: one record per cleaner+date (full-time, `shift IS NULL`) or
+    per cleaner+shift+date (shift sites), enforced by two partial unique
+    constraints. The service layer additionally enforces the site's work mode
+    (full-time cannot record against a shift; shift sites require a shift).
+70. **Future dates** are rejected on bulk entry unless the actor is SYSTEM_ADMIN
+    or GENERAL_SUPERVISOR (the admin override); generated placeholder sheets
+    are allowed for any date (pre-scheduling).
+71. **Workflow**: DRAFT → SUBMITTED → REVIEWED → LOCKED, with RETURNED as the
+    correction state. Only DRAFT/RETURNED records are editable; submission
+    requires every scheduled record to be marked; `AttendanceSubmitted` events
+    are emitted per record; auto-lock applies to reviewed records older than
+    `ATTENDANCE_LOCK_AFTER_DAYS` (constance, default 7).
+72. **Overnight checkout** is naturally supported: `check_out_time` earlier
+    than `check_in_time` implies next-day checkout (TimeField has no date).
+73. **Generation** builds from ACTIVE site assignments (full-time) and active
+    shift bindings (shift sites), filtered by date-window coverage and ACTIVE
+    cleaner status; idempotent, uses `bulk_create`.
+74. **Performance**: daily sheet and history use `select_related(cleaner, site,
+    shift)` (single query); summary uses one grouped aggregate; generation and
+    bulk entry use `bulk_create`/`bulk_update`. Query-count tests enforce this.
+75. **`attendance_rate`** = `(present + late) / (present + late + absent)`
+    (sick/leave/permission/off are excused and excluded).

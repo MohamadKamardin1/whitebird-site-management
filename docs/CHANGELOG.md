@@ -5,6 +5,32 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 08] — 2026-08-13
+
+### Added
+
+- **`AttendanceRecord`**: full status set, check-in/out (overnight-safe),
+  review workflow (DRAFT/SUBMITTED/REVIEWED/RETURNED/LOCKED), partial-unique
+  constraints for full-time (cleaner+date) and shift (cleaner+shift+date)
+  records.
+- **Services** (transactional + audited): generate daily sheet (idempotent
+  from active assignments + shift bindings, `bulk_create`), bulk upsert,
+  save draft, record single, submit (requires all scheduled marked), return
+  (group or record), review, auto-lock (`ATTENDANCE_LOCK_AFTER_DAYS`);
+  `AttendanceSubmitted` domain events.
+- **Selectors**: `attendance_daily_sheet` (single query), `attendance_history`,
+  `attendance_summary` (single grouped aggregate), `missing_attendance_sites`,
+  `attendance_exceptions`.
+- **API**: daily/bulk/record/submit/return/review/history/summary/missing/
+  exceptions endpoints with role scoping, pagination, and validation.
+- **Admin**: `AttendanceRecordAdmin` (filters, date hierarchy, readonly after
+  submission, submit/return/review actions, delete guard for locked records).
+- **Factory** + migration for attendance records.
+
+### Changed
+
+- `ATTENDANCE_LOCK_AFTER_DAYS` added to constance runtime configuration.
+
 ## [Prompt 07] — 2026-08-13
 
 ### Added

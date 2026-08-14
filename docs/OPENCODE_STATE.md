@@ -13,10 +13,32 @@ Module. Each prompt updates this file before its commit.
 | 4      | Organisation hierarchy (zones/sites/supervisors) | Prompt 4 completed | —      |
 | 5      | Site configuration (shifts/areas/roles) | Prompt 5 completed | —      |
 | 6      | Cleaner registry & secure documents | Prompt 6 completed | —      |
-| 7      | Assignments & scheduling engine | **Prompt 7 completed** | see CHANGELOG |
-| 8–20   | (pending)                                    | —                  | —      |
+| 7      | Assignments & scheduling engine | Prompt 7 completed | —      |
+| 8      | Attendance engine | **Prompt 8 completed** | see CHANGELOG |
+| 9–20   | (pending)                                    | —                  | —      |
 
-## Prompt 7 — completed ✅
+## Prompt 8 — completed ✅
+
+Implemented the fast, accurate attendance engine:
+
+- **`AttendanceRecord`**: statuses (SCHEDULED/PRESENT/LATE/ABSENT/SICK/LEAVE/
+  PERMISSION/OFF/NOT_SCHEDULED), check-in/out (overnight-safe), review
+  workflow (DRAFT/SUBMITTED/REVIEWED/RETURNED/LOCKED), partial-unique
+  constraints per full-time (cleaner+date) and shift (cleaner+shift+date).
+- **Services**: generate sheet (idempotent, from active assignments + shift
+  bindings), bulk upsert, save draft, record single, submit (requires all
+  scheduled marked), return, review, auto-lock; audited; `AttendanceSubmitted`
+  domain events.
+- **Selectors**: daily sheet (single query), history, summary (single grouped
+  aggregate), missing sites, exceptions — all role-scoped.
+- **API**: daily/bulk/record/submit/return/review/history/summary/missing/
+  exceptions endpoints with strict scoping and validation.
+- **Admin**: `AttendanceRecordAdmin` (filters, date hierarchy, readonly after
+  submission, submit/return/review actions, delete guard for locked records).
+- **Factory** + migration.
+
+**Quality gates (all green):** Ruff · Mypy strict (126 files) · pytest 332
+passed · coverage 90.1% ≥ 90 · `makemigrations --check` clean.
 
 Implemented the cleaner assignment and scheduling engine:
 
@@ -36,6 +58,10 @@ Implemented the cleaner assignment and scheduling engine:
   `scheduled_cleaners_for_attendance` projection.
 - **Policies**: `can_assign_cleaner`/`can_edit_assignment`/`can_view_assignment`
   with role/data scoping.
+
+## Prompt 7 — completed ✅
+
+Implemented the cleaner assignment and scheduling engine:
 - **API**: assignments CRUD + status, shift bindings, area schedules, and the
   attendance-ready `/schedules` endpoint.
 - **Admin**: `CleanerSiteAssignmentAdmin` (status badges, shift/schedule

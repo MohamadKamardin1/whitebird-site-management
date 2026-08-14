@@ -518,3 +518,77 @@ class ScheduleRowOut(Schema):
     start_time: str
     end_time: str
     crosses_midnight: bool
+
+
+class AttendanceRecordOut(Schema):
+    id: int
+    cleaner_id: int
+    cleaner_name: str
+    site_id: int
+    site_name: str
+    shift_id: int | None = None
+    shift_name: str | None = None
+    attendance_date: date
+    status: str
+    check_in_time: time | None = None
+    check_out_time: time | None = None
+    notes: str
+    review_status: str
+    return_reason: str
+    submitted_at: datetime | None = None
+    is_editable: bool
+
+
+class AttendanceEntryIn(Schema):
+    record_id: int | None = None
+    cleaner_id: int | None = None
+    shift_id: int | None = None
+    status: str = Field(pattern="^(scheduled|present|late|absent|sick|leave|permission|off|not_scheduled)$")
+    check_in_time: time | None = None
+    check_out_time: time | None = None
+    notes: str = ""
+
+
+class AttendanceBulkIn(Schema):
+    site_id: int
+    attendance_date: date
+    entries: list[AttendanceEntryIn] = Field(min_length=1)
+    shift_id: int | None = None
+
+
+class AttendanceSingleIn(Schema):
+    status: str = Field(pattern="^(scheduled|present|late|absent|sick|leave|permission|off|not_scheduled)$")
+    check_in_time: time | None = None
+    check_out_time: time | None = None
+    notes: str = ""
+
+
+class AttendanceGroupIn(Schema):
+    site_id: int
+    attendance_date: date
+    shift_id: int | None = None
+    reason: str = ""
+
+
+class AttendanceReturnIn(Schema):
+    site_id: int | None = None
+    attendance_date: date | None = None
+    shift_id: int | None = None
+    record_id: int | None = None
+    reason: str = ""
+
+
+class AttendanceSubmitOut(Schema):
+    submitted: int
+
+
+class AttendanceSummaryOut(Schema):
+    total_scheduled: int
+    present: int
+    late: int
+    absent: int
+    sick: int
+    leave: int
+    permission: int
+    off: int
+    attendance_rate: float

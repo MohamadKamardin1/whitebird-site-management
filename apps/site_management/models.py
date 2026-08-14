@@ -978,3 +978,96 @@ class CleanerAreaSchedule(UserStampedModel):
             raise ValidationError("Area must belong to the assignment's site.", code="area_site_mismatch")
         if self.shift_id and self.shift is not None and self.shift.site_id != self.assignment.site_id:
             raise ValidationError("Shift must belong to the assignment's site.", code="shift_site_mismatch")
+
+
+# --------------------------------------------------------------------------- #
+# Attendance
+# --------------------------------------------------------------------------- #
+
+
+class AttendanceStatus(models.TextChoices):
+    SCHEDULED = "scheduled", "Scheduled"
+    PRESENT = "present", "Present"
+    LATE = "late", "Late"
+    ABSENT = "absent", "Absent"
+    SICK = "sick", "Sick"
+    LEAVE = "leave", "Leave"
+    PERMISSION = "permission", "Permission"
+    OFF = "off", "Off"
+    NOT_SCHEDULED = "not_scheduled", "Not Scheduled"
+
+
+class AttendanceReviewStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    REVIEWED = "reviewed", "Reviewed"
+    RETURNED = "returned", "Returned"
+    LOCKED = "locked", "Locked"
+
+
+class AttendanceRecord(UserStampedModel):
+    """Daily attendance record for a cleaner at a site.
+
+    Uniqueness: one record per cleaner+date (full-time), or per
+    cleaner+shift+date (shift sites), enforced by partial unique constraints.
+    """
+
+    cleaner = models.ForeignKey(Cleaner, on_delete=models.CASCADE, related_name="attendance_records")
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="attendance_records")
+    shift = models.ForeignKey(
+        SiteShift, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_records"
+    )
+    attendance_date = models.DateField(db_index=True)
+    status = models.CharField(
+        max_length=16, choices=AttendanceStatus.choices, default=AttendanceStatus.SCHEDULED, db_index=True
+    )
+    check_in_time = models.TimeField(null=True, blank=True)
+    check_out_time = models.TimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_attendance",
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    review_status = models.CharField(
+        max_length=16,
+        choices=AttendanceReviewStatus.choices,
+        default=AttendanceReviewStatus.DRAFT,
+        db_index=True,
+    )
+    return_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Attendance record"
+        verbose_name_plural = "Attendance records"
+        ordering = ["attendance_date", "site__name", "cleaner__last_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cleaner", "site", "attendance_date"],
+                condition=models.Q(shift__isnull=True),
+                name="uniq_attendance_ft_per_day",
+            ),
+            models.UniqueConstraint(
+                fields=["cleaner", "site", "shift", "attendance_date"],
+                condition=models.Q(shift__isnull=False),
+                name="uniq_attendance_shift_per_day",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["site", "attendance_date"]),
+            models.Index(fields=["site", "attendance_date", "shift"]),
+            models.Index(fields=["cleaner", "attendance_date"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.cleaner.full_name} {self.attendance_date} ({self.status})"
+
+    @property
+    def is_editable(self) -> bool:
+        return self.review_status in {
+            AttendanceReviewStatus.DRAFT,
+            AttendanceReviewStatus.RETURNED,
+        }

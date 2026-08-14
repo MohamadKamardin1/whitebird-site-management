@@ -12,6 +12,7 @@ from apps.accounts.factories import UserFactory
 from .models import (
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
+    AttendanceRecord,
     Cleaner,
     CleanerAreaSchedule,
     CleanerDocument,
@@ -220,3 +221,15 @@ class CleanerAreaScheduleFactory(factory.django.DjangoModelFactory):
     start_time = datetime.time(8, 0)
     end_time = datetime.time(16, 0)
     is_active = True
+
+
+class AttendanceRecordFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AttendanceRecord
+
+    cleaner = factory.SubFactory(CleanerFactory)
+    site = factory.SubFactory(SiteFactory)
+    attendance_date = date.today()
+    status = "present"
+    review_status = "draft"
+    recorded_by = factory.SubFactory(UserFactory)
