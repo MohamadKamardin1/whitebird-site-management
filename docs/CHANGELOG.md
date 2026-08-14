@@ -5,6 +5,41 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 10] — 2026-08-14
+
+### Added
+
+- **`SiteStore`**: per-site store(s) with `managed_by`, soft deactivation.
+- **`StoreItem`**: item_name/item_code/unit/category, opening + running
+  `current_stock`, `minimum_stock_level` reorder point, unique name/code per
+  store, `low_stock` flag (`current_stock <= minimum_stock_level`).
+- **`StockMovement`**: immutable OPENING/RECEIVED/ISSUED/RETURNED/DAMAGED/
+  LOST/ADJUSTMENT records (signed for adjustments), optional cleaner/area,
+  required reason for damage/loss.
+- **`StockRequest`** + **`StockRequestItem`**: DRAFT → SUBMITTED →
+  ZONE_REVIEWED → OFFICE_PROCESSED → COMPLETED/REJECTED workflow with
+  per-item requested/approved quantities, ready for Office Management.
+- **Services** (transactional + audited): store/item CRUD, concurrency-safe
+  `record_stock_movement` (`select_for_update` + `F` expressions), receive/
+  issue/damage/loss/adjust helpers, request create/submit/review/reject/
+  complete (completion issues approved stock); `StockLow` + `StockRequestSubmitted`
+  domain events, low-stock in-platform notification to the store manager.
+- **Negative-stock guard**: refused at the service layer unless the
+  `ALLOW_NEGATIVE_STOCK` constance override is enabled.
+- **Selectors**: role-scoped `store_list`/`store_detail`, `stock_items`,
+  `stock_movements` (filters), `low_stock_items`, `stock_requests`.
+- **API**: `/stores` CRUD + items, movements, requests and workflow endpoints
+  + `/stores/low-stock`; read = management/viewer, manage = site scope,
+  review/reject/complete = zone-level management.
+- **Admin**: `SiteStoreAdmin` (item inline, low-stock badge, actions),
+  `StoreItemAdmin`, read-only `StockMovementAdmin`, `StockRequestAdmin`
+  (item inline, submit/review/reject/complete actions).
+- **Factories** + migration for all five entities.
+
+### Changed
+
+- `ALLOW_NEGATIVE_STOCK` added to constance runtime configuration.
+
 ## [Prompt 09] — 2026-08-14
 
 ### Added

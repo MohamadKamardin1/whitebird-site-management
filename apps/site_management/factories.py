@@ -23,8 +23,13 @@ from .models import (
     SiteArea,
     SiteShift,
     SiteStatus,
+    SiteStore,
     SiteSupervisorAssignment,
     SiteType,
+    StockMovement,
+    StockRequest,
+    StockRequestItem,
+    StoreItem,
     TraineeEvaluation,
     TraineeProgram,
     WorkMode,
@@ -260,3 +265,63 @@ class TraineeEvaluationFactory(factory.django.DjangoModelFactory):
     behavior_score = 80
     skill_score = 80
     evaluated_by = factory.SubFactory(UserFactory)
+
+
+class SiteStoreFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SiteStore
+
+    site = factory.SubFactory(SiteFactory)
+    store_name = factory.Sequence(lambda n: f"Store {n}")
+    location = "Ground floor"
+    is_active = True
+    created_by = factory.SubFactory(UserFactory)
+
+
+class StoreItemFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StoreItem
+
+    store = factory.SubFactory(SiteStoreFactory)
+    item_name = factory.Sequence(lambda n: f"Item {n}")
+    item_code = factory.Sequence(lambda n: f"IT{n:03d}")
+    unit = "piece"
+    category = "consumables"
+    opening_stock = 50
+    current_stock = 50
+    minimum_stock_level = 5
+    is_active = True
+    created_by = factory.SubFactory(UserFactory)
+
+
+class StockMovementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StockMovement
+
+    store_item = factory.SubFactory(StoreItemFactory)
+    movement_type = "received"
+    quantity = 10
+    movement_date = date.today()
+    recorded_by = factory.SubFactory(UserFactory)
+    created_by = factory.SubFactory(UserFactory)
+
+
+class StockRequestFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StockRequest
+
+    site = factory.SubFactory(SiteFactory)
+    store = factory.SubFactory(SiteStoreFactory)
+    request_date = date.today()
+    requested_by = factory.SubFactory(UserFactory)
+    status = "draft"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class StockRequestItemFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StockRequestItem
+
+    request = factory.SubFactory(StockRequestFactory)
+    store_item = factory.SubFactory(StoreItemFactory)
+    requested_quantity = 10

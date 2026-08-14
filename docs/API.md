@@ -240,6 +240,33 @@ program per cleaner. Read = management roles or viewer; start/update/evaluate =
 site-scoped management; pass/fail/drop = senior management only. `/trainees`
 routes are registered before `{id}` routes so `/trainees/summary` resolves.
 
+### Stores
+
+| Method | Path                                      | Description                                    |
+| ------ | ----------------------------------------- | ---------------------------------------------- |
+| GET    | `/stores`                                 | Paginated stores (`site_id`/`search`)          |
+| POST   | `/stores`                                 | Create a store (`site_id`, `store_name`, ...)  |
+| GET    | `/stores/{id}`                            | Store detail (item counts)                     |
+| GET    | `/stores/low-stock`                       | Items at/below reorder point (`site_id` filter)|
+| GET    | `/stores/{id}/items`                      | Store items                                    |
+| POST   | `/stores/{id}/items`                      | Add an item (`opening_stock` seeds an OPENING movement) |
+| PUT    | `/stores/{store_id}/items/{item_id}`      | Update item metadata/reorder point (never stock) |
+| GET    | `/stores/{id}/movements`                  | Paginated movements (`store_item_id`/`movement_type`/`date_from`/`date_to`) |
+| POST   | `/stores/{id}/movements`                  | Record a movement (type + quantity; damage/loss needs `reason`) |
+| GET    | `/stores/{id}/requests`                   | Paginated requests (`status`/`request_date`)   |
+| POST   | `/stores/{id}/requests`                   | Create a draft request (`items: [{store_item_id, requested_quantity}]`) |
+| POST   | `/stores/{store_id}/requests/{id}/submit` | DRAFT → SUBMITTED (`StockRequestSubmitted` event) |
+| POST   | `/stores/{store_id}/requests/{id}/review` | SUBMITTED → ZONE_REVIEWED (`approved` per item) |
+| POST   | `/stores/{store_id}/requests/{id}/reject` | SUBMITTED/ZONE_REVIEWED → REJECTED (`reason`)  |
+| POST   | `/stores/{store_id}/requests/{id}/complete` | ZONE_REVIEWED → COMPLETED (issues approved stock) |
+
+Movement signs: OPENING/RECEIVED/RETURNED increase; ISSUED/DAMAGED/LOST
+decrease; ADJUSTMENT carries a signed quantity. Concurrency-safe via row locks
++ `F` expressions; negative stock is blocked unless `ALLOW_NEGATIVE_STOCK` is
+enabled. Permissions: read = management or viewer; manage (stores/items/
+movements/requests/submit) = site-scoped; review/reject/complete = zone
+supervisor or above.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

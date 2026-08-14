@@ -16,7 +16,40 @@ Module. Each prompt updates this file before its commit.
 | 7      | Assignments & scheduling engine | Prompt 7 completed | —      |
 | 8      | Attendance engine | **Prompt 8 completed** | see CHANGELOG |
 | 9      | Trainee lifecycle & conversion | **Prompt 9 completed** | see CHANGELOG |
-| 10–20  | (pending)                                    | —                  | —      |
+| 10     | Site store & stock requests | **Prompt 10 completed** | see CHANGELOG |
+| 11–20  | (pending)                                    | —                  | —      |
+
+## Prompt 10 — completed ✅
+
+Implemented accurate, concurrency-safe site store records and stock requests
+ready for future Office Management integration:
+
+- **`SiteStore`** (per-site, soft deactivate) + **`StoreItem`** (opening/running
+  stock, reorder point, unique name/code per store, `low_stock` flag).
+- **`StockMovement`**: immutable OPENING/RECEIVED/ISSUED/RETURNED/DAMAGED/
+  LOST/ADJUSTMENT records; damage/loss requires a reason; adjustments use
+  signed quantities.
+- **`StockRequest`** + **`StockRequestItem`**: DRAFT → SUBMITTED →
+  ZONE_REVIEWED → OFFICE_PROCESSED → COMPLETED/REJECTED with per-item
+  requested/approved quantities; completion issues approved stock against the
+  store.
+- **Concurrency safety**: movements lock the item row (`select_for_update`)
+  and apply the delta with `F` expressions inside an atomic transaction;
+  negative stock is rejected unless the `ALLOW_NEGATIVE_STOCK` constance
+  override is on.
+- **Low-stock hook**: `StockLow` domain event + notification to the store
+  manager when an item reaches its reorder point; `StockRequestSubmitted`
+  domain event for the office module.
+- **API**: `/stores` CRUD, items, movements, requests + submit/review/reject/
+  complete, `/stores/low-stock`; read = management/viewer, manage = site scope,
+  review/reject/complete = zone-level management.
+- **Admin**: `SiteStoreAdmin` (item inline, low-stock badge), `StoreItemAdmin`,
+  read-only `StockMovementAdmin`, `StockRequestAdmin` with submit/review/
+  reject/complete actions.
+- **Factories** + migration (`site_management.0008`).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 376 passed ·
+coverage 90.52% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 9 — completed ✅
 

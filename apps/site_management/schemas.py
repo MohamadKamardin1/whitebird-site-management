@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from decimal import Decimal
 
 from ninja import Field, ModelSchema, Schema
 
@@ -666,3 +667,144 @@ class TraineeSummaryOut(Schema):
     passed: int
     failed: int
     dropped: int
+
+
+class StoreOut(Schema):
+    id: int
+    site_id: int
+    site_name: str
+    store_name: str
+    location: str = ""
+    managed_by: str | None = None
+    managed_by_id: int | None = None
+    is_active: bool = True
+    item_count: int = 0
+    low_stock_count: int = 0
+    created_at: datetime
+
+
+class StoreCreateIn(Schema):
+    site_id: int
+    store_name: str = Field(min_length=1, max_length=160)
+    location: str = Field(default="", max_length=255)
+    managed_by_id: int | None = None
+
+
+class StoreUpdateIn(Schema):
+    store_name: str | None = Field(default=None, min_length=1, max_length=160)
+    location: str | None = Field(default=None, max_length=255)
+    managed_by_id: int | None = None
+    is_active: bool | None = None
+
+
+class StoreItemOut(Schema):
+    id: int
+    store_id: int
+    item_name: str
+    item_code: str = ""
+    unit: str = "piece"
+    category: str = ""
+    opening_stock: Decimal
+    current_stock: Decimal
+    minimum_stock_level: Decimal
+    low_stock: bool = False
+    is_active: bool = True
+    created_at: datetime
+
+
+class StoreItemCreateIn(Schema):
+    item_name: str = Field(min_length=1, max_length=160)
+    item_code: str = Field(default="", max_length=32)
+    unit: str = Field(default="piece", max_length=32)
+    category: str = Field(default="", max_length=64)
+    opening_stock: Decimal = Field(default=Decimal("0"), ge=0)
+    minimum_stock_level: Decimal | None = Field(default=None, ge=0)
+
+
+class StoreItemUpdateIn(Schema):
+    item_name: str | None = Field(default=None, min_length=1, max_length=160)
+    item_code: str | None = Field(default=None, max_length=32)
+    unit: str | None = Field(default=None, max_length=32)
+    category: str | None = Field(default=None, max_length=64)
+    minimum_stock_level: Decimal | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
+class StockMovementOut(Schema):
+    id: int
+    store_id: int
+    store_name: str
+    store_item_id: int
+    item_name: str
+    movement_type: str
+    quantity: Decimal
+    movement_date: date
+    cleaner_id: int | None = None
+    cleaner_name: str | None = None
+    area_id: int | None = None
+    area_name: str | None = None
+    notes: str = ""
+    recorded_by: str | None = None
+    created_at: datetime
+
+
+class StockMovementCreateIn(Schema):
+    store_item_id: int
+    movement_type: str = Field(pattern="^(opening|received|issued|returned|damaged|lost|adjustment)$")
+    quantity: Decimal
+    movement_date: date | None = None
+    cleaner_id: int | None = None
+    area_id: int | None = None
+    notes: str = ""
+    reason: str = ""
+
+
+class StockRequestItemOut(Schema):
+    id: int
+    store_item_id: int
+    item_name: str
+    requested_quantity: Decimal
+    approved_quantity: Decimal | None = None
+    notes: str = ""
+
+
+class StockRequestOut(Schema):
+    id: int
+    site_id: int
+    site_name: str
+    store_id: int
+    store_name: str
+    request_date: date
+    requested_by: str | None = None
+    status: str
+    notes: str = ""
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    items: list[StockRequestItemOut] = Field(default_factory=list)
+    created_at: datetime
+
+
+class StockRequestCreateIn(Schema):
+    request_date: date | None = None
+    notes: str = ""
+    items: list[StockRequestItemIn] = Field(min_length=1)
+
+
+class StockRequestItemIn(Schema):
+    store_item_id: int
+    requested_quantity: Decimal = Field(gt=0)
+    notes: str = ""
+
+
+class StockRequestReviewIn(Schema):
+    approved: list[StockRequestApprovalIn] = Field(default_factory=list)
+    notes: str = ""
+
+
+class StockRequestApprovalIn(Schema):
+    item_id: int
+    approved_quantity: Decimal = Field(ge=0)
+
+
+class StockRequestDecisionIn(Schema):
+    reason: str = Field(default="", min_length=1)

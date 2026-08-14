@@ -295,3 +295,31 @@ engineering contract.
     ASSISTANT_GENERAL_SUPERVISOR.
 82. **Admin**: actions reuse the services (pass/fail/drop/extend), completed
     programs are readonly, and deletion is blocked once a program is final.
+
+## Site store & stock requests (Prompt 10)
+
+83. **Movement quantities** are stored as signed changes for ADJUSTMENT
+    (positive = increase, negative = decrease) and as positive magnitudes for
+    all other types; the type implies direction. `abs(quantity)` is always the
+    magnitude and a reason is required for DAMAGED/LOST.
+84. **Concurrency safety**: `record_stock_movement` locks the item row with
+    `select_for_update` and applies the delta via an `F` expression inside one
+    atomic transaction, so concurrent movements never lose an update.
+85. **Negative stock** is refused at the service layer (row locked before the
+    check) unless the `ALLOW_NEGATIVE_STOCK` constance override is enabled;
+    because the override permits negatives, no hard DB `current_stock >= 0`
+    constraint exists.
+86. **Low stock** is `current_stock <= minimum_stock_level`; drops to/through
+    the reorder point emit a `StockLow` domain event and notify the store's
+    `managed_by` user (when `ENABLE_NOTIFICATIONS`).
+87. **Stock request completion** issues approved quantities (ISSUED movements)
+    against the store and applies the same negative-stock guard; status
+    ZONE_REVIEWED → COMPLETED. `OFFICE_PROCESSED` is reserved for the future
+    Office Management module — the site module can complete directly from
+    ZONE_REVIEWED.
+88. **Permissions**: reads = any management role or management viewer (scoped
+    to `visible_sites`); store/item/movement/request management and submit =
+    site-scoped (`user_can_manage_site`); review/reject/complete = ZONE_SUPERVISOR
+    or above.
+89. **Immutability**: movement rows cannot be added, edited or deleted from the
+    admin; the item list selector is a single query (`select_related`).

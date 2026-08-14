@@ -82,6 +82,7 @@ from .models import (
     AssetCategory,
     AttendanceRecord,
     AttendanceStatus,
+    Cleaner,
     CleanerAreaSchedule,
     CleanerAssignmentType,
     CleanerDocumentType,
@@ -97,9 +98,14 @@ from .models import (
     SiteArea,
     SiteShift,
     SiteStatus,
+    SiteStore,
     SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    StockMovement,
+    StockMovementType,
+    StockRequest,
+    StoreItem,
     TraineeEvaluation,
     TraineeProgram,
     WorkMode,
@@ -159,6 +165,18 @@ from .schemas import (
     SiteUpdateIn,
     StatusRef,
     StatusUpdateIn,
+    StockMovementCreateIn,
+    StockMovementOut,
+    StockRequestCreateIn,
+    StockRequestDecisionIn,
+    StockRequestItemOut,
+    StockRequestOut,
+    StockRequestReviewIn,
+    StoreCreateIn,
+    StoreItemCreateIn,
+    StoreItemOut,
+    StoreItemUpdateIn,
+    StoreOut,
     TraineeDecisionIn,
     TraineeEvaluationCreateIn,
     TraineeEvaluationOut,
@@ -213,6 +231,30 @@ from .services import (
     update_operational_role,
     update_shift,
     update_site,
+)
+from .store_selectors import (
+    StockMovementFilter,
+    StockRequestFilter,
+    StoreFilter,
+    low_stock_items,
+    stock_items,
+    stock_movements,
+    stock_request_or_none,
+    stock_requests,
+    store_list,
+)
+from .store_services import (
+    add_store_item,
+    adjust_stock,
+    complete_stock_request,
+    create_stock_request,
+    create_store,
+    record_damage_loss,
+    record_stock_movement,
+    reject_stock_request,
+    review_stock_request,
+    submit_stock_request,
+    update_store_item,
 )
 from .trainee_selectors import (
     TraineeFilter,
@@ -2158,3 +2200,417 @@ def trainee_drop(request: AuthenticatedRequest, program_id: int, payload: Traine
     _trainee_decide(request.auth)
     updated = drop_trainee(program=program, actor=request.auth, reason=payload.reason)
     return _trainee_out(updated)
+
+
+# --------------------------------------------------------------------------- #
+# Site store & stock requests
+# --------------------------------------------------------------------------- #
+
+
+def _store_read(user: User, store_id: int) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Store records require a management role.")
+    if not user.is_system_admin and not site_in_user_scope(user, getattr(_load_store_or_404(store_id), "site_id", 0)):
+        raise PermissionDenied("You do not have access to this store.")
+
+
+def _store_manage(user: User, store_id: int) -> None:
+    _store_read(user, store_id)
+    store = _load_store_or_404(store_id)
+    if not user_can_manage_site(user, store.site_id):
+        raise PermissionDenied("You do not have permission to manage this store.")
+
+
+def _store_review(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role
+        in {
+            RoleCode.GENERAL_SUPERVISOR,
+            RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+            RoleCode.ZONE_SUPERVISOR,
+        }
+    ):
+        raise PermissionDenied("Only zone-level management can review stock requests.")
+
+
+def _load_store_or_404(store_id: int) -> SiteStore:
+    store = SiteStore.objects.filter(pk=store_id).first()
+    if store is None:
+        raise Http404("Store not found.")
+    return store
+
+
+def _store_out(store: SiteStore) -> StoreOut:
+    annotated = getattr(store, "annotated_item_count", None)
+    managed_by = store.managed_by
+    return StoreOut(
+        id=store.pk,
+        site_id=store.site_id,
+        site_name=store.site.name,
+        store_name=store.store_name,
+        location=store.location,
+        managed_by=managed_by.email if managed_by else None,
+        managed_by_id=store.managed_by_id,
+        is_active=store.is_active,
+        item_count=annotated if annotated is not None else store.item_count,
+        low_stock_count=store.low_stock_count,
+        created_at=store.created_at,
+    )
+
+
+def _store_item_out(item: StoreItem) -> StoreItemOut:
+    return StoreItemOut(
+        id=item.pk,
+        store_id=item.store_id,
+        item_name=item.item_name,
+        item_code=item.item_code,
+        unit=item.unit,
+        category=item.category,
+        opening_stock=item.opening_stock,
+        current_stock=item.current_stock,
+        minimum_stock_level=item.minimum_stock_level,
+        low_stock=item.low_stock,
+        is_active=item.is_active,
+        created_at=item.created_at,
+    )
+
+
+def _movement_out(m: StockMovement) -> StockMovementOut:
+    cleaner = m.cleaner
+    area = m.area
+    recorded_by = m.recorded_by
+    return StockMovementOut(
+        id=m.pk,
+        store_id=m.store_item.store_id,
+        store_name=m.store_item.store.store_name,
+        store_item_id=m.store_item_id,
+        item_name=m.store_item.item_name,
+        movement_type=m.movement_type,
+        quantity=m.quantity,
+        movement_date=m.movement_date,
+        cleaner_id=m.cleaner_id,
+        cleaner_name=cleaner.full_name if cleaner else None,
+        area_id=m.area_id,
+        area_name=area.area_name if area else None,
+        notes=m.notes,
+        recorded_by=recorded_by.email if recorded_by else None,
+        created_at=m.created_at,
+    )
+
+
+def _request_out(r: StockRequest) -> StockRequestOut:
+    requested_by = r.requested_by
+    reviewed_by = r.reviewed_by
+    items = [
+        StockRequestItemOut(
+            id=item.pk,
+            store_item_id=item.store_item_id,
+            item_name=item.store_item.item_name,
+            requested_quantity=item.requested_quantity,
+            approved_quantity=item.approved_quantity,
+            notes=item.notes,
+        )
+        for item in r.items.all()
+    ]
+    return StockRequestOut(
+        id=r.pk,
+        site_id=r.site_id,
+        site_name=r.site.name,
+        store_id=r.store_id,
+        store_name=r.store.store_name,
+        request_date=r.request_date,
+        requested_by=requested_by.email if requested_by else None,
+        status=r.status,
+        notes=r.notes,
+        reviewed_by=reviewed_by.email if reviewed_by else None,
+        reviewed_at=r.reviewed_at,
+        items=items,
+        created_at=r.created_at,
+    )
+
+
+def _load_request_or_404(store_id: int, request_id: int) -> StockRequest:
+    request = stock_request_or_none(request_id)
+    if request is None or request.store_id != store_id:
+        raise Http404("Stock request not found.")
+    return request
+
+
+@router.get(
+    "/stores",
+    response=Paginated[StoreOut],
+    summary="List stores (paginated, role-scoped)",
+)
+def store_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    search: str | None = None,
+) -> Paginated[StoreOut]:
+    if not (management_required(request.auth) or request.auth.is_management_viewer):
+        raise PermissionDenied("Store records require a management role.")
+    qs = store_list(request.auth, StoreFilter(site_id=site_id, search=search))
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_store_out(s) for s in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get(
+    "/stores/low-stock",
+    response=list[StoreItemOut],
+    summary="List low-stock items (role-scoped)",
+)
+def store_low_stock_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+) -> list[StoreItemOut]:
+    if not (management_required(request.auth) or request.auth.is_management_viewer):
+        raise PermissionDenied("Store records require a management role.")
+    return [_store_item_out(item) for item in low_stock_items(request.auth, site_id)]
+
+
+@router.post("/stores", response=StoreOut, summary="Create a store")
+def store_create(request: AuthenticatedRequest, payload: StoreCreateIn) -> StoreOut:
+    site = _load_site_or_404(payload.site_id)
+    if not user_can_manage_site(request.auth, site.pk):
+        raise PermissionDenied("You do not have permission to create a store for this site.")
+    managed_by = User.objects.filter(pk=payload.managed_by_id).first() if payload.managed_by_id else None
+    return _store_out(
+        create_store(
+            site=site,
+            store_name=payload.store_name,
+            actor=request.auth,
+            location=payload.location,
+            managed_by=managed_by,
+        )
+    )
+
+
+@router.get("/stores/{store_id}", response=StoreOut, summary="Store detail")
+def store_detail_endpoint(request: AuthenticatedRequest, store_id: int) -> StoreOut:
+    _store_read(request.auth, store_id)
+    store = _load_store_or_404(store_id)
+    return _store_out(store)
+
+
+@router.get("/stores/{store_id}/items", response=list[StoreItemOut], summary="Store items")
+def store_items_endpoint(request: AuthenticatedRequest, store_id: int) -> list[StoreItemOut]:
+    _store_read(request.auth, store_id)
+    return [_store_item_out(item) for item in stock_items(request.auth, store_id)]
+
+
+@router.post("/stores/{store_id}/items", response=StoreItemOut, summary="Add a store item")
+def store_item_create(request: AuthenticatedRequest, store_id: int, payload: StoreItemCreateIn) -> StoreItemOut:
+    _store_manage(request.auth, store_id)
+    store = _load_store_or_404(store_id)
+    return _store_item_out(
+        add_store_item(
+            store=store,
+            item_name=payload.item_name,
+            actor=request.auth,
+            item_code=payload.item_code,
+            unit=payload.unit,
+            category=payload.category,
+            opening_stock=payload.opening_stock,
+            minimum_stock_level=payload.minimum_stock_level,
+        )
+    )
+
+
+@router.put(
+    "/stores/{store_id}/items/{item_id}",
+    response=StoreItemOut,
+    summary="Update a store item",
+)
+def store_item_update(
+    request: AuthenticatedRequest, store_id: int, item_id: int, payload: StoreItemUpdateIn
+) -> StoreItemOut:
+    _store_manage(request.auth, store_id)
+    item = StoreItem.objects.filter(pk=item_id, store_id=store_id).first()
+    if item is None:
+        raise Http404("Store item not found.")
+    return _store_item_out(
+        update_store_item(
+            item=item,
+            actor=request.auth,
+            item_name=payload.item_name,
+            item_code=payload.item_code,
+            unit=payload.unit,
+            category=payload.category,
+            minimum_stock_level=payload.minimum_stock_level,
+            is_active=payload.is_active,
+        )
+    )
+
+
+@router.get(
+    "/stores/{store_id}/movements",
+    response=Paginated[StockMovementOut],
+    summary="List stock movements (paginated, filtered)",
+)
+def store_movements_endpoint(
+    request: AuthenticatedRequest,
+    store_id: int,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    store_item_id: int | None = None,
+    movement_type: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Paginated[StockMovementOut]:
+    _store_read(request.auth, store_id)
+    spec = StockMovementFilter(
+        store_id=store_id,
+        store_item_id=store_item_id,
+        movement_type=movement_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    qs = stock_movements(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_movement_out(m) for m in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post(
+    "/stores/{store_id}/movements",
+    response=StockMovementOut,
+    summary="Record a stock movement",
+)
+def store_movement_create(
+    request: AuthenticatedRequest, store_id: int, payload: StockMovementCreateIn
+) -> StockMovementOut:
+    _store_manage(request.auth, store_id)
+    item = StoreItem.objects.filter(pk=payload.store_item_id, store_id=store_id).first()
+    if item is None:
+        raise Http404("Store item not found.")
+    cleaner = Cleaner.objects.filter(pk=payload.cleaner_id).first() if payload.cleaner_id else None
+    area = SiteArea.objects.filter(pk=payload.area_id).first() if payload.area_id else None
+    if payload.movement_type in {StockMovementType.DAMAGED, StockMovementType.LOST}:
+        movement = record_damage_loss(
+            store_item=item,
+            movement_type=payload.movement_type,
+            quantity=payload.quantity,
+            actor=request.auth,
+            reason=payload.reason,
+            movement_date=payload.movement_date,
+            notes=payload.notes,
+        )
+    elif payload.movement_type == StockMovementType.ADJUSTMENT:
+        movement = adjust_stock(
+            store_item=item,
+            signed_quantity=payload.quantity,
+            actor=request.auth,
+            reason=payload.reason,
+            movement_date=payload.movement_date,
+        )
+    else:
+        movement = record_stock_movement(
+            store_item=item,
+            movement_type=payload.movement_type,
+            quantity=payload.quantity,
+            actor=request.auth,
+            movement_date=payload.movement_date,
+            cleaner=cleaner,
+            area=area,
+            notes=payload.notes,
+        )
+    return _movement_out(movement)
+
+
+@router.get(
+    "/stores/{store_id}/requests",
+    response=Paginated[StockRequestOut],
+    summary="List stock requests (paginated, filtered)",
+)
+def store_requests_endpoint(
+    request: AuthenticatedRequest,
+    store_id: int,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    status: str | None = None,
+    request_date: date | None = None,
+) -> Paginated[StockRequestOut]:
+    _store_read(request.auth, store_id)
+    spec = StockRequestFilter(store_id=store_id, status=status, request_date=request_date)
+    qs = stock_requests(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_request_out(r) for r in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post(
+    "/stores/{store_id}/requests",
+    response=StockRequestOut,
+    summary="Create a stock request (draft)",
+)
+def store_request_create(
+    request: AuthenticatedRequest, store_id: int, payload: StockRequestCreateIn
+) -> StockRequestOut:
+    _store_manage(request.auth, store_id)
+    store = _load_store_or_404(store_id)
+    items = [
+        {"store_item_id": row.store_item_id, "requested_quantity": row.requested_quantity, "notes": row.notes}
+        for row in payload.items
+    ]
+    created = create_stock_request(
+        site=store.site,
+        store=store,
+        actor=request.auth,
+        items=items,
+        request_date=payload.request_date,
+        notes=payload.notes,
+    )
+    return _request_out(stock_request_or_none(created.pk) or created)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/submit",
+    response=StockRequestOut,
+    summary="Submit a draft stock request",
+)
+def store_request_submit(request: AuthenticatedRequest, store_id: int, request_id: int) -> StockRequestOut:
+    _store_manage(request.auth, store_id)
+    stock_request = _load_request_or_404(store_id, request_id)
+    submit_stock_request(request=stock_request, actor=request.auth)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/review",
+    response=StockRequestOut,
+    summary="Review a submitted stock request (zone)",
+)
+def store_request_review(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestReviewIn
+) -> StockRequestOut:
+    _store_review(request.auth)
+    stock_request = _load_request_or_404(store_id, request_id)
+    approved = [{"item_id": row.item_id, "approved_quantity": row.approved_quantity} for row in payload.approved]
+    review_stock_request(request=stock_request, actor=request.auth, approved=approved, notes=payload.notes)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/reject",
+    response=StockRequestOut,
+    summary="Reject a stock request",
+)
+def store_request_reject(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestDecisionIn
+) -> StockRequestOut:
+    _store_review(request.auth)
+    stock_request = _load_request_or_404(store_id, request_id)
+    reject_stock_request(request=stock_request, actor=request.auth, reason=payload.reason)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/complete",
+    response=StockRequestOut,
+    summary="Complete a reviewed stock request (issues approved stock)",
+)
+def store_request_complete(request: AuthenticatedRequest, store_id: int, request_id: int) -> StockRequestOut:
+    _store_review(request.auth)
+    stock_request = _load_request_or_404(store_id, request_id)
+    complete_stock_request(request=stock_request, actor=request.auth)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)

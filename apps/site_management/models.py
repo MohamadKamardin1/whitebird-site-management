@@ -1175,3 +1175,232 @@ class TraineeEvaluation(TimeStampedModel):
         super().clean()
         if self.total_score is None:
             self.total_score = self.attendance_score + self.performance_score + self.behavior_score + self.skill_score
+
+
+# --------------------------------------------------------------------------- #
+# Site store & stock requests
+# --------------------------------------------------------------------------- #
+
+
+class StockMovementType(models.TextChoices):
+    OPENING = "opening", "Opening"
+    RECEIVED = "received", "Received"
+    ISSUED = "issued", "Issued"
+    RETURNED = "returned", "Returned"
+    DAMAGED = "damaged", "Damaged"
+    LOST = "lost", "Lost"
+    ADJUSTMENT = "adjustment", "Adjustment"
+
+
+INCREASING_MOVEMENT_TYPES = {StockMovementType.OPENING, StockMovementType.RECEIVED, StockMovementType.RETURNED}
+DECREASING_MOVEMENT_TYPES = {StockMovementType.ISSUED, StockMovementType.DAMAGED, StockMovementType.LOST}
+
+
+class SiteStore(UserStampedModel, ActivatableModel):
+    """A store location within a site. Sites may run one or more stores."""
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="stores")
+    store_name = models.CharField(max_length=160)
+    location = models.CharField(max_length=255, blank=True, default="")
+    managed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_stores",
+    )
+
+    class Meta:
+        verbose_name = "Site store"
+        verbose_name_plural = "Site stores"
+        ordering = ["site__name", "store_name"]
+        indexes = [models.Index(fields=["site", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.store_name} @ {self.site.name}"
+
+    @property
+    def item_count(self) -> int:
+        return self.items.count()
+
+    @property
+    def low_stock_count(self) -> int:
+        return self.items.filter(current_stock__lte=models.F("minimum_stock_level")).count()
+
+
+class StoreItem(UserStampedModel, ActivatableModel):
+    """A stocked item in a site store with running stock level and reorder point."""
+
+    store = models.ForeignKey(SiteStore, on_delete=models.CASCADE, related_name="items")
+    item_name = models.CharField(max_length=160)
+    item_code = models.CharField(max_length=32, blank=True, default="")
+    unit = models.CharField(max_length=32, default="piece")
+    category = models.CharField(max_length=64, blank=True, default="")
+    opening_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    current_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    minimum_stock_level = models.DecimalField(max_digits=10, decimal_places=2, default=5)
+
+    class Meta:
+        verbose_name = "Store item"
+        verbose_name_plural = "Store items"
+        ordering = ["store__store_name", "item_name"]
+        constraints = [
+            models.UniqueConstraint(fields=["store", "item_name"], name="uniq_store_item_name"),
+            models.UniqueConstraint(
+                fields=["store", "item_code"],
+                condition=models.Q(item_code__gt=""),
+                name="uniq_store_item_code",
+            ),
+        ]
+        indexes = [models.Index(fields=["store", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"{self.item_name} @ {self.store}"
+
+    @property
+    def low_stock(self) -> bool:
+        """True when current stock is at or below the reorder point."""
+        return self.current_stock <= self.minimum_stock_level
+
+
+class StockMovement(UserStampedModel):
+    """An immutable stock movement against a store item.
+
+    ``quantity`` is the signed change applied to ``current_stock``: positive
+    for OPENING/RECEIVED/RETURNED, negative for ISSUED/DAMAGED/LOST, and signed
+    (positive increase / negative decrease) for ADJUSTMENT. ``abs(quantity)``
+    is always the magnitude; magnitude is strictly positive.
+    """
+
+    store_item = models.ForeignKey(StoreItem, on_delete=models.CASCADE, related_name="movements")
+    movement_type = models.CharField(max_length=16, choices=StockMovementType.choices, db_index=True)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    movement_date = models.DateField(db_index=True)
+    cleaner = models.ForeignKey(
+        Cleaner, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_movements"
+    )
+    area = models.ForeignKey(SiteArea, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_movements")
+    notes = models.TextField(blank=True, default="")
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_stock_movements",
+    )
+
+    class Meta:
+        verbose_name = "Stock movement"
+        verbose_name_plural = "Stock movements"
+        ordering = ["-movement_date", "-created_at"]
+        indexes = [models.Index(fields=["store_item", "movement_date"])]
+
+    def __str__(self) -> str:
+        return f"{self.movement_type} {self.quantity} {self.store_item.item_name} ({self.movement_date})"
+
+    @property
+    def absolute_quantity(self) -> Any:
+        return abs(self.quantity)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.quantity == 0:
+            raise ValidationError("Movement quantity cannot be zero.", code="zero_quantity")
+        if self.movement_type != StockMovementType.ADJUSTMENT and self.quantity < 0:
+            raise ValidationError("Only ADJUSTMENT movements may carry a negative quantity.", code="negative_magnitude")
+        if self.cleaner_id and self.cleaner is not None:
+            assigned = self.cleaner.site_assignments.filter(site_id=self.store_item.store.site_id).exists()
+            if not assigned:
+                raise ValidationError(
+                    "Cleaner must be assigned to the item's store site.", code="cleaner_site_mismatch"
+                )
+        if self.area_id and self.area is not None and self.area.site_id != self.store_item.store.site_id:
+            raise ValidationError("Area must belong to the item's store site.", code="area_site_mismatch")
+
+
+class StockRequestStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    ZONE_REVIEWED = "zone_reviewed", "Zone Reviewed"
+    OFFICE_PROCESSED = "office_processed", "Office Processed"
+    COMPLETED = "completed", "Completed"
+    REJECTED = "rejected", "Rejected"
+
+
+class StockRequest(UserStampedModel):
+    """A request for stock, prepared at a site and consumed by office management.
+
+    The lifecycle (DRAFT → SUBMITTED → ZONE_REVIEWED → OFFICE_PROCESSED →
+    COMPLETED/REJECTED) hands off to the future Office Management module; on
+    completion approved quantities are issued against the store.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="stock_requests")
+    store = models.ForeignKey(SiteStore, on_delete=models.CASCADE, related_name="requests")
+    request_date = models.DateField(db_index=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stock_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StockRequestStatus.choices,
+        default=StockRequestStatus.DRAFT,
+        db_index=True,
+    )
+    notes = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_stock_requests",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Stock request"
+        verbose_name_plural = "Stock requests"
+        ordering = ["-request_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["site", "status"]),
+            models.Index(fields=["store", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Request {self.pk} @ {self.store} ({self.status})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.store.site_id != self.site_id:
+            raise ValidationError("Store must belong to the request's site.", code="store_site_mismatch")
+
+
+class StockRequestItem(TimeStampedModel):
+    """A requested item within a stock request, with optional approved quantity."""
+
+    request = models.ForeignKey(StockRequest, on_delete=models.CASCADE, related_name="items")
+    store_item = models.ForeignKey(StoreItem, on_delete=models.CASCADE, related_name="stock_request_items")
+    requested_quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    approved_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Stock request item"
+        verbose_name_plural = "Stock request items"
+        ordering = ["request", "store_item__item_name"]
+
+    def __str__(self) -> str:
+        return f"{self.requested_quantity} x {self.store_item.item_name} (request {self.request_id})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.requested_quantity <= 0:
+            raise ValidationError("Requested quantity must be positive.", code="requested_quantity_invalid")
+        if self.store_item.store_id != self.request.store_id:
+            raise ValidationError("Item must belong to the request's store.", code="item_store_mismatch")
+        if self.approved_quantity is not None and self.approved_quantity < 0:
+            raise ValidationError("Approved quantity cannot be negative.", code="approved_quantity_invalid")

@@ -30,9 +30,15 @@ from .models import (
     SiteArea,
     SiteShift,
     SiteStatus,
+    SiteStore,
     SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    StockMovement,
+    StockRequest,
+    StockRequestItem,
+    StockRequestStatus,
+    StoreItem,
     TraineeEvaluation,
     TraineeProgram,
     TraineeProgramStatus,
@@ -731,3 +737,211 @@ class TraineeProgramAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
             drop_trainee(program=program, actor=request.user, reason="Dropped via admin")
             updated += 1
         self.message_user(request, f"{updated} program(s) dropped.")
+
+
+class StoreItemInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = StoreItem
+    extra = 0
+    fk_name = "store"
+    fields = (
+        "item_name",
+        "item_code",
+        "unit",
+        "category",
+        "current_stock",
+        "minimum_stock_level",
+        "low_stock_badge",
+        "is_active",
+    )
+    readonly_fields = ("current_stock", "low_stock_badge")
+    show_change_link = True
+
+    @admin.display(description="Low stock")
+    def low_stock_badge(self, obj: StoreItem) -> str:
+        return "YES" if obj.low_stock else ""
+
+
+@admin.register(SiteStore)
+class SiteStoreAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("store_name", "site", "location", "managed_by", "item_count", "low_stock_badge", "is_active")
+    list_filter = ("is_active", "site")
+    search_fields = ("store_name", "location", "site__name")
+    raw_id_fields = ("site", "managed_by", "created_by", "updated_by")
+    inlines = [StoreItemInline]
+    actions = ["activate_stores", "deactivate_stores"]
+
+    @admin.display(description="Items")
+    def item_count(self, obj: SiteStore) -> int:
+        return obj.items.count()
+
+    @admin.display(description="Low stock")
+    def low_stock_badge(self, obj: SiteStore) -> str:
+        return f"{obj.low_stock_count} item(s)"
+
+    @admin.action(description="Activate selected stores")
+    def activate_stores(self, request: Any, queryset: Any) -> None:
+        updated = queryset.update(is_active=True, updated_at=timezone.now())
+        self.message_user(request, f"{updated} store(s) activated.")
+
+    @admin.action(description="Deactivate selected stores")
+    def deactivate_stores(self, request: Any, queryset: Any) -> None:
+        updated = queryset.update(is_active=False, updated_at=timezone.now())
+        self.message_user(request, f"{updated} store(s) deactivated.")
+
+    def delete_model(self, request: Any, obj: SiteStore) -> None:
+        if obj.items.exists():
+            raise DjangoValidationError(f"Cannot delete store {obj.store_name}: it has items. Deactivate it instead.")
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            self.delete_model(request, obj)
+
+
+@admin.register(StoreItem)
+class StoreItemAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "item_name",
+        "store",
+        "category",
+        "unit",
+        "current_stock",
+        "minimum_stock_level",
+        "low_stock_badge",
+        "is_active",
+    )
+    list_filter = ("is_active", "category", "store__site")
+    search_fields = ("item_name", "item_code", "store__store_name")
+    raw_id_fields = ("store", "created_by", "updated_by")
+
+    @admin.display(description="Low stock")
+    def low_stock_badge(self, obj: StoreItem) -> str:
+        return "YES" if obj.low_stock else ""
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "movement_date",
+        "store_item",
+        "movement_type",
+        "quantity",
+        "cleaner",
+        "area",
+        "recorded_by",
+    )
+    list_filter = ("movement_type", "movement_date", "store_item__store__site")
+    search_fields = ("store_item__item_name", "notes")
+    date_hierarchy = "movement_date"
+    raw_id_fields = ("store_item", "cleaner", "area", "recorded_by", "created_by", "updated_by")
+    readonly_fields = (
+        "store_item",
+        "movement_type",
+        "quantity",
+        "movement_date",
+        "cleaner",
+        "area",
+        "notes",
+        "recorded_by",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request: Any) -> bool:
+        return False
+
+    def has_change_permission(self, request: Any, obj: StockMovement | None = None) -> bool:
+        return False
+
+    def has_delete_permission(self, request: Any, obj: StockMovement | None = None) -> bool:
+        return False
+
+
+class StockRequestItemInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = StockRequestItem
+    extra = 0
+    fk_name = "request"
+    fields = ("store_item", "requested_quantity", "approved_quantity", "notes")
+    raw_id_fields = ("store_item",)
+    show_change_link = True
+
+
+@admin.register(StockRequest)
+class StockRequestAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("id", "store", "site", "request_date", "status_badge", "requested_by", "reviewed_by", "reviewed_at")
+    list_filter = ("status", "site", "request_date", "store")
+    search_fields = ("store__store_name", "site__name", "notes")
+    date_hierarchy = "request_date"
+    raw_id_fields = ("site", "store", "requested_by", "reviewed_by", "created_by", "updated_by")
+    inlines = [StockRequestItemInline]
+    actions = ["submit_requests", "review_requests", "reject_requests", "complete_requests"]
+    readonly_fields = ("status", "reviewed_by", "reviewed_at")
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: StockRequest) -> str:
+        return obj.status
+
+    def get_readonly_fields(self, request: Any, obj: StockRequest | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = ("created_at", "updated_at", "reviewed_by", "reviewed_at")
+        if obj is not None and obj.status != StockRequestStatus.DRAFT:
+            readonly += ("site", "store", "request_date", "status", "notes")
+        return readonly
+
+    @admin.action(description="Submit selected requests")
+    def submit_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import submit_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.DRAFT):
+            try:
+                submit_stock_request(request=stock_request, actor=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) submitted.")
+
+    @admin.action(description="Review selected requests")
+    def review_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import review_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.SUBMITTED):
+            approved = [
+                {"item_id": item.pk, "approved_quantity": item.requested_quantity} for item in stock_request.items.all()
+            ]
+            try:
+                review_stock_request(request=stock_request, actor=request.user, approved=approved)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) reviewed.")
+
+    @admin.action(description="Reject selected requests")
+    def reject_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import reject_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(
+            status__in=[StockRequestStatus.SUBMITTED, StockRequestStatus.ZONE_REVIEWED]
+        ):
+            try:
+                reject_stock_request(request=stock_request, actor=request.user, reason="Rejected via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) rejected.")
+
+    @admin.action(description="Complete selected requests")
+    def complete_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import complete_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.ZONE_REVIEWED):
+            try:
+                complete_stock_request(request=stock_request, actor=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) completed.")
