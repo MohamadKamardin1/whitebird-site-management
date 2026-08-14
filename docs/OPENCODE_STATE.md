@@ -17,7 +17,36 @@ Module. Each prompt updates this file before its commit.
 | 8      | Attendance engine | **Prompt 8 completed** | see CHANGELOG |
 | 9      | Trainee lifecycle & conversion | **Prompt 9 completed** | see CHANGELOG |
 | 10     | Site store & stock requests | **Prompt 10 completed** | see CHANGELOG |
-| 11–20  | (pending)                                    | —                  | —      |
+| 11     | Inspections & templates | **Prompt 11 completed** | see CHANGELOG |
+| 12–20  | (pending)                                    | —                  | —      |
+
+## Prompt 11 — completed ✅
+
+Implemented the full inspection engine for site area reports:
+
+- **`InspectionTemplate`** (+ items): global or site-scoped checklists with
+  YES_NO/PASS_FAIL/SCORE/TEXT/PHOTO rows, required flags, frequencies, soft
+  deactivation.
+- **`Inspection`** (+ results): DRAFT → SUBMITTED → REVIEWED → RETURNED
+  workflow with type-matched answers, private photo attachments, and
+  transparent `calculate_inspection_score` (SCORE average; any failed answer →
+  FAILED, score < 70 → NEEDS_ATTENTION, else PASSED).
+- **Workflow rules**: required items enforced before submit; submitted
+  inspections immutable unless returned; `InspectionSubmitted` domain event;
+  failed results trigger the `create_issue_from_failed_result` hook
+  (notification + `InspectionIssueDetected` event, ready for the Issues module).
+- **Security**: result photos stored on the private backend, served only via
+  signed download tokens (owner or system admin).
+- **API**: templates CRUD/status, inspections list/start/update/submit/return/
+  review/summary, results create/update, photo upload + signed URL; read =
+  management/viewer, manage = site scope, review/return = zone supervisor+.
+- **Admin**: template + item inline, inspection filters/status badges, readonly
+  result inline with signed photo thumbnail, submit/return/review actions,
+  delete guard on submitted inspections.
+- **Factories** + migration (`site_management.0009`).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 394 passed ·
+coverage 90.20% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 10 — completed ✅
 

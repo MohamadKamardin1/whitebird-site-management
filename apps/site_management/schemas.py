@@ -808,3 +808,143 @@ class StockRequestApprovalIn(Schema):
 
 class StockRequestDecisionIn(Schema):
     reason: str = Field(default="", min_length=1)
+
+
+class TemplateItemIn(Schema):
+    item_label: str = Field(min_length=1, max_length=255)
+    item_type: str = Field(pattern="^(yes_no|pass_fail|score|text|photo)$")
+    required: bool = True
+    sequence: int = Field(default=0, ge=0)
+    help_text: str = Field(default="", max_length=255)
+
+
+class TemplateItemOut(TemplateItemIn):
+    id: int
+
+
+class InspectionTemplateOut(Schema):
+    id: int
+    template_name: str
+    description: str = ""
+    site_id: int | None = None
+    site_name: str | None = None
+    area_id: int | None = None
+    area_name: str | None = None
+    frequency: str
+    is_active: bool = True
+    item_count: int = 0
+    items: list[TemplateItemOut] = Field(default_factory=list)
+    created_at: datetime
+
+
+class InspectionTemplateCreateIn(Schema):
+    template_name: str = Field(min_length=1, max_length=160)
+    description: str = ""
+    site_id: int | None = None
+    area_id: int | None = None
+    frequency: str = Field(default="manual", pattern="^(daily|weekly|monthly|manual)$")
+    items: list[TemplateItemIn] = Field(default_factory=list)
+
+
+class InspectionTemplateUpdateIn(Schema):
+    template_name: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = None
+    frequency: str | None = Field(default=None, pattern="^(daily|weekly|monthly|manual)$")
+    items: list[TemplateItemIn] | None = None
+
+
+class InspectionTemplateStatusIn(Schema):
+    is_active: bool
+
+
+class InspectionStartIn(Schema):
+    site_id: int
+    area_id: int
+    template_id: int
+    inspection_date: date | None = None
+    shift_id: int | None = None
+    inspected_by_id: int | None = None
+    notes: str = ""
+
+
+class InspectionUpdateIn(Schema):
+    notes: str | None = None
+
+
+class InspectionResultOut(Schema):
+    id: int
+    inspection_id: int
+    template_item_id: int
+    item_label: str
+    item_type: str
+    required: bool
+    value_text: str = ""
+    value_number: Decimal | None = None
+    value_boolean: bool | None = None
+    passed: bool | None = None
+    notes: str = ""
+    has_photo: bool = False
+
+
+class InspectionResultCreateIn(Schema):
+    template_item_id: int
+    value_text: str = ""
+    value_number: Decimal | None = Field(default=None, ge=0, le=100)
+    value_boolean: bool | None = None
+    passed: bool | None = None
+    notes: str = ""
+
+
+class InspectionResultUpdateIn(Schema):
+    value_text: str | None = None
+    value_number: Decimal | None = Field(default=None, ge=0, le=100)
+    value_boolean: bool | None = None
+    passed: bool | None = None
+    notes: str | None = None
+
+
+class InspectionOut(Schema):
+    id: int
+    site_id: int
+    site_name: str
+    area_id: int
+    area_name: str
+    template_id: int
+    template_name: str
+    inspection_date: date
+    shift_id: int | None = None
+    shift_name: str | None = None
+    inspected_by: str | None = None
+    overall_status: str = ""
+    score: Decimal | None = None
+    notes: str = ""
+    status: str
+    submitted_at: datetime | None = None
+    results: list[InspectionResultOut] = Field(default_factory=list)
+    created_at: datetime
+
+
+class InspectionReturnIn(Schema):
+    reason: str = Field(min_length=1)
+
+
+class InspectionSummaryOut(Schema):
+    total_inspections: int
+    draft: int
+    submitted: int
+    reviewed: int
+    returned: int
+    passed: int
+    failed: int
+    needs_attention: int
+    average_score: Decimal | None = None
+    last_inspection_date: date | None = None
+
+
+class AreaLatestStatusOut(Schema):
+    area_id: int
+    inspection_id: int
+    inspection_date: date
+    overall_status: str
+    score: Decimal | None = None
+    template_name: str

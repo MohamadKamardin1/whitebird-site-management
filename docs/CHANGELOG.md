@@ -5,6 +5,39 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 11] — 2026-08-14
+
+### Added
+
+- **`InspectionTemplate`**: reusable checklists — global (site null) or
+  site-scoped, optional area, frequency (daily/weekly/monthly/manual), soft
+  deactivation (never deleted once inspections exist).
+- **`InspectionTemplateItem`**: YES_NO / PASS_FAIL / SCORE / TEXT / PHOTO rows
+  with required flag, sequence, help text; unique sequence per template.
+- **`Inspection`**: site/area/template, inspection_date, optional shift,
+  inspected_by, overall_status (PASSED/FAILED/NEEDS_ATTENTION), score, notes,
+  DRAFT → SUBMITTED → REVIEWED → RETURNED workflow, submitted_at.
+- **`InspectionResult`**: private PHOTO attachments (PrivateFileModel + signed
+  tokens), type-matched answers (value_text/value_number/value_boolean/passed),
+  notes; unique (inspection, template_item).
+- **Services** (transactional + audited): template CRUD + deactivate, start/
+  save/submit/return/review, add/update result, photo upload, transparent
+  `calculate_inspection_score` (SCORE average; any failure → FAILED, score < 70
+  → NEEDS_ATTENTION, else PASSED); required items enforced on submit;
+  immutable once submitted unless returned; `InspectionSubmitted` event and the
+  `create_issue_from_failed_result` hook (notification + `InspectionIssueDetected`
+  event, ready for the future Issues module).
+- **Selectors**: role-scoped `template_list`, `inspection_list`, detail,
+  `inspection_summary`, `area_latest_status` (single queries).
+- **API**: `/inspection-templates` CRUD + status, `/inspections` list/start/
+  detail/update/submit/return/review/summary, results create/update, photo
+  upload + signed download URL; read = management/viewer, manage = site scope,
+  review/return = zone supervisor or above.
+- **Admin**: `InspectionTemplateAdmin` (item inline, actions), `InspectionAdmin`
+  (status badges, result inline readonly after submission, photo thumbnail with
+  signed access, submit/return/review actions, delete guard).
+- **Factories** + migration (`site_management.0009`).
+
 ## [Prompt 10] — 2026-08-14
 
 ### Added

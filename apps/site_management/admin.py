@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.conf import settings
 from django.contrib import admin
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Avg
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+
+from apps.core.files import create_file_token
 
 from .models import (
     Asset,
@@ -24,6 +27,11 @@ from .models import (
     CleanerShiftAssignment,
     CleanerSiteAssignment,
     Department,
+    Inspection,
+    InspectionResult,
+    InspectionTemplate,
+    InspectionTemplateItem,
+    InspectionWorkflowStatus,
     Notification,
     OperationalRole,
     Site,
@@ -945,3 +953,178 @@ class StockRequestAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
             except Exception:
                 continue
         self.message_user(request, f"{updated} request(s) completed.")
+
+
+class InspectionTemplateItemInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = InspectionTemplateItem
+    extra = 0
+    fk_name = "template"
+    fields = ("item_label", "item_type", "required", "sequence", "help_text")
+    ordering = ("sequence",)
+
+
+@admin.register(InspectionTemplate)
+class InspectionTemplateAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("template_name", "site", "frequency", "item_count", "is_active")
+    list_filter = ("frequency", "is_active", "site")
+    search_fields = ("template_name", "description")
+    raw_id_fields = ("site", "area", "created_by", "updated_by")
+    inlines = [InspectionTemplateItemInline]
+    actions = ["activate_templates", "deactivate_templates"]
+
+    @admin.display(description="Items")
+    def item_count(self, obj: InspectionTemplate) -> int:
+        return obj.items.count()
+
+    @admin.action(description="Activate selected templates")
+    def activate_templates(self, request: Any, queryset: Any) -> None:
+        updated = queryset.update(is_active=True, updated_at=timezone.now())
+        self.message_user(request, f"{updated} template(s) activated.")
+
+    @admin.action(description="Deactivate selected templates")
+    def deactivate_templates(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.inspection_services import deactivate_template  # noqa: PLC0415
+
+        updated = 0
+        for template in queryset:
+            deactivate_template(template=template, actor=request.user)
+            updated += 1
+        self.message_user(request, f"{updated} template(s) deactivated.")
+
+    def delete_model(self, request: Any, obj: InspectionTemplate) -> None:
+        if obj.has_operational_history:
+            raise DjangoValidationError(
+                f"Cannot delete template {obj.template_name}: inspections exist. Deactivate it instead."
+            )
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            self.delete_model(request, obj)
+
+
+class InspectionResultInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = InspectionResult
+    extra = 0
+    fk_name = "inspection"
+    fields = ("template_item", "item_type", "passed", "value_text", "value_number", "value_boolean", "photo_preview")
+    readonly_fields = ("template_item", "item_type", "photo_preview")
+    raw_id_fields = ("template_item", "uploaded_by")
+    can_delete = False
+
+    def get_formset(self, request: Any, obj: Inspection | None = None, **kwargs: Any) -> Any:
+        self._request = request
+        return super().get_formset(request, obj, **kwargs)
+
+    @admin.display(description="Item type")
+    def item_type(self, obj: InspectionResult) -> str:
+        return obj.template_item.item_type
+
+    @admin.display(description="Photo")
+    def photo_preview(self, obj: InspectionResult) -> str:
+        request = getattr(self, "_request", None)
+        if not obj.file or request is None:
+            return "—"
+        token = create_file_token(
+            user_id=request.user.pk,
+            app_label="site_management",
+            model_name="inspectionresult",
+            object_id=obj.pk,
+        )
+        url = f"/{settings.API_V1_PREFIX}/files/signed/{token}/"
+        return mark_safe(
+            f'<a href="{url}" target="_blank"><img src="{url}" width="48" height="48" '
+            'style="object-fit:cover;border-radius:4px" alt="photo"/></a>'
+        )
+
+
+@admin.register(Inspection)
+class InspectionAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "inspection_date",
+        "site",
+        "area",
+        "template",
+        "status_badge",
+        "overall_badge",
+        "score",
+        "inspected_by",
+        "submitted_at",
+    )
+    list_filter = ("status", "overall_status", "site", "inspection_date")
+    search_fields = ("site__name", "area__area_name", "template__template_name", "notes")
+    date_hierarchy = "inspection_date"
+    raw_id_fields = ("site", "area", "template", "shift", "inspected_by", "created_by", "updated_by")
+    inlines = [InspectionResultInline]
+    actions = ["submit_inspections", "return_inspections", "review_inspections"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: Inspection) -> str:
+        return obj.status
+
+    @admin.display(description="Overall")
+    def overall_badge(self, obj: Inspection) -> str:
+        return obj.overall_status or "—"
+
+    def get_readonly_fields(self, request: Any, obj: Inspection | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = ("created_at", "updated_at")
+        if obj is not None and not obj.is_editable:
+            readonly += (
+                "site",
+                "area",
+                "template",
+                "inspection_date",
+                "shift",
+                "inspected_by",
+                "overall_status",
+                "score",
+                "status",
+                "submitted_at",
+            )
+        return readonly
+
+    def has_delete_permission(self, request: Any, obj: Inspection | None = None) -> bool:
+        if obj is None:
+            return True
+        return obj.is_editable
+
+    @admin.action(description="Submit selected inspections")
+    def submit_inspections(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.inspection_services import submit_inspection  # noqa: PLC0415
+
+        updated = 0
+        for inspection in queryset.filter(status=InspectionWorkflowStatus.DRAFT):
+            try:
+                submit_inspection(inspection=inspection, actor=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} inspection(s) submitted.")
+
+    @admin.action(description="Return selected inspections")
+    def return_inspections(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.inspection_services import return_inspection  # noqa: PLC0415
+
+        updated = 0
+        for inspection in queryset.filter(
+            status__in=[InspectionWorkflowStatus.SUBMITTED, InspectionWorkflowStatus.REVIEWED]
+        ):
+            try:
+                return_inspection(inspection=inspection, actor=request.user, reason="Returned via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} inspection(s) returned.")
+
+    @admin.action(description="Review selected inspections")
+    def review_inspections(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.inspection_services import review_inspection  # noqa: PLC0415
+
+        updated = 0
+        for inspection in queryset.filter(status=InspectionWorkflowStatus.SUBMITTED):
+            try:
+                review_inspection(inspection=inspection, actor=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} inspection(s) reviewed.")

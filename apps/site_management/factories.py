@@ -18,6 +18,10 @@ from .models import (
     CleanerDocument,
     CleanerShiftAssignment,
     CleanerSiteAssignment,
+    Inspection,
+    InspectionResult,
+    InspectionTemplate,
+    InspectionTemplateItem,
     OperationalRole,
     Site,
     SiteArea,
@@ -325,3 +329,47 @@ class StockRequestItemFactory(factory.django.DjangoModelFactory):
     request = factory.SubFactory(StockRequestFactory)
     store_item = factory.SubFactory(StoreItemFactory)
     requested_quantity = 10
+
+
+class InspectionTemplateFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = InspectionTemplate
+
+    template_name = factory.Sequence(lambda n: f"Checklist {n}")
+    frequency = "manual"
+    is_active = True
+    created_by = factory.SubFactory(UserFactory)
+
+
+class InspectionTemplateItemFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = InspectionTemplateItem
+
+    template = factory.SubFactory(InspectionTemplateFactory)
+    item_label = factory.Sequence(lambda n: f"Check {n}")
+    item_type = "pass_fail"
+    required = True
+    sequence = factory.Sequence(lambda n: n)
+
+
+class InspectionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Inspection
+
+    site = factory.SubFactory(SiteFactory)
+    area = factory.SubFactory(SiteAreaFactory)
+    template = factory.SubFactory(InspectionTemplateFactory)
+    inspection_date = date.today()
+    inspected_by = factory.SubFactory(UserFactory)
+    status = "draft"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class InspectionResultFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = InspectionResult
+
+    inspection = factory.SubFactory(InspectionFactory)
+    template_item = factory.SubFactory(InspectionTemplateItemFactory)
+    passed = True
+    uploaded_by = factory.SubFactory(UserFactory)

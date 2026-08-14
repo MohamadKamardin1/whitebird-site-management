@@ -77,6 +77,28 @@ from .cleaner_services import (
     upload_cleaner_document,
     verify_cleaner_document,
 )
+from .inspection_selectors import (
+    InspectionFilter,
+    TemplateFilter,
+    get_inspection_or_none,
+    get_template_or_none,
+    inspection_list,
+    inspection_summary,
+    template_list,
+)
+from .inspection_services import (
+    add_inspection_result,
+    create_template,
+    deactivate_template,
+    return_inspection,
+    review_inspection,
+    save_inspection_draft,
+    start_inspection,
+    submit_inspection,
+    update_inspection_result,
+    update_template,
+    upload_result_photo,
+)
 from .models import (
     Asset,
     AssetCategory,
@@ -92,6 +114,10 @@ from .models import (
     Department,
     Gender,
     IdType,
+    Inspection,
+    InspectionResult,
+    InspectionTemplate,
+    InspectionTemplateItem,
     Notification,
     OperationalRole,
     Site,
@@ -142,6 +168,18 @@ from .schemas import (
     DepartmentUpdateIn,
     DocumentReviewIn,
     DownloadUrlOut,
+    InspectionOut,
+    InspectionResultCreateIn,
+    InspectionResultOut,
+    InspectionResultUpdateIn,
+    InspectionReturnIn,
+    InspectionStartIn,
+    InspectionSummaryOut,
+    InspectionTemplateCreateIn,
+    InspectionTemplateOut,
+    InspectionTemplateStatusIn,
+    InspectionTemplateUpdateIn,
+    InspectionUpdateIn,
     MessageOut,
     NotificationOut,
     OperationalRoleCreateIn,
@@ -177,6 +215,8 @@ from .schemas import (
     StoreItemOut,
     StoreItemUpdateIn,
     StoreOut,
+    TemplateItemIn,
+    TemplateItemOut,
     TraineeDecisionIn,
     TraineeEvaluationCreateIn,
     TraineeEvaluationOut,
@@ -2614,3 +2654,459 @@ def store_request_complete(request: AuthenticatedRequest, store_id: int, request
     stock_request = _load_request_or_404(store_id, request_id)
     complete_stock_request(request=stock_request, actor=request.auth)
     return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+# --------------------------------------------------------------------------- #
+# Inspections
+# --------------------------------------------------------------------------- #
+
+
+def _inspection_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Inspection records require a management role.")
+
+
+def _inspection_manage(user: User, site_id: int) -> None:
+    _inspection_read(user)
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You do not have permission to manage inspections for this site.")
+
+
+def _inspection_review(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role
+        in {
+            RoleCode.GENERAL_SUPERVISOR,
+            RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+            RoleCode.ZONE_SUPERVISOR,
+        }
+    ):
+        raise PermissionDenied("Only zone-level management can review inspections.")
+
+
+def _load_template_or_404(template_id: int) -> InspectionTemplate:
+    template = get_template_or_none(template_id)
+    if template is None:
+        raise Http404("Inspection template not found.")
+    return template
+
+
+def _load_inspection_or_404(inspection_id: int) -> Inspection:
+    inspection = get_inspection_or_none(inspection_id)
+    if inspection is None:
+        raise Http404("Inspection not found.")
+    return inspection
+
+
+def _template_out(template: InspectionTemplate) -> InspectionTemplateOut:
+    annotated = getattr(template, "annotated_item_count", None)
+    site = template.site
+    area = template.area
+    return InspectionTemplateOut(
+        id=template.pk,
+        template_name=template.template_name,
+        description=template.description,
+        site_id=template.site_id,
+        site_name=site.name if site else None,
+        area_id=template.area_id,
+        area_name=area.area_name if area else None,
+        frequency=template.frequency,
+        is_active=template.is_active,
+        item_count=annotated if annotated is not None else template.item_count,
+        items=[_template_item_out(item) for item in template.items.all()],
+        created_at=template.created_at,
+    )
+
+
+def _template_item_out(item: InspectionTemplateItem) -> TemplateItemOut:
+    return TemplateItemOut(
+        id=item.pk,
+        item_label=item.item_label,
+        item_type=item.item_type,
+        required=item.required,
+        sequence=item.sequence,
+        help_text=item.help_text,
+    )
+
+
+def _result_out(r: InspectionResult) -> InspectionResultOut:
+    return InspectionResultOut(
+        id=r.pk,
+        inspection_id=r.inspection_id,
+        template_item_id=r.template_item_id,
+        item_label=r.template_item.item_label,
+        item_type=r.template_item.item_type,
+        required=r.template_item.required,
+        value_text=r.value_text,
+        value_number=r.value_number,
+        value_boolean=r.value_boolean,
+        passed=r.passed,
+        notes=r.notes,
+        has_photo=bool(r.file),
+    )
+
+
+def _inspection_out(inspection: Inspection) -> InspectionOut:
+    results = [_result_out(r) for r in inspection.results.all()]
+    inspected_by = inspection.inspected_by
+    shift = inspection.shift
+    return InspectionOut(
+        id=inspection.pk,
+        site_id=inspection.site_id,
+        site_name=inspection.site.name,
+        area_id=inspection.area_id,
+        area_name=inspection.area.area_name,
+        template_id=inspection.template_id,
+        template_name=inspection.template.template_name,
+        inspection_date=inspection.inspection_date,
+        shift_id=inspection.shift_id,
+        shift_name=shift.shift_name if shift else None,
+        inspected_by=inspected_by.email if inspected_by else None,
+        overall_status=inspection.overall_status,
+        score=inspection.score,
+        notes=inspection.notes,
+        status=inspection.status,
+        submitted_at=inspection.submitted_at,
+        results=results,
+        created_at=inspection.created_at,
+    )
+
+
+@router.get(
+    "/inspection-templates",
+    response=Paginated[InspectionTemplateOut],
+    summary="List inspection templates (paginated, role-scoped)",
+)
+def inspection_template_list(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    frequency: str | None = None,
+    search: str | None = None,
+    is_active: bool | None = None,
+) -> Paginated[InspectionTemplateOut]:
+    _inspection_read(request.auth)
+    spec = TemplateFilter(site_id=site_id, frequency=frequency, search=search, is_active=is_active)
+    qs = template_list(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_template_out(t) for t in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post(
+    "/inspection-templates",
+    response=InspectionTemplateOut,
+    summary="Create an inspection template",
+)
+def inspection_template_create(
+    request: AuthenticatedRequest, payload: InspectionTemplateCreateIn
+) -> InspectionTemplateOut:
+    _inspection_read(request.auth)
+    site = None
+    if payload.site_id:
+        site = _load_site_or_404(payload.site_id)
+        _inspection_manage(request.auth, site.pk)
+    area = SiteArea.objects.filter(pk=payload.area_id).first() if payload.area_id else None
+    items = [_item_payload(row) for row in payload.items]
+    created = create_template(
+        template_name=payload.template_name,
+        actor=request.auth,
+        description=payload.description,
+        site=site,
+        area=area,
+        frequency=payload.frequency,
+        items=items,
+    )
+    return _template_out(get_template_or_none(created.pk) or created)
+
+
+def _item_payload(row: TemplateItemIn) -> dict[str, Any]:
+    return {
+        "item_label": row.item_label,
+        "item_type": row.item_type,
+        "required": row.required,
+        "sequence": row.sequence,
+        "help_text": row.help_text,
+    }
+
+
+@router.get(
+    "/inspection-templates/{template_id}",
+    response=InspectionTemplateOut,
+    summary="Inspection template detail",
+)
+def inspection_template_detail(request: AuthenticatedRequest, template_id: int) -> InspectionTemplateOut:
+    _inspection_read(request.auth)
+    template = _load_template_or_404(template_id)
+    return _template_out(template)
+
+
+@router.put(
+    "/inspection-templates/{template_id}",
+    response=InspectionTemplateOut,
+    summary="Update an inspection template",
+)
+def inspection_template_update(
+    request: AuthenticatedRequest, template_id: int, payload: InspectionTemplateUpdateIn
+) -> InspectionTemplateOut:
+    _inspection_read(request.auth)
+    template = _load_template_or_404(template_id)
+    if template.site_id and not user_can_manage_site(request.auth, template.site_id):
+        raise PermissionDenied("You do not have permission to edit this template.")
+    items = [_item_payload(row) for row in payload.items] if payload.items is not None else None
+    updated = update_template(
+        template=template,
+        actor=request.auth,
+        template_name=payload.template_name,
+        description=payload.description,
+        frequency=payload.frequency,
+        items=items,
+    )
+    return _template_out(get_template_or_none(updated.pk) or updated)
+
+
+@router.patch(
+    "/inspection-templates/{template_id}/status",
+    response=InspectionTemplateOut,
+    summary="Activate or deactivate an inspection template",
+)
+def inspection_template_status(
+    request: AuthenticatedRequest, template_id: int, payload: InspectionTemplateStatusIn
+) -> InspectionTemplateOut:
+    _inspection_read(request.auth)
+    template = _load_template_or_404(template_id)
+    if template.site_id and not user_can_manage_site(request.auth, template.site_id):
+        raise PermissionDenied("You do not have permission to change this template.")
+    if payload.is_active:
+        template.is_active = True
+        template.updated_by = request.auth
+        template.save(update_fields=["is_active", "updated_by", "updated_at"])
+    else:
+        deactivate_template(template=template, actor=request.auth)
+    return _template_out(get_template_or_none(template.pk) or template)
+
+
+@router.get(
+    "/inspections",
+    response=Paginated[InspectionOut],
+    summary="List inspections (paginated, filtered)",
+)
+def inspection_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    area_id: int | None = None,
+    template_id: int | None = None,
+    status: str | None = None,
+    overall_status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Paginated[InspectionOut]:
+    _inspection_read(request.auth)
+    spec = InspectionFilter(
+        site_id=site_id,
+        area_id=area_id,
+        template_id=template_id,
+        status=status,
+        overall_status=overall_status,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    qs = inspection_list(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_inspection_out(i) for i in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get(
+    "/inspections/summary",
+    response=InspectionSummaryOut,
+    summary="Inspection summary counts",
+)
+def inspection_summary_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+) -> InspectionSummaryOut:
+    _inspection_read(request.auth)
+    return InspectionSummaryOut(**inspection_summary(request.auth, site_id))
+
+
+@router.post("/inspections", response=InspectionOut, summary="Start an inspection")
+def inspection_start(request: AuthenticatedRequest, payload: InspectionStartIn) -> InspectionOut:
+    site = _load_site_or_404(payload.site_id)
+    _inspection_manage(request.auth, site.pk)
+    area = SiteArea.objects.filter(pk=payload.area_id).first()
+    if area is None or area.site_id != site.pk:
+        raise Http404("Area not found.")
+    template = _load_template_or_404(payload.template_id)
+    if template.site_id and template.site_id != site.pk:
+        raise PermissionDenied("Template is not scoped to this site.")
+    shift = SiteShift.objects.filter(pk=payload.shift_id, site_id=site.pk).first() if payload.shift_id else None
+    inspected_by: User = request.auth
+    if payload.inspected_by_id:
+        found = User.objects.filter(pk=payload.inspected_by_id).first()
+        if found is None:
+            raise Http404("Inspector not found.")
+        inspected_by = found
+    created = start_inspection(
+        site=site,
+        area=area,
+        template=template,
+        inspected_by=inspected_by,
+        actor=request.auth,
+        inspection_date=payload.inspection_date,
+        shift=shift,
+        notes=payload.notes,
+    )
+    return _inspection_out(get_inspection_or_none(created.pk) or created)
+
+
+@router.get("/inspections/{inspection_id}", response=InspectionOut, summary="Inspection detail")
+def inspection_detail_endpoint(request: AuthenticatedRequest, inspection_id: int) -> InspectionOut:
+    _inspection_read(request.auth)
+    inspection = _load_inspection_or_404(inspection_id)
+    if not site_in_user_scope(request.auth, inspection.site_id):
+        raise PermissionDenied("You do not have access to this inspection.")
+    return _inspection_out(inspection)
+
+
+@router.put("/inspections/{inspection_id}", response=InspectionOut, summary="Save an inspection draft")
+def inspection_update(request: AuthenticatedRequest, inspection_id: int, payload: InspectionUpdateIn) -> InspectionOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_manage(request.auth, inspection.site_id)
+    saved = save_inspection_draft(inspection=inspection, actor=request.auth, notes=payload.notes)
+    return _inspection_out(get_inspection_or_none(saved.pk) or saved)
+
+
+@router.post(
+    "/inspections/{inspection_id}/submit",
+    response=InspectionOut,
+    summary="Submit an inspection",
+)
+def inspection_submit(request: AuthenticatedRequest, inspection_id: int) -> InspectionOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_manage(request.auth, inspection.site_id)
+    submitted = submit_inspection(inspection=inspection, actor=request.auth)
+    return _inspection_out(get_inspection_or_none(submitted.pk) or submitted)
+
+
+@router.post(
+    "/inspections/{inspection_id}/return",
+    response=InspectionOut,
+    summary="Return an inspection for correction",
+)
+def inspection_return(request: AuthenticatedRequest, inspection_id: int, payload: InspectionReturnIn) -> InspectionOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_review(request.auth)
+    returned = return_inspection(inspection=inspection, actor=request.auth, reason=payload.reason)
+    return _inspection_out(get_inspection_or_none(returned.pk) or returned)
+
+
+@router.post(
+    "/inspections/{inspection_id}/review",
+    response=InspectionOut,
+    summary="Review a submitted inspection",
+)
+def inspection_review(request: AuthenticatedRequest, inspection_id: int) -> InspectionOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_review(request.auth)
+    reviewed = review_inspection(inspection=inspection, actor=request.auth)
+    return _inspection_out(get_inspection_or_none(reviewed.pk) or reviewed)
+
+
+@router.post(
+    "/inspections/{inspection_id}/results",
+    response=InspectionResultOut,
+    summary="Add an inspection result",
+)
+def inspection_result_create(
+    request: AuthenticatedRequest, inspection_id: int, payload: InspectionResultCreateIn
+) -> InspectionResultOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_manage(request.auth, inspection.site_id)
+    template_item = InspectionTemplateItem.objects.filter(
+        pk=payload.template_item_id, template_id=inspection.template_id
+    ).first()
+    if template_item is None:
+        raise Http404("Template item not found.")
+    result = add_inspection_result(
+        inspection=inspection,
+        template_item=template_item,
+        actor=request.auth,
+        value_text=payload.value_text,
+        value_number=payload.value_number,
+        value_boolean=payload.value_boolean,
+        passed=payload.passed,
+        notes=payload.notes,
+    )
+    return _result_out(result)
+
+
+@router.put(
+    "/inspections/{inspection_id}/results/{result_id}",
+    response=InspectionResultOut,
+    summary="Update an inspection result",
+)
+def inspection_result_update(
+    request: AuthenticatedRequest, inspection_id: int, result_id: int, payload: InspectionResultUpdateIn
+) -> InspectionResultOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_manage(request.auth, inspection.site_id)
+    result = InspectionResult.objects.filter(pk=result_id, inspection_id=inspection_id).first()
+    if result is None:
+        raise Http404("Inspection result not found.")
+    updated = update_inspection_result(
+        result=result,
+        actor=request.auth,
+        value_text=payload.value_text,
+        value_number=payload.value_number,
+        value_boolean=payload.value_boolean,
+        passed=payload.passed,
+        notes=payload.notes,
+    )
+    return _result_out(updated)
+
+
+@router.post(
+    "/inspections/{inspection_id}/results/{result_id}/photo",
+    response=InspectionResultOut,
+    summary="Upload a private photo for a PHOTO result",
+)
+def inspection_result_photo(
+    request: AuthenticatedRequest,
+    inspection_id: int,
+    result_id: int,
+    file: UploadedFile = FILE_PARAM_DEFAULT,
+) -> InspectionResultOut:
+    inspection = _load_inspection_or_404(inspection_id)
+    _inspection_manage(request.auth, inspection.site_id)
+    result = InspectionResult.objects.filter(pk=result_id, inspection_id=inspection_id).first()
+    if result is None:
+        raise Http404("Inspection result not found.")
+    updated = upload_result_photo(result=result, uploaded_file=file, actor=request.auth)
+    return _result_out(updated)
+
+
+@router.get(
+    "/inspections/{inspection_id}/results/{result_id}/download-url",
+    response=DownloadUrlOut,
+    summary="Signed download URL for a private inspection photo",
+)
+def inspection_result_download_url(request: AuthenticatedRequest, inspection_id: int, result_id: int) -> DownloadUrlOut:
+    _inspection_read(request.auth)
+    inspection = _load_inspection_or_404(inspection_id)
+    if not site_in_user_scope(request.auth, inspection.site_id):
+        raise PermissionDenied("You do not have access to this inspection.")
+    result = InspectionResult.objects.filter(pk=result_id, inspection_id=inspection_id).first()
+    if result is None:
+        raise Http404("Inspection result not found.")
+    if not result.file:
+        raise Http404("This result has no photo.")
+    token = create_file_token(
+        user_id=request.auth.pk,
+        app_label="site_management",
+        model_name="inspectionresult",
+        object_id=result.pk,
+    )
+    return DownloadUrlOut(download_url=f"/{settings.API_V1_PREFIX}/files/signed/{token}/")

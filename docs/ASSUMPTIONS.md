@@ -323,3 +323,32 @@ engineering contract.
     or above.
 89. **Immutability**: movement rows cannot be added, edited or deleted from the
     admin; the item list selector is a single query (`select_related`).
+
+## Inspections & templates (Prompt 11)
+
+90. **Templates** are global when `site IS NULL` (visible to everyone) or
+    site-scoped; an `area` requires the template's site. Templates are soft
+    deactivated (`is_active=False`); the default manager hides inactive ones,
+    but the detail lookup uses the base manager so operators can reactivate.
+91. **Result type matching**: YES_NO stores `value_boolean` (and derives
+    `passed`), PASS_FAIL stores `passed`, SCORE stores `value_number` (0–100,
+    `passed` = ≥ 50), TEXT stores non-empty `value_text`, PHOTO stores a
+    private file. `full_clean` excludes the optional file field when saving
+    results without a photo.
+92. **Score transparency**: score = average of SCORE answers (0–100) when any
+    exist, else NULL. overall_status = FAILED if any answer failed;
+    NEEDS_ATTENTION if score < 70; else PASSED. Stored on submit and recomputed
+    on review.
+93. **Required items** must be answered (type-appropriate) before submission;
+    submission is allowed from DRAFT or RETURNED. Submitted inspections are
+    immutable (results/photos can't change) unless returned with a reason.
+94. **Issue hook**: `create_issue_from_failed_result` runs on submit for every
+    failed result — emits an `InspectionIssueDetected` domain event and notifies
+    the inspector. A future Issues module will materialise these into records.
+95. **Photos** use the private storage backend and are only served through
+    signed download tokens (owner or system admin); the admin thumbnail embeds
+    a signed URL generated for the logged-in staff user.
+96. **Permissions**: reads = any management role or viewer (scoped to
+    `visible_sites`); creating/managing templates and inspections + submit =
+    site-scoped (`user_can_manage_site`); return/review = ZONE_SUPERVISOR or
+    above.

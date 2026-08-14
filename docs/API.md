@@ -267,6 +267,35 @@ enabled. Permissions: read = management or viewer; manage (stores/items/
 movements/requests/submit) = site-scoped; review/reject/complete = zone
 supervisor or above.
 
+### Inspections
+
+| Method | Path                                    | Description                                    |
+| ------ | --------------------------------------- | ---------------------------------------------- |
+| GET    | `/inspection-templates`                 | Paginated templates (`site_id`/`frequency`/`search`) |
+| POST   | `/inspection-templates`                 | Create a template (optionally with `items`)    |
+| GET    | `/inspection-templates/{id}`            | Template detail with items                     |
+| PUT    | `/inspection-templates/{id}`            | Update metadata and/or replace items           |
+| PATCH  | `/inspection-templates/{id}/status`     | Activate/deactivate (`is_active`)              |
+| GET    | `/inspections`                          | Paginated inspections (site/area/template/status/overall/date filters) |
+| POST   | `/inspections`                          | Start a DRAFT inspection                       |
+| GET    | `/inspections/summary`                  | Counts per status/overall + average score      |
+| GET    | `/inspections/{id}`                     | Inspection detail with results                 |
+| PUT    | `/inspections/{id}`                     | Save draft notes (score/status preview)        |
+| POST   | `/inspections/{id}/submit`              | DRAFT/RETURNED → SUBMITTED (validates required)|
+| POST   | `/inspections/{id}/return`              | SUBMITTED/REVIEWED → RETURNED (`reason`)       |
+| POST   | `/inspections/{id}/review`              | SUBMITTED → REVIEWED (zone supervisor+)        |
+| POST   | `/inspections/{id}/results`             | Add a result (`template_item_id` + value)      |
+| PUT    | `/inspections/{inspection_id}/results/{result_id}` | Update a result (editable only)      |
+| POST   | `/inspections/{inspection_id}/results/{result_id}/photo` | Upload private photo (`file`, PHOTO items) |
+| GET    | `/inspections/{inspection_id}/results/{result_id}/download-url` | Signed photo URL   |
+
+Item types: YES_NO (boolean → passed), PASS_FAIL (passed), SCORE (0–100 →
+passed ≥ 50), TEXT (text), PHOTO (private file). Score = average of SCORE
+answers; any failed answer → FAILED; score < 70 → NEEDS_ATTENTION; else PASSED.
+Submitted inspections are immutable until returned. Permissions: read =
+management/viewer; start/manage = site scope; return/review = zone supervisor
+or above.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

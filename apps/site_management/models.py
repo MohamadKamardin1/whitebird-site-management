@@ -1404,3 +1404,211 @@ class StockRequestItem(TimeStampedModel):
             raise ValidationError("Item must belong to the request's store.", code="item_store_mismatch")
         if self.approved_quantity is not None and self.approved_quantity < 0:
             raise ValidationError("Approved quantity cannot be negative.", code="approved_quantity_invalid")
+
+
+# --------------------------------------------------------------------------- #
+# Inspections
+# --------------------------------------------------------------------------- #
+
+
+class InspectionFrequency(models.TextChoices):
+    DAILY = "daily", "Daily"
+    WEEKLY = "weekly", "Weekly"
+    MONTHLY = "monthly", "Monthly"
+    MANUAL = "manual", "Manual"
+
+
+class InspectionItemType(models.TextChoices):
+    YES_NO = "yes_no", "Yes/No"
+    PASS_FAIL = "pass_fail", "Pass/Fail"
+    SCORE = "score", "Score"
+    TEXT = "text", "Text"
+    PHOTO = "photo", "Photo"
+
+
+class InspectionOverallStatus(models.TextChoices):
+    PASSED = "passed", "Passed"
+    FAILED = "failed", "Failed"
+    NEEDS_ATTENTION = "needs_attention", "Needs Attention"
+
+
+class InspectionWorkflowStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    REVIEWED = "reviewed", "Reviewed"
+    RETURNED = "returned", "Returned"
+
+
+class InspectionTemplate(UserStampedModel, ActivatableModel):
+    """A reusable checklist of inspection items.
+
+    Global templates (``site IS NULL``) apply to every site; site-specific
+    templates are scoped to one site. Templates are deactivated, never deleted,
+    once inspections exist.
+    """
+
+    template_name = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="inspection_templates", null=True, blank=True)
+    area = models.ForeignKey(
+        SiteArea, on_delete=models.CASCADE, related_name="inspection_templates", null=True, blank=True
+    )
+    frequency = models.CharField(
+        max_length=16, choices=InspectionFrequency.choices, default=InspectionFrequency.MANUAL, db_index=True
+    )
+
+    class Meta:
+        verbose_name = "Inspection template"
+        verbose_name_plural = "Inspection templates"
+        ordering = ["template_name"]
+        indexes = [models.Index(fields=["site", "is_active"])]
+
+    def __str__(self) -> str:
+        site = self.site
+        scope = f" @ {site.name}" if site is not None else " (global)"
+        return f"{self.template_name}{scope}"
+
+    @property
+    def item_count(self) -> int:
+        return self.items.count()
+
+    @property
+    def has_operational_history(self) -> bool:
+        return self.inspections.exists()
+
+    def clean(self) -> None:
+        super().clean()
+        if self.area_id and self.area is not None and self.area.site_id != self.site_id:
+            raise ValidationError("Area must belong to the template's site.", code="area_site_mismatch")
+
+
+class InspectionTemplateItem(TimeStampedModel):
+    """A checklist row within an inspection template."""
+
+    template = models.ForeignKey(InspectionTemplate, on_delete=models.CASCADE, related_name="items")
+    item_label = models.CharField(max_length=255)
+    item_type = models.CharField(max_length=16, choices=InspectionItemType.choices, db_index=True)
+    required = models.BooleanField(default=True)
+    sequence = models.PositiveSmallIntegerField(default=0)
+    help_text = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Inspection template item"
+        verbose_name_plural = "Inspection template items"
+        ordering = ["template", "sequence"]
+        constraints = [
+            models.UniqueConstraint(fields=["template", "sequence"], name="uniq_template_item_sequence"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.template.template_name}: {self.item_label}"
+
+
+class Inspection(UserStampedModel):
+    """A performed inspection of a site area using a template."""
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="inspections")
+    area = models.ForeignKey(SiteArea, on_delete=models.CASCADE, related_name="inspections")
+    template = models.ForeignKey(InspectionTemplate, on_delete=models.PROTECT, related_name="inspections")
+    inspection_date = models.DateField(db_index=True)
+    shift = models.ForeignKey(SiteShift, on_delete=models.SET_NULL, null=True, blank=True, related_name="inspections")
+    inspected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inspected_site_inspections",
+    )
+    overall_status = models.CharField(
+        max_length=20, choices=InspectionOverallStatus.choices, blank=True, default="", db_index=True
+    )
+    score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=InspectionWorkflowStatus.choices,
+        default=InspectionWorkflowStatus.DRAFT,
+        db_index=True,
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Inspection"
+        verbose_name_plural = "Inspections"
+        ordering = ["-inspection_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["site", "status"]),
+            models.Index(fields=["area", "inspection_date"]),
+            models.Index(fields=["template", "inspection_date"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Inspection {self.pk} @ {self.site.name} ({self.inspection_date})"
+
+    @property
+    def is_editable(self) -> bool:
+        return self.status in {InspectionWorkflowStatus.DRAFT, InspectionWorkflowStatus.RETURNED}
+
+    def clean(self) -> None:
+        super().clean()
+        if self.area.site_id != self.site_id:
+            raise ValidationError("Area must belong to the inspection's site.", code="area_site_mismatch")
+        if self.template.site_id and self.template.site_id != self.site_id:
+            raise ValidationError(
+                "Template must be global or scoped to the inspection's site.", code="template_site_mismatch"
+            )
+        if self.shift_id and self.shift is not None and self.shift.site_id != self.site_id:
+            raise ValidationError("Shift must belong to the inspection's site.", code="shift_site_mismatch")
+
+
+class InspectionResult(PrivateFileModel):
+    """The answer to one template item within an inspection.
+
+    ``file`` (from :class:`apps.core.models.PrivateFileModel`) is the private
+    photo for PHOTO items; it is stored on the private backend and only served
+    through signed download tokens.
+    """
+
+    inspection = models.ForeignKey(Inspection, on_delete=models.CASCADE, related_name="results")
+    template_item = models.ForeignKey(InspectionTemplateItem, on_delete=models.CASCADE, related_name="results")
+    value_text = models.TextField(blank=True, default="")
+    value_number = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    value_boolean = models.BooleanField(null=True, blank=True)
+    passed = models.BooleanField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Inspection result"
+        verbose_name_plural = "Inspection results"
+        ordering = ["template_item__sequence"]
+        constraints = [
+            models.UniqueConstraint(fields=["inspection", "template_item"], name="uniq_inspection_template_item"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.inspection_id} / {self.template_item.item_label}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.template_item.template_id != self.inspection.template_id:
+            raise ValidationError(
+                "Template item must belong to the inspection's template.", code="item_template_mismatch"
+            )
+        item_type = self.template_item.item_type
+        if item_type == InspectionItemType.YES_NO:
+            if self.value_boolean is None:
+                raise ValidationError("Yes/No items require a boolean answer.", code="boolean_required")
+            self.passed = self.value_boolean
+        elif item_type == InspectionItemType.PASS_FAIL:
+            if self.passed is None:
+                raise ValidationError("Pass/Fail items require a pass/fail answer.", code="pass_fail_required")
+            self.value_boolean = self.passed
+        elif item_type == InspectionItemType.SCORE:
+            if self.value_number is None:
+                raise ValidationError("Score items require a numeric value.", code="score_required")
+            if not 0 <= self.value_number <= 100:
+                raise ValidationError("Score must be between 0 and 100.", code="score_out_of_range")
+            self.passed = self.value_number >= 50
+        elif item_type == InspectionItemType.TEXT:
+            if not self.value_text.strip():
+                raise ValidationError("Text items require a text answer.", code="text_required")
