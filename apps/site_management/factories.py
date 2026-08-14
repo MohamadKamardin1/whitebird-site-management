@@ -12,6 +12,8 @@ from apps.accounts.factories import UserFactory
 from .models import (
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
+    Cleaner,
+    CleanerDocument,
     OperationalRole,
     Site,
     SiteArea,
@@ -150,3 +152,33 @@ class OperationalRoleFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Role {n}")
     code = factory.Sequence(lambda n: f"role-{n}")
     is_active = True
+
+
+class CleanerFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Cleaner
+
+    first_name = factory.Sequence(lambda n: f"Cleaner{n}")
+    last_name = factory.Sequence(lambda n: f"Last{n}")
+    id_type = "nida"
+    id_number = factory.Sequence(lambda n: f"NIDA{n:08d}")
+    gender = "female"
+    birth_date = date(1990, 1, 1)
+    living_location = "Stone Town"
+    status = "applicant"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class CleanerDocumentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CleanerDocument
+
+    cleaner = factory.SubFactory(CleanerFactory)
+    document_type = "nida"
+    document_number = factory.Sequence(lambda n: f"DOC{n:06d}")
+    file = factory.django.FileField(data=b"%PDF-1.4 test document")
+    original_filename = factory.Sequence(lambda n: f"doc-{n}.pdf")
+    content_type = "application/pdf"
+    size_bytes = 19
+    file_hash = factory.Sequence(lambda n: f"hash{n:064d}")
+    status = "pending"

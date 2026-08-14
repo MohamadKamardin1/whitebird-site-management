@@ -150,6 +150,28 @@ target user, model, object id, and an expiry (TTL from constance
 enforces that the downloader is the token owner or a system admin; every
 download is written to the audit trail (`file_download` action).
 
+### Cleaner registry & documents
+
+| Method | Path                          | Description                                   |
+| ------ | ----------------------------- | --------------------------------------------- |
+| GET    | `/cleaners`                    | List cleaners (paginated; ID/phone masked)    |
+| POST   | `/cleaners`                    | Register a cleaner (applicant)                |
+| GET    | `/cleaners/{id}`               | Cleaner detail                                |
+| PUT    | `/cleaners/{id}`               | Update a cleaner                              |
+| PATCH  | `/cleaners/{id}/status`        | Transition status (service-enforced)          |
+| GET    | `/cleaners/{id}/documents`     | List documents (numbers masked)               |
+| POST   | `/cleaners/{id}/documents`     | Upload a document (multipart)                 |
+| GET    | `/cleaners/{id}/documents/{d}` | Document detail                               |
+| POST   | `/cleaners/{id}/documents/{d}/verify` | Verify a document (sensitive permission) |
+| POST   | `/cleaners/{id}/documents/{d}/reject` | Reject a document (reason)            |
+| GET    | `/cleaners/{id}/documents/{d}/download-url` | Signed private download URL      |
+
+Privacy: full ID numbers/phone numbers are returned only to SYSTEM_ADMIN or
+users holding `view_sensitive_cleaner_documents`; everyone else sees masked
+values. A cleaner becomes `ACTIVE` only after at least one identity document
+is `verified`. Document downloads stream through `/files/signed/{token}/`
+and are audited.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

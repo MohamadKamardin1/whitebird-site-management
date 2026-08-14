@@ -11,8 +11,39 @@ Module. Each prompt updates this file before its commit.
 | 2      | Custom user, RBAC and auth foundation        | Prompt 2 completed | —      |
 | 3      | Shared kernel: audit, files, events, errors  | Prompt 3 completed | —      |
 | 4      | Organisation hierarchy (zones/sites/supervisors) | Prompt 4 completed | —      |
-| 5      | Site configuration (shifts/areas/roles) | **Prompt 5 completed** | see CHANGELOG |
-| 6–20   | (pending)                                    | —                  | —      |
+| 5      | Site configuration (shifts/areas/roles) | Prompt 5 completed | —      |
+| 6      | Cleaner registry & secure documents | **Prompt 6 completed** | see CHANGELOG |
+| 7–20   | (pending)                                    | —                  | —      |
+
+## Prompt 6 — completed ✅
+
+Implemented the cleaner/applicant/trainee registry with secure document
+handling and privacy-conscious design:
+
+- **`Cleaner`** master data: ID type/number (normalised upper/trim, unique
+  `(id_type, id_number)`), gender, birth date (future/age validated via
+  constance `MIN_CLEANER_AGE`), living location, phones (validated), next of
+  kin, private profile photo, status lifecycle (APPLICANT/TRAINEE/ACTIVE/
+  INACTIVE), registration date.
+- **`CleanerDocument`**: private file storage (no public URL), SHA-256
+  duplicate detection, PENDING/VERIFIED/REJECTED lifecycle with
+  verifier/timestamp/reason, identity eligibility flag.
+- **Privacy**: ID/phone masking in list APIs unless the caller holds
+  `view_sensitive_cleaner_documents`; cleaner data never cached; every
+  download audited.
+- **Services** (transactional + audited): register/update/status/
+  activate-if-eligible/deactivate, document upload/verify/reject; domain
+  events `CleanerRegistered`/`CleanerActivated`/`CleanerDeactivated` via the
+  outbox.
+- **Selectors** with `can_view_full_cleaner_profile`/`can_view_document`.
+- **API**: cleaners CRUD/status + documents list/upload/detail/verify/reject/
+  signed download-url with role-scoped permissions and PII masking.
+- **Admin**: `CleanerAdmin` (status badges, masked ID, documents inline,
+  activate/deactivate actions, delete guard) and `CleanerDocumentAdmin`
+  (verify/reject actions, image preview for privileged staff, delete guard).
+
+**Quality gates (all green):** Ruff · Mypy strict (116 files) · pytest 274
+passed · coverage 91.4% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 5 — completed ✅
 

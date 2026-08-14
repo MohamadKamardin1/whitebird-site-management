@@ -6,22 +6,47 @@ services (writes) or selectors (reads), and shape output schemas.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import Http404
-from ninja import Query, Router
+from ninja import File, Form, Query, Router, UploadedFile
 
 from apps.accounts.models import RoleCode, User
 from apps.accounts.permissions import management_required, role_required, user_can_manage_site
+from apps.core.files import create_file_token
 from apps.core.pagination import PageParams, Paginated, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
+from .cleaner_selectors import (
+    CleanerFilter,
+    can_view_document,
+    cleaner_document_serialize,
+    cleaner_documents,
+    cleaner_list_queryset,
+    cleaner_serialize,
+    get_cleaner_document_or_none,
+    get_cleaner_or_none,
+)
+from .cleaner_services import (
+    change_cleaner_status,
+    register_cleaner,
+    reject_cleaner_document,
+    update_cleaner,
+    upload_cleaner_document,
+    verify_cleaner_document,
+)
 from .models import (
     Asset,
     AssetCategory,
+    CleanerDocumentType,
+    CleanerStatus,
     Department,
+    Gender,
+    IdType,
     Notification,
     OperationalRole,
     Site,
@@ -41,9 +66,16 @@ from .schemas import (
     AssetUpdateIn,
     AssignmentCreateIn,
     AssignmentOut,
+    CleanerCreateIn,
+    CleanerDocumentOut,
+    CleanerOut,
+    CleanerStatusIn,
+    CleanerUpdateIn,
     DepartmentCreateIn,
     DepartmentOut,
     DepartmentUpdateIn,
+    DocumentReviewIn,
+    DownloadUrlOut,
     MessageOut,
     NotificationOut,
     OperationalRoleCreateIn,
@@ -114,6 +146,11 @@ from .services import (
 )
 
 PAGE_PARAMS_DEFAULT: Any = Query()  # type: ignore[type-arg]
+FILE_PARAM_DEFAULT: Any = File(...)  # type: ignore[type-arg]
+FORM_PARAM_DEFAULT: Any = Form(...)  # type: ignore[type-arg]
+FORM_EMPTY_DEFAULT: Any = Form("")  # type: ignore[type-arg]
+FORM_NONE_DEFAULT: Any = Form(None)  # type: ignore[type-arg]
+FORM_FALSE_DEFAULT: Any = Form("false")  # type: ignore[type-arg]
 
 router = Router()
 
@@ -995,3 +1032,227 @@ def notification_unread_count(request: AuthenticatedRequest) -> dict[str, object
 def notification_mark_read(request: AuthenticatedRequest, notification_ids: list[int]) -> dict[str, object]:
     updated = mark_notifications_read(user=request.auth, notification_ids=notification_ids)
     return {"updated": updated}
+
+
+# --------------------------------------------------------------------------- #
+# Cleaner registry
+# --------------------------------------------------------------------------- #
+
+
+def _cleaner_read(user: User) -> None:
+    if not management_required(user):
+        raise PermissionDenied("Cleaner records require a management role.")
+
+
+def _cleaner_write(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role == RoleCode.GENERAL_SUPERVISOR
+        or user.has_perm("accounts.manage_site_configuration")
+    ):
+        raise PermissionDenied("You do not have permission to manage cleaners.")
+
+
+def _document_review(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role == RoleCode.GENERAL_SUPERVISOR
+        or user.has_perm("accounts.view_sensitive_cleaner_documents")
+    ):
+        raise PermissionDenied("You do not have permission to review cleaner documents.")
+
+
+@router.get(
+    "/cleaners",
+    response=Paginated[CleanerOut],
+    summary="List cleaners (paginated, PII masked)",
+)
+def cleaner_list(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    search: str | None = None,
+    status: str | None = None,
+    id_type: str | None = None,
+    gender: str | None = None,
+) -> Paginated[CleanerOut]:
+    _cleaner_read(request.auth)
+    spec = CleanerFilter(search=search, status=status, id_type=id_type, gender=gender)
+    qs = cleaner_list_queryset(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [CleanerOut(**cleaner_serialize(c, request.auth)) for c in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post("/cleaners", response=CleanerOut, summary="Register a cleaner")
+def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> CleanerOut:
+    _cleaner_write(request.auth)
+    cleaner = register_cleaner(
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        id_type=IdType(payload.id_type),
+        id_number=payload.id_number,
+        birth_date=payload.birth_date,
+        gender=Gender(payload.gender),
+        living_location=payload.living_location,
+        phone_number=payload.phone_number,
+        near_person_name=payload.near_person_name,
+        near_person_relationship=payload.near_person_relationship,
+        near_person_phone=payload.near_person_phone,
+        notes=payload.notes,
+        actor=request.auth,
+    )
+    return CleanerOut(**cleaner_serialize(cleaner, request.auth))
+
+
+@router.get("/cleaners/{cleaner_id}", response=CleanerOut, summary="Cleaner detail")
+def cleaner_detail(request: AuthenticatedRequest, cleaner_id: int) -> CleanerOut:
+    _cleaner_read(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    return CleanerOut(**cleaner_serialize(cleaner, request.auth))
+
+
+@router.put("/cleaners/{cleaner_id}", response=CleanerOut, summary="Update a cleaner")
+def cleaner_update(request: AuthenticatedRequest, cleaner_id: int, payload: CleanerUpdateIn) -> CleanerOut:
+    _cleaner_write(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    updated = update_cleaner(
+        cleaner=cleaner,
+        actor=request.auth,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        gender=Gender(payload.gender) if payload.gender else None,
+        living_location=payload.living_location,
+        phone_number=payload.phone_number,
+        near_person_name=payload.near_person_name,
+        near_person_relationship=payload.near_person_relationship,
+        near_person_phone=payload.near_person_phone,
+        notes=payload.notes,
+    )
+    return CleanerOut(**cleaner_serialize(updated, request.auth))
+
+
+@router.patch("/cleaners/{cleaner_id}/status", response=CleanerOut, summary="Change cleaner status")
+def cleaner_status(request: AuthenticatedRequest, cleaner_id: int, payload: CleanerStatusIn) -> CleanerOut:
+    _cleaner_write(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    updated = change_cleaner_status(cleaner=cleaner, new_status=CleanerStatus(payload.status), actor=request.auth)
+    return CleanerOut(**cleaner_serialize(updated, request.auth))
+
+
+# --------------------------------------------------------------------------- #
+# Cleaner documents
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/cleaners/{cleaner_id}/documents", response=list[CleanerDocumentOut], summary="List cleaner documents")
+def document_list(request: AuthenticatedRequest, cleaner_id: int) -> list[CleanerDocumentOut]:
+    _cleaner_read(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    return [
+        CleanerDocumentOut(**cleaner_document_serialize(doc, request.auth)) for doc in cleaner_documents(cleaner_id)
+    ]
+
+
+@router.post(
+    "/cleaners/{cleaner_id}/documents",
+    response=CleanerDocumentOut,
+    summary="Upload a cleaner document (multipart)",
+)
+def document_upload(
+    request: AuthenticatedRequest,
+    cleaner_id: int,
+    file: UploadedFile = FILE_PARAM_DEFAULT,
+    document_type: str = FORM_PARAM_DEFAULT,
+    document_number: str = FORM_EMPTY_DEFAULT,
+    expires_at: str | None = FORM_NONE_DEFAULT,
+    is_primary_id: str = FORM_FALSE_DEFAULT,
+) -> CleanerDocumentOut:
+    _cleaner_write(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    expires = None
+    if expires_at:
+        expires = date.fromisoformat(expires_at)
+    document = upload_cleaner_document(
+        cleaner=cleaner,
+        uploaded_file=file,
+        document_type=CleanerDocumentType(document_type),
+        document_number=document_number,
+        expires_at=expires,
+        is_primary_id=is_primary_id.lower() in {"true", "1", "yes"},
+        actor=request.auth,
+    )
+    return CleanerDocumentOut(**cleaner_document_serialize(document, request.auth))
+
+
+@router.get(
+    "/cleaners/{cleaner_id}/documents/{document_id}",
+    response=CleanerDocumentOut,
+    summary="Cleaner document detail",
+)
+def document_detail(request: AuthenticatedRequest, cleaner_id: int, document_id: int) -> CleanerDocumentOut:
+    _cleaner_read(request.auth)
+    document = get_cleaner_document_or_none(cleaner_id, document_id)
+    if document is None:
+        raise Http404("Document not found.")
+    return CleanerDocumentOut(**cleaner_document_serialize(document, request.auth))
+
+
+@router.post(
+    "/cleaners/{cleaner_id}/documents/{document_id}/verify",
+    response=CleanerDocumentOut,
+    summary="Verify a cleaner document",
+)
+def document_verify(request: AuthenticatedRequest, cleaner_id: int, document_id: int) -> CleanerDocumentOut:
+    _document_review(request.auth)
+    document = get_cleaner_document_or_none(cleaner_id, document_id)
+    if document is None:
+        raise Http404("Document not found.")
+    verified = verify_cleaner_document(document=document, actor=request.auth)
+    return CleanerDocumentOut(**cleaner_document_serialize(verified, request.auth))
+
+
+@router.post(
+    "/cleaners/{cleaner_id}/documents/{document_id}/reject",
+    response=CleanerDocumentOut,
+    summary="Reject a cleaner document",
+)
+def document_reject(
+    request: AuthenticatedRequest, cleaner_id: int, document_id: int, payload: DocumentReviewIn
+) -> CleanerDocumentOut:
+    _document_review(request.auth)
+    document = get_cleaner_document_or_none(cleaner_id, document_id)
+    if document is None:
+        raise Http404("Document not found.")
+    rejected = reject_cleaner_document(document=document, actor=request.auth, reason=payload.reason)
+    return CleanerDocumentOut(**cleaner_document_serialize(rejected, request.auth))
+
+
+@router.get(
+    "/cleaners/{cleaner_id}/documents/{document_id}/download-url",
+    response=DownloadUrlOut,
+    summary="Signed download URL for a private document",
+)
+def document_download_url(request: AuthenticatedRequest, cleaner_id: int, document_id: int) -> DownloadUrlOut:
+    _cleaner_read(request.auth)
+    document = get_cleaner_document_or_none(cleaner_id, document_id)
+    if document is None:
+        raise Http404("Document not found.")
+    if not can_view_document(request.auth, document):
+        raise PermissionDenied("You do not have permission to view this document.")
+    token = create_file_token(
+        user_id=request.auth.pk,
+        app_label="site_management",
+        model_name="cleanerdocument",
+        object_id=document.pk,
+    )
+    return DownloadUrlOut(download_url=f"/{settings.API_V1_PREFIX}/files/signed/{token}/")

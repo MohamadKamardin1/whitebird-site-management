@@ -192,3 +192,31 @@ engineering contract.
     or anyone holding the `manage_site_configuration` RBAC permission
     (assistant/zone/site supervisors), scoped to sites they can manage. Reads
     follow the visible scope.
+
+## Cleaner registry & secure documents (Prompt 6)
+
+52. **Privacy by design**: ID numbers and phone numbers are **masked** in list
+    responses (last 4 visible) unless the caller is a SYSTEM_ADMIN or holds
+    the `view_sensitive_cleaner_documents` permission (granted to GENERAL and
+    ASSISTANT supervisors via RBAC). Cleaner data is **never cached** in Redis.
+53. **Document storage is private**: `CleanerDocument` inherits
+    `PrivateFileModel` — files live on the private storage backend, have no
+    public URL, and are only streamed via signed download tokens. Every
+    download is audited (`file_download` action).
+54. **ACTIVE eligibility** requires at least one **verified** identity document
+    (BIRTH_CERTIFICATE/NIDA/ZANZAR_ID, status `verified`). Status transitions
+    are enforced in the service layer via a transition map; deactivation is
+    allowed from any state.
+55. **ID normalization**: `id_number` is trimmed and uppercased on save;
+    uniqueness is enforced on `(id_type, id_number)`.
+56. **Age rule**: `MIN_CLEANER_AGE` (constance, default 18) is enforced at
+    registration; `birth_date` cannot be in the future.
+57. **Duplicate uploads** are rejected: a document whose SHA-256 hash already
+    exists for the same cleaner raises a validation error.
+58. **Verified documents cannot be deleted** from the admin (delete guard); the
+    guard is enforced via `has_delete_permission`/`delete_model`.
+59. **Admin document preview** streams the private file to staff users who hold
+    `view_sensitive_cleaner_documents`, via a dedicated admin view (session
+    auth), not the API signed endpoint.
+60. **Domain events**: `CleanerRegistered`, `CleanerActivated`,
+    `CleanerDeactivated` are published through the transactional outbox.

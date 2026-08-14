@@ -5,6 +5,41 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 06] — 2026-08-13
+
+### Added
+
+- **`Cleaner`** registry: ID type/number (normalised upper/trim, unique
+  `(id_type, id_number)`), gender, birth date (future + minimum age via
+  constance `MIN_CLEANER_AGE`), living location, validated phones, next-of-kin
+  details, private profile photo, status lifecycle
+  (APPLICANT/TRAINEE/ACTIVE/INACTIVE) enforced in the service layer,
+  registration date.
+- **`CleanerDocument`**: private storage (no public URL), SHA-256 duplicate
+  detection, PENDING/VERIFIED/REJECTED lifecycle with verifier/timestamp/
+  reason, expiry, primary-ID flag; only verified identity documents grant
+  ACTIVE eligibility.
+- **Privacy**: ID/phone masking in list APIs unless the caller is SYSTEM_ADMIN
+  or holds `view_sensitive_cleaner_documents`; cleaner data is never cached;
+  every document download is audited.
+- **Services** (transactional + audited): register/update/status-change/
+  activate-if-eligible/deactivate, document upload/verify/reject; domain
+  events `CleanerRegistered`, `CleanerActivated`, `CleanerDeactivated`.
+- **Selectors**: `cleaner_list_queryset`, `cleaner_serialize` (masking),
+  `can_view_full_cleaner_profile`, `can_view_document`.
+- **API**: cleaners list/create/detail/update/status + documents
+  list/upload/detail/verify/reject/signed-download-url with role-based
+  permissions.
+- **Admin**: `CleanerAdmin` (status badges, masked ID, documents inline,
+  activate/deactivate actions, delete guard) and `CleanerDocumentAdmin`
+  (verify/reject actions, privileged image preview, delete guard for verified
+  documents).
+- **Factories** for cleaners and documents.
+
+### Changed
+
+- `MIN_CLEANER_AGE` added to constance runtime configuration.
+
 ## [Prompt 05] — 2026-08-13
 
 ### Added

@@ -13,6 +13,9 @@ Design notes
   assignments.
 """
 
+from datetime import date
+from typing import Any
+
 from constance import config
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -20,8 +23,10 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from apps.accounts.validators import validate_phone
+from apps.core.files import PrivateMediaStorage
 from apps.core.managers import SoftDeleteManager
-from apps.core.models import ActivatableModel, TimeStampedModel, UserStampedModel
+from apps.core.models import ActivatableModel, PrivateFileModel, TimeStampedModel, UserStampedModel
 
 from .validators import validate_effective_days, validate_shift_time_logic, validate_working_days
 
@@ -617,3 +622,190 @@ class SiteWorkingRule(UserStampedModel):
 
     def __str__(self) -> str:
         return f"Working rules for {self.site.name}"
+
+
+# --------------------------------------------------------------------------- #
+# Cleaner registry
+# --------------------------------------------------------------------------- #
+
+
+class CleanerStatus(models.TextChoices):
+    APPLICANT = "applicant", "Applicant"
+    TRAINEE = "trainee", "Trainee"
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+
+
+class IdType(models.TextChoices):
+    BIRTH_CERTIFICATE = "birth_certificate", "Birth Certificate"
+    NIDA = "nida", "NIDA"
+    ZANZIBAR_ID = "zanzibar_id", "Zanzibar ID"
+
+
+class Gender(models.TextChoices):
+    MALE = "male", "Male"
+    FEMALE = "female", "Female"
+    OTHER = "other", "Other"
+    UNSPECIFIED = "unspecified", "Unspecified"
+
+
+class Cleaner(UserStampedModel):
+    """Master data for a cleaner/applicant/trainee.
+
+    ID numbers are stored upper-case/trimmed; the ``(id_type, id_number)``
+    pair is unique. Privacy: full ID numbers and phone numbers are masked in
+    list responses unless the caller holds the sensitive-document permission.
+    """
+
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
+    id_type = models.CharField(max_length=24, choices=IdType.choices, db_index=True)
+    id_number = models.CharField(max_length=64, db_index=True)
+    gender = models.CharField(max_length=16, choices=Gender.choices, default=Gender.UNSPECIFIED)
+    birth_date = models.DateField()
+    living_location = models.CharField(max_length=255, blank=True, default="")
+    phone_number = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
+    near_person_name = models.CharField(max_length=150, blank=True, default="")
+    near_person_relationship = models.CharField(max_length=120, blank=True, default="")
+    near_person_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
+    profile_photo = models.ImageField(
+        storage=PrivateMediaStorage(),
+        upload_to="cleaners/photos/%Y/%m/",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(
+        max_length=16, choices=CleanerStatus.choices, default=CleanerStatus.APPLICANT, db_index=True
+    )
+    registration_date = models.DateField(default=date.today, db_index=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Cleaner"
+        verbose_name_plural = "Cleaners"
+        ordering = ["last_name", "first_name"]
+        constraints = [models.UniqueConstraint(fields=["id_type", "id_number"], name="uniq_cleaner_id_type_number")]
+        indexes = [models.Index(fields=["status", "registration_date"])]
+
+    def __str__(self) -> str:
+        return self.full_name
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def has_verified_id(self) -> bool:
+        """True when at least one verified identity document exists."""
+        return self.documents.filter(
+            status=CleanerDocumentStatus.VERIFIED,
+            document_type__in=[
+                CleanerDocumentType.BIRTH_CERTIFICATE,
+                CleanerDocumentType.NIDA,
+                CleanerDocumentType.ZANZIBAR_ID,
+            ],
+        ).exists()
+
+    @property
+    def has_operational_history(self) -> bool:
+        """True when documents or future operational records reference this cleaner."""
+        if self.documents.exists():
+            return True
+        for related in ("attendance_records", "task_assignments"):
+            manager = getattr(self, related, None)
+            if manager is not None and manager.exists():
+                return True
+        return False
+
+    def clean(self) -> None:
+        super().clean()
+        if self.birth_date and self.birth_date > timezone.localdate():
+            raise ValidationError("birth_date cannot be in the future.", code="future_birth_date")
+        min_age = int(config.MIN_CLEANER_AGE)
+        age = _age_years(self.birth_date)
+        if age is not None and age < min_age:
+            raise ValidationError(f"Cleaner must be at least {min_age} years old.", code="underage")
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        self.id_number = (self.id_number or "").strip().upper()
+        super().save(*args, **kwargs)
+
+
+def _age_years(birth_date: date | None) -> int | None:
+    if birth_date is None:
+        return None
+    today = timezone.localdate()
+    return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+
+
+class CleanerDocumentType(models.TextChoices):
+    BIRTH_CERTIFICATE = "birth_certificate", "Birth Certificate"
+    NIDA = "nida", "NIDA"
+    ZANZIBAR_ID = "zanzibar_id", "Zanzibar ID"
+    PROFILE_PHOTO = "profile_photo", "Profile Photo"
+    OTHER = "other", "Other"
+
+
+class CleanerDocumentStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    VERIFIED = "verified", "Verified"
+    REJECTED = "rejected", "Rejected"
+
+
+class CleanerDocument(PrivateFileModel):
+    """A privately stored document attached to a cleaner.
+
+    Files live on the private storage backend; access is only via signed
+    download tokens. Only *verified* identity documents count toward ACTIVE
+    eligibility.
+    """
+
+    cleaner = models.ForeignKey(Cleaner, on_delete=models.CASCADE, related_name="documents")
+    document_type = models.CharField(max_length=24, choices=CleanerDocumentType.choices, db_index=True)
+    document_number = models.CharField(max_length=64, blank=True, default="")
+    file_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    status = models.CharField(
+        max_length=16, choices=CleanerDocumentStatus.choices, default=CleanerDocumentStatus.PENDING, db_index=True
+    )
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, default="")
+    expires_at = models.DateField(null=True, blank=True)
+    is_primary_id = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Cleaner document"
+        verbose_name_plural = "Cleaner documents"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["cleaner", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.document_type} for {self.cleaner} ({self.status})"
+
+    @property
+    def is_identity(self) -> bool:
+        return self.document_type in {
+            CleanerDocumentType.BIRTH_CERTIFICATE,
+            CleanerDocumentType.NIDA,
+            CleanerDocumentType.ZANZIBAR_ID,
+        }

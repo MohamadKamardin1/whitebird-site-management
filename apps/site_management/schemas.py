@@ -339,3 +339,82 @@ class SiteWorkingRuleOut(Schema):
     attendance_locked: bool
     require_shift_area_assignment: bool
     allow_temporary_transfers: bool
+
+
+class CleanerOut(Schema):
+    id: int
+    first_name: str
+    last_name: str
+    full_name: str
+    id_type: str
+    id_number: str
+    gender: str
+    birth_date: date
+    living_location: str
+    phone_number: str
+    near_person_name: str
+    near_person_relationship: str
+    near_person_phone: str
+    status: str
+    registration_date: date
+    has_verified_id: bool
+    notes: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class CleanerCreateIn(Schema):
+    first_name: str = Field(min_length=1, max_length=150)
+    last_name: str = Field(min_length=1, max_length=150)
+    id_type: str = Field(pattern="^(birth_certificate|nida|zanzibar_id)$")
+    id_number: str = Field(min_length=1, max_length=64)
+    birth_date: date
+    gender: str = Field(default="unspecified", pattern="^(male|female|other|unspecified)$")
+    living_location: str = ""
+    phone_number: str = ""
+    near_person_name: str = ""
+    near_person_relationship: str = ""
+    near_person_phone: str = ""
+    notes: str = ""
+
+
+class CleanerUpdateIn(Schema):
+    first_name: str | None = Field(default=None, max_length=150)
+    last_name: str | None = Field(default=None, max_length=150)
+    gender: str | None = Field(default=None, pattern="^(male|female|other|unspecified)$")
+    living_location: str | None = None
+    phone_number: str | None = None
+    near_person_name: str | None = None
+    near_person_relationship: str | None = None
+    near_person_phone: str | None = None
+    notes: str | None = None
+
+
+class CleanerStatusIn(Schema):
+    status: str = Field(pattern="^(applicant|trainee|active|inactive)$")
+
+
+class CleanerDocumentOut(Schema):
+    id: int
+    cleaner_id: int
+    document_type: str
+    document_number: str
+    status: str
+    rejection_reason: str
+    expires_at: date | None = None
+    is_primary_id: bool
+    is_identity: bool
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    verified_by: str | None = None
+    verified_at: datetime | None = None
+    created_at: datetime
+
+
+class DocumentReviewIn(Schema):
+    reason: str = Field(default="", max_length=1000)
+
+
+class DownloadUrlOut(Schema):
+    download_url: str

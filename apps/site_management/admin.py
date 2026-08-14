@@ -6,12 +6,17 @@ from typing import Any
 
 from django.contrib import admin
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 
 from .models import (
     Asset,
     AssetCategory,
     AssistantGeneralSupervisorAssignment,
+    Cleaner,
+    CleanerDocument,
+    CleanerDocumentStatus,
     Department,
     Notification,
     OperationalRole,
@@ -270,3 +275,161 @@ class OperationalRoleAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         if obj is None:
             return True
         return not obj.has_operational_usage
+
+
+class CleanerDocumentInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = CleanerDocument
+    extra = 0
+    fk_name = "cleaner"
+    fields = ("document_type", "status", "is_primary_id", "created_at")
+    readonly_fields = ("created_at",)
+    show_change_link = True
+
+
+@admin.register(Cleaner)
+class CleanerAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("full_name", "status_badge", "id_type", "masked_id", "gender", "registration_date")
+    list_filter = ("status", "id_type", "gender", "registration_date")
+    search_fields = ("first_name", "last_name", "id_number")
+    date_hierarchy = "registration_date"
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [CleanerDocumentInline]
+    actions = ["activate_cleaners", "deactivate_cleaners"]
+
+    @admin.display(description="Name")
+    def full_name(self, obj: Cleaner) -> str:
+        return obj.full_name
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: Cleaner) -> str:
+        return obj.status
+
+    @admin.display(description="ID number")
+    def masked_id(self, obj: Cleaner) -> str:
+        from .cleaner_selectors import mask_value  # noqa: PLC0415
+
+        return mask_value(obj.id_number)
+
+    @admin.action(description="Activate selected cleaners")
+    def activate_cleaners(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.cleaner_services import activate_cleaner_if_eligible  # noqa: PLC0415
+
+        activated = 0
+        for cleaner in queryset:
+            try:
+                activate_cleaner_if_eligible(cleaner=cleaner, actor=request.user)
+                activated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{activated} cleaner(s) activated.")
+
+    @admin.action(description="Deactivate selected cleaners")
+    def deactivate_cleaners(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.cleaner_services import deactivate_cleaner  # noqa: PLC0415
+
+        updated = 0
+        for cleaner in queryset:
+            deactivate_cleaner(cleaner=cleaner, actor=request.user)
+            updated += 1
+        self.message_user(request, f"{updated} cleaner(s) deactivated.")
+
+    def delete_model(self, request: Any, obj: Cleaner) -> None:
+        if obj.has_operational_history:
+            raise DjangoValidationError(
+                f"Cannot delete cleaner {obj.full_name}: documents/history exist. Deactivate instead."
+            )
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            self.delete_model(request, obj)
+
+    def has_delete_permission(self, request: Any, obj: Cleaner | None = None) -> bool:
+        if obj is None:
+            return True
+        return not obj.has_operational_history
+
+
+@admin.register(CleanerDocument)
+class CleanerDocumentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "cleaner",
+        "document_type",
+        "status_badge",
+        "preview",
+        "is_primary_id",
+        "verified_at",
+        "created_at",
+    )
+    list_filter = ("status", "document_type", "created_at")
+    search_fields = ("cleaner__first_name", "cleaner__last_name", "document_number")
+    readonly_fields = ("file_hash", "original_filename", "content_type", "size_bytes", "created_at", "updated_at")
+    actions = ["verify_documents", "reject_documents"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: CleanerDocument) -> str:
+        return obj.status
+
+    @admin.display(description="Preview")
+    def preview(self, obj: CleanerDocument) -> str:
+        if obj.content_type.startswith("image/"):
+            return mark_safe(f'<a href="{obj.pk}/preview/">View</a>')
+        return obj.content_type or "file"
+
+    @admin.action(description="Verify selected documents")
+    def verify_documents(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.cleaner_services import verify_cleaner_document  # noqa: PLC0415
+
+        updated = 0
+        for document in queryset:
+            verify_cleaner_document(document=document, actor=request.user)
+            updated += 1
+        self.message_user(request, f"{updated} document(s) verified.")
+
+    @admin.action(description="Reject selected documents")
+    def reject_documents(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.cleaner_services import reject_cleaner_document  # noqa: PLC0415
+
+        updated = 0
+        for document in queryset:
+            reject_cleaner_document(document=document, actor=request.user, reason="Rejected from admin")
+            updated += 1
+        self.message_user(request, f"{updated} document(s) rejected.")
+
+    def delete_model(self, request: Any, obj: CleanerDocument) -> None:
+        if obj.status == CleanerDocumentStatus.VERIFIED:
+            raise DjangoValidationError("Verified documents cannot be deleted. Unverify or override with an audit.")
+        super().delete_model(request, obj)
+
+    def has_delete_permission(self, request: Any, obj: CleanerDocument | None = None) -> bool:
+        if obj is None:
+            return True
+        return obj.status != CleanerDocumentStatus.VERIFIED
+
+    def get_urls(self) -> list[Any]:
+        from django.urls import path  # noqa: PLC0415
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<int:document_id>/preview/",
+                self.admin_site.admin_view(self.preview_view),
+                name="cleaner_document_preview",
+            )
+        ]
+        return custom + urls
+
+    def preview_view(self, request: Any, document_id: int) -> Any:
+        """Stream a private image to staff users only (admin session auth)."""
+        if not (request.user.is_staff and request.user.has_perm("accounts.view_sensitive_cleaner_documents")):
+            return HttpResponseForbidden("Not permitted.")
+        document = CleanerDocument.objects.filter(pk=document_id).first()
+        if document is None or not document.file.name:
+            raise Http404("Document not found.")
+        try:
+            stream = document.file.storage.open(document.file.name)
+        except FileNotFoundError:
+            raise Http404("File missing.") from None
+        response = FileResponse(stream, content_type=document.content_type or "application/octet-stream")
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
