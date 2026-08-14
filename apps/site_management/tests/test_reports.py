@@ -187,6 +187,7 @@ def test_submit_stores_immutable_snapshot(site, admin_user) -> None:
 
 @pytest.mark.django_db
 def test_return_and_resubmit_flow(site, admin_user, zone_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     day = date.today()
     report = generate_site_report(site_id=site.pk, day=day, user=admin_user)
     submit_site_report(report=report, user=admin_user)
@@ -273,6 +274,7 @@ def test_general_report_final_submission(site, admin_user, zone_user, general_us
 
 @pytest.mark.django_db
 def test_report_status_transitions(site, admin_user, zone_user, general_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     day = date.today()
     report = generate_site_report(site_id=site.pk, day=day, user=admin_user)
     submit_site_report(report=report, user=admin_user)
@@ -472,6 +474,7 @@ def test_admin_views(site, admin_user) -> None:
 
 @pytest.mark.django_db
 def test_report_validation_branches(site, admin_user, zone_user, general_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     day = date.today()
     draft = generate_site_report(site_id=site.pk, day=day, user=admin_user)
     # Cannot return a draft.

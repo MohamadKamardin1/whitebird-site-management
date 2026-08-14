@@ -75,6 +75,55 @@ added to their role's group automatically by a `post_save` signal, so
 - Services assume the caller passed authorization; they never re-authorize.
 - Superusers bypass all checks (`is_system_admin` includes superusers).
 
+## Object-level policy layer (`apps/site_management/policies.py`)
+
+Every view/read/write decision funnels through central predicates (routers and
+services call these — never re-implement the rules). Denials are expressed as
+`False` (for visibility) or `ForbiddenActionError` (raised by services via
+`ensure(...)`).
+
+Key predicates: `can_view_zone`, `can_view_site`, `can_edit_site`,
+`can_view_cleaner`, `can_edit_cleaner`, `can_view_assignment`,
+`can_edit_assignment`, `can_record_attendance`, `can_review_attendance`,
+`can_manage_store`, `can_view_inspection`, `can_create_inspection`,
+`can_review_inspection`, `can_view_issue`, `can_edit_issue`, `can_assign_job`,
+`can_verify_job`, `can_submit_site_report`, `can_review_site_report`,
+`can_review_zone_report`, `can_review_assistant_report`,
+`can_submit_general_report`, `can_view_management_report`, `can_export_data`.
+
+## Complete permission matrix
+
+Legend: ✔ = allowed, — = denied. "Own" = scoped to the user's assigned
+sites/zones (see data-scoping table below); management viewer is read-only.
+
+| Resource / action                    | SysAdmin | General | Asst. General | Zone | Site | Viewer |
+| ------------------------------------ | :------: | :-----: | :-----------: | :--: | :--: | :----: |
+| View any site/zone/cleaner/issue     |    ✔     |    ✔    |       ✔       |  ✔   |  ✔   |   ✔    |
+| View out-of-scope site data          |    ✔     |    ✔    |    ✔ (all)    |  —   |  —   |   ✔    |
+| Edit site / config                   |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Manage cleaners (register/update)    |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| View cleaner PII (masked otherwise)  |    ✔     |    ✔    |       ✔       |  —   |  —   |   —    |
+| View/edit assignments & schedules    |    ✔     |    ✔    |       ✔       | Own  | Own  | read   |
+| Record attendance                    |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Review/return attendance             |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Manage stores/stock/requests         |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Review/reject/complete stock request |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Create/update inspections            |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Review/return inspections            |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Raise/update issues                  |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Escalate issues                      |    ✔     |    ✔    |       ✔       |  —   |  —   |   —    |
+| Assign jobs                          |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Verify jobs                          |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Close/reopen jobs                    |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Generate/submit site report          |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+| Review/return site report            |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Generate/submit zone summary         |    ✔     |    ✔    |       ✔       | Own  |  —   |   —    |
+| Author/submit assistant summary      |    ✔     |    ✔    |       ✔       |  —   |  —   |   —    |
+| Author/submit general report         |    ✔     |    ✔    |       —        |  —   |  —   |   —    |
+| View management report               |    ✔     |    ✔    |       ✔       |  ✔   |  ✔   |   ✔    |
+| Export data                          |    ✔     |    ✔    |       ✔       |  ✔   |  ✔   |   ✔    |
+| Admin change/delete (scoped)         |    ✔     |    ✔    |       ✔       | Own  | Own  |   —    |
+
 ## Data scoping (organisation hierarchy)
 
 Scoping selectors (`apps/site_management/scoping.py`) answer "what can this
@@ -95,6 +144,18 @@ Write capacity for a site (`user_can_manage_site`):
 - Site supervisor with an active `SiteSupervisorAssignment` → yes.
 - Zone supervisor / assistant general whose scope includes the site → yes.
 - Management viewer → never.
+
+## Admin hardening
+
+All data-bearing `ModelAdmin` classes inherit `ScopedAdminMixin`
+(`apps/site_management/admin.py`):
+
+- `get_queryset` restricts non-superuser/non-GS admins to their `visible_sites`
+  (zone supervisors, site supervisors, AGS) — out-of-scope rows never appear.
+- MANAGEMENT_VIEWER can view (scoped) but `has_add_permission` /
+  `has_change_permission` / `has_delete_permission` return false.
+- Subclasses override `scope_queryset` for zone-based or nested-site scoping
+  (e.g. StoreItem via `store__site`, Cleaner via `site_assignments`).
 
 Supervisor assignments are date-windowed (`assigned_from`/`assigned_to`),
 soft-deactivatable (`is_active`), and enforce one active assignment per

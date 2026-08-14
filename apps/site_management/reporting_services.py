@@ -40,6 +40,14 @@ from .models import (
     ZoneReportStatus,
     ZoneSummaryReport,
 )
+from .policies import (
+    can_review_assistant_report,
+    can_review_site_report,
+    can_review_zone_report,
+    can_submit_general_report,
+    can_submit_site_report,
+    ensure,
+)
 
 EVENT_SITE_REPORT_SUBMITTED = "SiteReportSubmitted"
 EVENT_ZONE_REPORT_SUBMITTED = "ZoneReportSubmitted"
@@ -230,6 +238,7 @@ def generate_site_report(*, site_id: int, day: datetime.date, user: User) -> Dai
 def submit_site_report(*, report: DailySiteReport, user: User) -> DailySiteReport:
     """Submit a site report, storing its immutable snapshot."""
     with transaction.atomic():
+        ensure(user, can_submit_site_report(user, report), "You cannot submit this site report.")
         if report.status not in {SiteReportStatus.DRAFT, SiteReportStatus.RETURNED}:
             raise _invalid("Only draft reports can be submitted.", "invalid_status")
         snapshot = site_data_snapshot(report.site_id, report.report_date)
@@ -253,6 +262,7 @@ def submit_site_report(*, report: DailySiteReport, user: User) -> DailySiteRepor
 def return_site_report(*, report: DailySiteReport, user: User, reason: str) -> DailySiteReport:
     """Return a submitted site report for correction; history is preserved."""
     with transaction.atomic():
+        ensure(user, can_review_site_report(user, report), "You cannot return this site report.")
         if report.status not in {SiteReportStatus.SUBMITTED, SiteReportStatus.ZONE_REVIEWED}:
             raise _invalid("This report cannot be returned.", "invalid_status")
         if not reason.strip():
@@ -268,6 +278,7 @@ def return_site_report(*, report: DailySiteReport, user: User, reason: str) -> D
 
 def review_site_report_by_zone(*, report: DailySiteReport, user: User) -> DailySiteReport:
     """Zone supervisor reviews a submitted site report."""
+    ensure(user, can_review_site_report(user, report), "You cannot review this site report.")
     return _advance_site_report(report, user, SiteReportStatus.ZONE_REVIEWED)
 
 
@@ -349,6 +360,7 @@ def generate_zone_summary(*, zone_id: int, day: datetime.date, user: User) -> Zo
 
 def submit_zone_summary(*, report: ZoneSummaryReport, user: User) -> ZoneSummaryReport:
     with transaction.atomic():
+        ensure(user, can_review_zone_report(user, report), "You cannot submit this zone summary.")
         if report.status != ZoneReportStatus.DRAFT:
             raise _invalid("Only draft zone summaries can be submitted.", "invalid_status")
         report.status = ZoneReportStatus.SUBMITTED
@@ -417,6 +429,7 @@ def generate_assistant_summary(
 
 def submit_assistant_summary(*, report: AssistantGeneralSummaryReport, user: User) -> AssistantGeneralSummaryReport:
     with transaction.atomic():
+        ensure(user, can_review_assistant_report(user, report), "You cannot submit this assistant summary.")
         if report.status != AssistantReportStatus.DRAFT:
             raise _invalid("Only draft assistant summaries can be submitted.", "invalid_status")
         report.status = AssistantReportStatus.SUBMITTED
@@ -510,6 +523,7 @@ def _assigned_jobs_snapshot(day: datetime.date) -> list[dict[str, Any]]:
 
 def submit_general_management_report(*, report: GeneralManagementReport, user: User) -> GeneralManagementReport:
     with transaction.atomic():
+        ensure(user, can_submit_general_report(user, report), "You cannot submit the general report.")
         if report.status != GeneralReportStatus.DRAFT:
             raise _invalid("Only draft general reports can be submitted.", "invalid_status")
         report.status = GeneralReportStatus.SUBMITTED_TO_MANAGEMENT

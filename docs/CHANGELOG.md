@@ -5,6 +5,35 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 15] — 2026-08-14
+
+### Added
+
+- **Central policy layer** `apps/site_management/policies.py`: 25 object-level
+  predicates (`can_view_site`, `can_edit_site`, `can_view_cleaner`,
+  `can_edit_cleaner`, `can_view_assignment`, `can_edit_assignment`,
+  `can_record_attendance`, `can_review_attendance`, `can_manage_store`,
+  `can_view/create/review_inspection`, `can_view/edit_issue`,
+  `can_assign/verify_job`, report policies, `can_export_data`, ...) plus an
+  `ensure(...)` guard that raises `ForbiddenActionError`.
+- **Service hardening**: report workflow (submit/return/review site report,
+  submit zone/assistant/general), job assign/verify/complete, inspection
+  review/return, and attendance record/review/return services now raise
+  `ForbiddenActionError` for actors outside their role/site scope.
+- **Admin hardening**: `ScopedAdminMixin` applied to all data-bearing
+  ModelAdmins — `get_queryset` restricted to `visible_sites`/`visible_zones`
+  for non-superuser/non-GS admins; management viewer can view but never
+  add/change/delete; zone-based/nested-site scope overrides (StoreItem via
+  `store__site`, Cleaner via `site_assignments`, InspectionTemplate global +
+  scoped).
+- **Permission test suite** (`apps/site_management/tests/test_permissions.py`):
+  every major policy parametrized over all six roles; cross-site/cross-zone
+  denials; service `ForbiddenActionError` guards; admin queryset scoping and
+  viewer read-only; API cross-scope denial.
+- **Docs**: `docs/RBAC.md` now contains the complete permission matrix
+  (resources × roles, read/write/submit/review/approve/export) plus the policy
+  layer and admin-hardening descriptions.
+
 ## [Prompt 14] — 2026-08-14
 
 ### Added

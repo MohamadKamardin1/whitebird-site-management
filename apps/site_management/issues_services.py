@@ -35,6 +35,7 @@ from .models import (
     Site,
     SiteArea,
 )
+from .policies import can_assign_job, can_verify_job, ensure
 
 EVENT_ISSUE_CREATED = "IssueCreated"
 EVENT_ISSUE_ESCALATED = "IssueEscalated"
@@ -362,6 +363,7 @@ def assign_job(
 ) -> Job:
     """Assign an open/reopened job to a user or cleaner."""
     with transaction.atomic():
+        ensure(actor, can_assign_job(actor, job), "You do not have permission to assign jobs.")
         if job.status not in {JobStatus.OPEN, JobStatus.REOPENED}:
             raise ValidationError("Only open or reopened jobs can be assigned.", code="invalid_status")
         if not (assigned_to_user or assigned_to_cleaner):
@@ -418,6 +420,11 @@ def complete_job(
 ) -> Job:
     """Complete a job; photo evidence is enforced when configured."""
     with transaction.atomic():
+        from apps.accounts.permissions import user_can_manage_site
+
+        ensure(
+            actor, actor.is_system_admin or user_can_manage_site(actor, job.site_id), "You cannot complete this job."
+        )
         if job.status not in {JobStatus.ASSIGNED, JobStatus.IN_PROGRESS}:
             raise ValidationError("Only assigned or in-progress jobs can be completed.", code="invalid_status")
         if completion_photo is None and config.JOB_COMPLETION_PHOTO_REQUIRED:
@@ -440,6 +447,7 @@ def complete_job(
 def verify_job(*, job: Job, actor: User) -> Job:
     """Verify a completed job; the job must be verified before it can close."""
     with transaction.atomic():
+        ensure(actor, can_verify_job(actor, job), "You do not have permission to verify jobs.")
         if job.status != JobStatus.COMPLETED:
             raise ValidationError("Only completed jobs can be verified.", code="invalid_status")
         before = model_data(job)

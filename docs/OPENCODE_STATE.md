@@ -21,7 +21,29 @@ Module. Each prompt updates this file before its commit.
 | 12     | Issues, jobs & escalation | **Prompt 12 completed** | see CHANGELOG |
 | 13     | Reporting chain engine | **Prompt 13 completed** | see CHANGELOG |
 | 14     | Complete API surface | **Prompt 14 completed** | see CHANGELOG |
-| 15–20  | (pending)                                    | —                  | —      |
+| 15     | RBAC hardening & scoping | **Prompt 15 completed** | see CHANGELOG |
+| 16–20  | (pending)                                    | —                  | —      |
+
+## Prompt 15 — completed ✅
+
+Hardened the entire permission system to a production-grade level:
+
+- **Central policy layer** (`apps/site_management/policies.py`): 25
+  object-level predicates + an `ensure()` guard raising `ForbiddenActionError`.
+- **Service guards**: report workflow, job assign/verify/complete, inspection
+  review/return, and attendance record/review/return services now deny
+  out-of-scope actors with `ForbiddenActionError`.
+- **Admin hardening**: `ScopedAdminMixin` on all data-bearing ModelAdmins —
+  `get_queryset` scoped by role (`visible_sites`/`visible_zones`), management
+  viewer read-only (no add/change/delete), zone/nested-site overrides.
+- **Permission test suite** (`test_permissions.py`): every policy parametrized
+  over all six roles, cross-site/cross-zone denials, service guards, admin
+  scoping, viewer read-only, API cross-scope denial.
+- **Docs**: `docs/RBAC.md` complete permission matrix (resources × roles incl.
+  read/write/submit/review/approve/export), policy layer, admin hardening.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 460 passed ·
+coverage 90.37% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 14 — completed ✅
 

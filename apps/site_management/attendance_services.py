@@ -32,8 +32,26 @@ from .models import (
     Site,
     WorkMode,
 )
+from .policies import can_review_attendance, ensure
 
 EVENT_ATTENDANCE_SUBMITTED = "AttendanceSubmitted"
+
+
+def _require_attendance_review(user: User, site_id: int) -> None:
+    from .models import Site
+
+    site = Site.objects.filter(pk=site_id).first()
+    ensure(user, site is not None and can_review_attendance(user, site), "You cannot review attendance at this site.")
+
+
+def _require_attendance_record(user: User, site_id: int) -> None:
+    from apps.accounts.permissions import user_can_manage_site
+
+    ensure(
+        user,
+        user.is_system_admin or user_can_manage_site(user, site_id),
+        "You cannot record attendance at this site.",
+    )
 
 
 def _assignment_date_cover_filter(day: datetime.date) -> Q:
@@ -288,6 +306,7 @@ def _group_records(site_id: int, day: datetime.date, shift_id: int | None) -> li
 
 def submit_daily_attendance(*, site_id: int, day: datetime.date, user: User, shift_id: int | None = None) -> int:
     """Submit a day's attendance once every scheduled cleaner is marked."""
+    _require_attendance_record(user, site_id)
     with transaction.atomic():
         records = _group_records(site_id, day, shift_id)
         if not records:
@@ -355,6 +374,7 @@ def return_attendance_group(
     *, site_id: int, day: datetime.date, user: User, reason: str, shift_id: int | None = None
 ) -> int:
     """Return a day's submitted/reviewed attendance group for correction."""
+    _require_attendance_review(user, site_id)
     with transaction.atomic():
         records = [
             r for r in _group_records(site_id, day, shift_id) if r.review_status != AttendanceReviewStatus.LOCKED
@@ -377,6 +397,7 @@ def return_attendance_group(
 
 def review_attendance_group(*, site_id: int, day: datetime.date, user: User, shift_id: int | None = None) -> int:
     """Review a submitted day's attendance and apply auto-lock when due."""
+    _require_attendance_review(user, site_id)
     with transaction.atomic():
         records = [
             r for r in _group_records(site_id, day, shift_id) if r.review_status == AttendanceReviewStatus.SUBMITTED

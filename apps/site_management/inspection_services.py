@@ -34,6 +34,7 @@ from .models import (
     SiteArea,
     SiteShift,
 )
+from .policies import can_review_inspection, ensure
 from .services import create_notification
 
 EVENT_INSPECTION_SUBMITTED = "InspectionSubmitted"
@@ -429,6 +430,7 @@ def submit_inspection(*, inspection: Inspection, actor: User) -> Inspection:
 def return_inspection(*, inspection: Inspection, actor: User, reason: str) -> Inspection:
     """Return a submitted/reviewed inspection for correction."""
     with transaction.atomic():
+        ensure(actor, can_review_inspection(actor, inspection), "You cannot return this inspection.")
         if inspection.status not in {InspectionWorkflowStatus.SUBMITTED, InspectionWorkflowStatus.REVIEWED}:
             raise ValidationError("Only submitted or reviewed inspections can be returned.", code="invalid_status")
         if not reason.strip():
@@ -451,6 +453,7 @@ def return_inspection(*, inspection: Inspection, actor: User, reason: str) -> In
 def review_inspection(*, inspection: Inspection, actor: User) -> Inspection:
     """Review a submitted inspection; recompute and confirm the score/status."""
     with transaction.atomic():
+        ensure(actor, can_review_inspection(actor, inspection), "You cannot review this inspection.")
         if inspection.status != InspectionWorkflowStatus.SUBMITTED:
             raise ValidationError("Only submitted inspections can be reviewed.", code="invalid_status")
         score, overall = calculate_inspection_score(inspection)

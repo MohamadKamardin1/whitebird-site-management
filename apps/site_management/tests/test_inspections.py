@@ -244,6 +244,7 @@ def test_submit_requires_required_items(site, admin_user) -> None:
 
 @pytest.mark.django_db
 def test_return_and_resubmit(site, admin_user, zone_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     inspection = _started_inspection(site, admin_user)
     items = {i.item_label: i for i in inspection.template.items.all()}
     add_inspection_result(inspection=inspection, template_item=items["Cleanliness"], actor=admin_user, passed=True)
@@ -263,6 +264,7 @@ def test_return_and_resubmit(site, admin_user, zone_user) -> None:
 
 @pytest.mark.django_db
 def test_review_workflow(site, admin_user, zone_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     inspection = _started_inspection(site, admin_user)
     items = {i.item_label: i for i in inspection.template.items.all()}
     add_inspection_result(inspection=inspection, template_item=items["Cleanliness"], actor=admin_user, passed=True)
@@ -548,6 +550,7 @@ def test_admin_views_and_actions(site, admin_user) -> None:
 
 @pytest.mark.django_db
 def test_additional_service_branches(site, admin_user, zone_user) -> None:
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_user)
     # start_inspection rejects a site-scoped template from another site.
     other_site = SiteFactory()
     other_template = _template(admin_user, site=other_site)

@@ -7,11 +7,12 @@ from typing import Any
 from django.conf import settings
 from django.contrib import admin
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Avg
+from django.db.models import Avg, Q
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
+from apps.accounts.models import RoleCode
 from apps.core.files import create_file_token
 
 from .models import (
@@ -67,8 +68,53 @@ from .models import (
 )
 
 
+class ScopedAdminMixin:
+    """Role-scoped admin hardening.
+
+    * ``get_queryset`` restricts non-superuser admins to their visible sites
+      (Site/Zone/General supervisors) — out-of-scope rows never appear.
+    * MANAGEMENT_VIEWER can view (scoped) but never add/change/delete.
+    * Subclasses may override ``scope_queryset`` for zone-based or nested-site
+      scoping (e.g. StoreItem via ``store__site``).
+    """
+
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(site__in=visible_sites(request.user))
+
+    def get_queryset(self, request: Any) -> Any:
+        qs = super().get_queryset(request)  # type: ignore[misc]
+        user = request.user
+        if user.is_superuser or user.is_system_admin or user.role in {RoleCode.GENERAL_SUPERVISOR}:
+            return qs
+        if user.role == RoleCode.MANAGEMENT_VIEWER:
+            return qs
+        return self.scope_queryset(request, qs)
+
+    def has_add_permission(self, request: Any) -> bool:
+        if request.user.role == RoleCode.MANAGEMENT_VIEWER:
+            return False
+        return bool(super().has_add_permission(request))  # type: ignore[misc]
+
+    def has_change_permission(self, request: Any, obj: Any = None) -> bool:
+        if request.user.role == RoleCode.MANAGEMENT_VIEWER:
+            return False
+        return bool(super().has_change_permission(request, obj))  # type: ignore[misc]
+
+    def has_delete_permission(self, request: Any, obj: Any = None) -> bool:
+        if request.user.role == RoleCode.MANAGEMENT_VIEWER:
+            return False
+        return bool(super().has_delete_permission(request, obj))  # type: ignore[misc]
+
+
 @admin.register(Zone)
-class ZoneAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class ZoneAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_zones
+
+        return qs.filter(pk__in=visible_zones(request.user))
+
     list_display = ("name", "code", "site_count", "is_active", "created_at")
     list_filter = ("is_active", "created_at")
     search_fields = ("name", "code", "description")
@@ -125,7 +171,12 @@ class SiteAreaInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(Site)
-class SiteAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class SiteAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(pk__in=visible_sites(request.user))
+
     list_display = (
         "name",
         "code",
@@ -322,7 +373,12 @@ class CleanerDocumentInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(Cleaner)
-class CleanerAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class CleanerAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(site_assignments__site__in=visible_sites(request.user)).distinct()
+
     list_display = ("full_name", "status_badge", "id_type", "masked_id", "gender", "registration_date")
     list_filter = ("status", "id_type", "gender", "registration_date")
     search_fields = ("first_name", "last_name", "id_number")
@@ -386,7 +442,12 @@ class CleanerAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 
 @admin.register(CleanerDocument)
-class CleanerDocumentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class CleanerDocumentAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(cleaner__site_assignments__site__in=visible_sites(request.user)).distinct()
+
     list_display = (
         "cleaner",
         "document_type",
@@ -486,7 +547,7 @@ class CleanerAreaScheduleInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(CleanerSiteAssignment)
-class CleanerSiteAssignmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class CleanerSiteAssignmentAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "cleaner",
         "site",
@@ -579,7 +640,7 @@ class CleanerAreaScheduleAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 
 @admin.register(AttendanceRecord)
-class AttendanceRecordAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class AttendanceRecordAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "attendance_date",
         "site",
@@ -673,7 +734,7 @@ class TraineeEvaluationInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(TraineeProgram)
-class TraineeProgramAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class TraineeProgramAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "cleaner",
         "site",
@@ -782,7 +843,7 @@ class StoreItemInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(SiteStore)
-class SiteStoreAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class SiteStoreAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("store_name", "site", "location", "managed_by", "item_count", "low_stock_badge", "is_active")
     list_filter = ("is_active", "site")
     search_fields = ("store_name", "location", "site__name")
@@ -819,7 +880,12 @@ class SiteStoreAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 
 @admin.register(StoreItem)
-class StoreItemAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class StoreItemAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(store__site__in=visible_sites(request.user))
+
     list_display = (
         "item_name",
         "store",
@@ -889,7 +955,7 @@ class StockRequestItemInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(StockRequest)
-class StockRequestAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class StockRequestAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("id", "store", "site", "request_date", "status_badge", "requested_by", "reviewed_by", "reviewed_at")
     list_filter = ("status", "site", "request_date", "store")
     search_fields = ("store__store_name", "site__name", "notes")
@@ -976,7 +1042,12 @@ class InspectionTemplateItemInline(admin.TabularInline):  # type: ignore[type-ar
 
 
 @admin.register(InspectionTemplate)
-class InspectionTemplateAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class InspectionTemplateAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_sites
+
+        return qs.filter(Q(site__isnull=True) | Q(site__in=visible_sites(request.user)))
+
     list_display = ("template_name", "site", "frequency", "item_count", "is_active")
     list_filter = ("frequency", "is_active", "site")
     search_fields = ("template_name", "description")
@@ -1051,7 +1122,7 @@ class InspectionResultInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(Inspection)
-class InspectionAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class InspectionAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "inspection_date",
         "site",
@@ -1153,7 +1224,7 @@ class JobInline(admin.TabularInline):  # type: ignore[type-arg]
 
 
 @admin.register(Issue)
-class IssueAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class IssueAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "title",
         "site",
@@ -1250,7 +1321,7 @@ class IssueAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 
 @admin.register(Job)
-class JobAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class JobAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         "job_title",
         "site",
@@ -1301,7 +1372,7 @@ class JobAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         return not obj.is_terminal
 
 
-class DailySiteReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class DailySiteReportAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("report_date", "site", "status_badge", "submitted_at", "returned_reason")
     list_filter = ("status", "report_date", "site")
     search_fields = ("site__name", "general_comments")
@@ -1370,7 +1441,12 @@ class DailySiteReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         self.message_user(request, f"{updated} report(s) returned.")
 
 
-class ZoneSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class ZoneSummaryReportAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
+    def scope_queryset(self, request: Any, qs: Any) -> Any:
+        from apps.site_management.scoping import visible_zones
+
+        return qs.filter(zone__in=visible_zones(request.user))
+
     list_display = ("report_date", "zone", "status_badge", "zone_supervisor", "submitted_at")
     list_filter = ("status", "report_date", "zone")
     search_fields = ("zone__name", "summary")
@@ -1410,7 +1486,7 @@ class ZoneSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         self.message_user(request, f"{updated} zone report(s) returned.")
 
 
-class AssistantGeneralSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class AssistantGeneralSummaryReportAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("report_date", "status_badge", "assistant_general_supervisor", "submitted_at")
     list_filter = ("status", "report_date")
     date_hierarchy = "report_date"
@@ -1449,7 +1525,7 @@ class AssistantGeneralSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type
         self.message_user(request, f"{updated} assistant report(s) returned.")
 
 
-class GeneralManagementReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+class GeneralManagementReportAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ("report_date", "status_badge", "general_supervisor", "submitted_at")
     list_filter = ("status", "report_date")
     date_hierarchy = "report_date"
