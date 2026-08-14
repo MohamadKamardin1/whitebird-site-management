@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Any
 
 from ninja import Field, ModelSchema, Schema
 
@@ -1094,3 +1095,108 @@ class JobSummaryOut(Schema):
     closed: int
     reopened: int
     overdue: int
+
+
+class DailySiteReportOut(Schema):
+    id: int
+    site_id: int
+    site_name: str
+    report_date: date
+    attendance_summary: dict[str, Any] = Field(default_factory=dict)
+    store_summary: dict[str, Any] = Field(default_factory=dict)
+    inspection_summary: dict[str, Any] = Field(default_factory=dict)
+    trainee_summary: dict[str, Any] = Field(default_factory=dict)
+    issues_summary: dict[str, Any] = Field(default_factory=dict)
+    general_comments: str = ""
+    status: str
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    submitted_at: datetime | None = None
+    returned_reason: str = ""
+    created_by: str | None = None
+
+
+class DailySiteReportUpdateIn(Schema):
+    general_comments: str = ""
+
+
+class ReportReturnIn(Schema):
+    reason: str = Field(min_length=1)
+
+
+class ZoneSummaryReportOut(Schema):
+    id: int
+    zone_id: int
+    zone_name: str
+    report_date: date
+    summary: str = ""
+    issues_extracted: list[dict[str, Any]] = Field(default_factory=list)
+    site_reports: list[dict[str, Any]] = Field(default_factory=list)
+    status: str
+    submitted_at: datetime | None = None
+    zone_supervisor: str | None = None
+
+
+class AssistantSummaryOut(Schema):
+    id: int
+    report_date: date
+    zone_ids: list[int] = Field(default_factory=list)
+    summary: str = ""
+    problems_extracted: list[dict[str, Any]] = Field(default_factory=list)
+    recommendations: str = ""
+    status: str
+    submitted_at: datetime | None = None
+    assistant_general_supervisor: str | None = None
+
+
+class AssistantSummaryGenerateIn(Schema):
+    report_date: date
+    zone_ids: list[int] | None = None
+
+
+class GeneralReportOut(Schema):
+    id: int
+    report_date: date
+    final_summary: str = ""
+    key_issues: list[dict[str, Any]] = Field(default_factory=list)
+    assigned_jobs: list[dict[str, Any]] = Field(default_factory=list)
+    recommendations: str = ""
+    status: str
+    submitted_at: datetime | None = None
+    general_supervisor: str | None = None
+
+
+class ReportStatusRow(Schema):
+    site_id: int
+    site_name: str
+    status: str
+    submitted_at: datetime | None = None
+    overdue: bool = False
+
+
+class ReportingStatusOut(Schema):
+    report_date: str
+    site_reports: list[ReportStatusRow] = Field(default_factory=list)
+    missing_site_reports: list[dict[str, Any]] = Field(default_factory=list)
+    zone_summary_status: str | None = None
+    assistant_summary_status: str | None = None
+    general_report_status: str | None = None
+
+
+class MissingSiteReportOut(Schema):
+    site_id: int
+    site_name: str
+    zone_id: int | None = None
+    zone_name: str | None = None
+
+
+class ZoneReportGenerateIn(Schema):
+    zone_id: int
+    report_date: date
+
+
+class GeneralReportGenerateIn(Schema):
+    report_date: date
+
+
+class AssistantSummaryGenerateInDate(Schema):
+    report_date: date

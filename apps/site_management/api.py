@@ -129,6 +129,7 @@ from .issues_services import (
 from .models import (
     Asset,
     AssetCategory,
+    AssistantGeneralSummaryReport,
     AttendanceRecord,
     AttendanceStatus,
     Cleaner,
@@ -138,8 +139,10 @@ from .models import (
     CleanerShiftAssignment,
     CleanerSiteAssignment,
     CleanerStatus,
+    DailySiteReport,
     Department,
     Gender,
+    GeneralManagementReport,
     IdType,
     Inspection,
     InspectionResult,
@@ -165,6 +168,33 @@ from .models import (
     TraineeProgram,
     WorkMode,
     Zone,
+    ZoneSummaryReport,
+)
+from .reporting_selectors import (
+    assistant_report_detail,
+    general_report_detail,
+    get_assistant_report_or_none,
+    get_general_report_or_none,
+    get_site_report_or_none,
+    get_zone_report_or_none,
+    missing_site_reports,
+    reporting_status_dashboard,
+    site_report_detail,
+    site_reports_for_day,
+    zone_report_detail,
+)
+from .reporting_services import (
+    generate_assistant_summary,
+    generate_general_management_report,
+    generate_site_report,
+    generate_zone_summary,
+    return_assistant_summary,
+    return_site_report,
+    return_zone_summary,
+    submit_assistant_summary,
+    submit_general_management_report,
+    submit_site_report,
+    submit_zone_summary,
 )
 from .schemas import (
     AreaScheduleCreateIn,
@@ -175,6 +205,8 @@ from .schemas import (
     AssetUpdateIn,
     AssignmentCreateIn,
     AssignmentOut,
+    AssistantSummaryGenerateIn,
+    AssistantSummaryOut,
     AttendanceBulkIn,
     AttendanceGroupIn,
     AttendanceRecordOut,
@@ -192,11 +224,14 @@ from .schemas import (
     CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
+    DailySiteReportOut,
     DepartmentCreateIn,
     DepartmentOut,
     DepartmentUpdateIn,
     DocumentReviewIn,
     DownloadUrlOut,
+    GeneralReportGenerateIn,
+    GeneralReportOut,
     InspectionOut,
     InspectionResultCreateIn,
     InspectionResultOut,
@@ -223,10 +258,13 @@ from .schemas import (
     JobSummaryOut,
     JobUpdateIn,
     MessageOut,
+    MissingSiteReportOut,
     NotificationOut,
     OperationalRoleCreateIn,
     OperationalRoleOut,
     OperationalRoleUpdateIn,
+    ReportingStatusOut,
+    ReportReturnIn,
     ScheduleRowOut,
     ShiftAssignIn,
     SiteAreaCreateIn,
@@ -268,6 +306,8 @@ from .schemas import (
     TraineeProgramUpdateIn,
     TraineeSummaryOut,
     ZoneOut,
+    ZoneReportGenerateIn,
+    ZoneSummaryReportOut,
 )
 from .scoping import site_in_user_scope, visible_sites, visible_zones
 from .selectors import (
@@ -3622,3 +3662,367 @@ def job_reopen(request: AuthenticatedRequest, job_id: int, payload: JobReopenIn)
     _issues_review(request.auth)
     reopened = reopen_job(job=job, actor=request.auth, reason=payload.reason)
     return _job_out(get_job_or_none(reopened.pk) or reopened)
+
+
+# --------------------------------------------------------------------------- #
+# Reporting chain
+# --------------------------------------------------------------------------- #
+
+
+def _report_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Reports require a management role.")
+
+
+def _report_review(user: User) -> None:
+    if not (
+        user.is_system_admin
+        or user.role
+        in {
+            RoleCode.GENERAL_SUPERVISOR,
+            RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
+            RoleCode.ZONE_SUPERVISOR,
+        }
+    ):
+        raise PermissionDenied("Only zone-level management can review reports.")
+
+
+def _assistant_report_manage(user: User) -> None:
+    if not (user.is_system_admin or user.role in {RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
+        raise PermissionDenied("Only assistant general management can author these reports.")
+
+
+def _general_report_manage(user: User) -> None:
+    if not (user.is_system_admin or user.role == RoleCode.GENERAL_SUPERVISOR):
+        raise PermissionDenied("Only the general supervisor can author this report.")
+
+
+def _load_site_report_or_404(site_id: int, day: date) -> DailySiteReport:
+    report = site_report_detail(site_id, day)
+    if report is None:
+        raise Http404("Site report not found.")
+    return report
+
+
+def _load_zone_report_or_404(report_id: int) -> ZoneSummaryReport:
+    report = get_zone_report_or_none(report_id)
+    if report is None:
+        raise Http404("Zone report not found.")
+    return report
+
+
+def _load_assistant_report_or_404(report_id: int) -> AssistantGeneralSummaryReport:
+    report = get_assistant_report_or_none(report_id)
+    if report is None:
+        raise Http404("Assistant report not found.")
+    return report
+
+
+def _load_general_report_or_404(report_id: int) -> GeneralManagementReport:
+    report = get_general_report_or_none(report_id)
+    if report is None:
+        raise Http404("General report not found.")
+    return report
+
+
+def _site_report_out(r: DailySiteReport) -> DailySiteReportOut:
+    created_by = r.created_by
+    return DailySiteReportOut(
+        id=r.pk,
+        site_id=r.site_id,
+        site_name=r.site.name,
+        report_date=r.report_date,
+        attendance_summary=r.attendance_summary,
+        store_summary=r.store_summary,
+        inspection_summary=r.inspection_summary,
+        trainee_summary=r.trainee_summary,
+        issues_summary=r.issues_summary,
+        general_comments=r.general_comments,
+        status=r.status,
+        snapshot=r.snapshot,
+        submitted_at=r.submitted_at,
+        returned_reason=r.returned_reason,
+        created_by=created_by.email if created_by else None,
+    )
+
+
+def _zone_report_out(r: ZoneSummaryReport) -> ZoneSummaryReportOut:
+    supervisor = r.zone_supervisor
+    return ZoneSummaryReportOut(
+        id=r.pk,
+        zone_id=r.zone_id,
+        zone_name=r.zone.name,
+        report_date=r.report_date,
+        summary=r.summary,
+        issues_extracted=r.issues_extracted,
+        site_reports=r.site_reports,
+        status=r.status,
+        submitted_at=r.submitted_at,
+        zone_supervisor=supervisor.email if supervisor else None,
+    )
+
+
+def _assistant_report_out(r: AssistantGeneralSummaryReport) -> AssistantSummaryOut:
+    author = r.assistant_general_supervisor
+    return AssistantSummaryOut(
+        id=r.pk,
+        report_date=r.report_date,
+        zone_ids=r.zone_ids,
+        summary=r.summary,
+        problems_extracted=r.problems_extracted,
+        recommendations=r.recommendations,
+        status=r.status,
+        submitted_at=r.submitted_at,
+        assistant_general_supervisor=author.email if author else None,
+    )
+
+
+def _general_report_out(r: GeneralManagementReport) -> GeneralReportOut:
+    author = r.general_supervisor
+    return GeneralReportOut(
+        id=r.pk,
+        report_date=r.report_date,
+        final_summary=r.final_summary,
+        key_issues=r.key_issues,
+        assigned_jobs=r.assigned_jobs,
+        recommendations=r.recommendations,
+        status=r.status,
+        submitted_at=r.submitted_at,
+        general_supervisor=author.email if author else None,
+    )
+
+
+@router.get(
+    "/reports/site",
+    response=Paginated[DailySiteReportOut],
+    summary="List daily site reports (paginated)",
+)
+def site_report_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    report_date: date | None = None,
+    site_id: int | None = None,
+    status: str | None = None,
+) -> Paginated[DailySiteReportOut]:
+    _report_read(request.auth)
+    qs = site_reports_for_day(request.auth, report_date or date.today())
+    if site_id:
+        qs = qs.filter(site_id=site_id)
+    if status:
+        qs = qs.filter(status=status)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_site_report_out(r) for r in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.get("/reports/site/{site_id}/{report_date}", response=DailySiteReportOut, summary="Site report detail")
+def site_report_detail_endpoint(request: AuthenticatedRequest, site_id: int, report_date: date) -> DailySiteReportOut:
+    _report_read(request.auth)
+    report = _load_site_report_or_404(site_id, report_date)
+    if not site_in_user_scope(request.auth, report.site_id):
+        raise PermissionDenied("You do not have access to this report.")
+    return _site_report_out(report)
+
+
+@router.post(
+    "/reports/site/{site_id}/{report_date}/generate",
+    response=DailySiteReportOut,
+    summary="Generate a daily site report",
+)
+def site_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, report_date: date) -> DailySiteReportOut:
+    site = _load_site_or_404(site_id)
+    _issues_manage(request.auth, site.pk)
+    report = generate_site_report(site_id=site_id, day=report_date, user=request.auth)
+    return _site_report_out(report)
+
+
+@router.post(
+    "/reports/site/{site_id}/{report_date}/submit",
+    response=DailySiteReportOut,
+    summary="Submit a daily site report",
+)
+def site_report_submit_endpoint(request: AuthenticatedRequest, site_id: int, report_date: date) -> DailySiteReportOut:
+    report = _load_site_report_or_404(site_id, report_date)
+    _issues_manage(request.auth, report.site_id)
+    submitted = submit_site_report(report=report, user=request.auth)
+    return _site_report_out(get_site_report_or_none(submitted.pk) or submitted)
+
+
+@router.post(
+    "/reports/site/{site_id}/{report_date}/return",
+    response=DailySiteReportOut,
+    summary="Return a submitted site report",
+)
+def site_report_return_endpoint(
+    request: AuthenticatedRequest, site_id: int, report_date: date, payload: ReportReturnIn
+) -> DailySiteReportOut:
+    report = _load_site_report_or_404(site_id, report_date)
+    _report_review(request.auth)
+    returned = return_site_report(report=report, user=request.auth, reason=payload.reason)
+    return _site_report_out(get_site_report_or_none(returned.pk) or returned)
+
+
+@router.get(
+    "/reports/zone",
+    response=list[ZoneSummaryReportOut],
+    summary="List zone summary reports",
+)
+def zone_report_list_endpoint(
+    request: AuthenticatedRequest, report_date: date | None = None
+) -> list[ZoneSummaryReportOut]:
+    _report_read(request.auth)
+    qs = ZoneSummaryReport.objects.select_related("zone", "zone_supervisor")
+    if report_date:
+        qs = qs.filter(report_date=report_date)
+    if not request.auth.is_system_admin:
+        qs = qs.filter(zone__in=visible_zones(request.auth))
+    return [_zone_report_out(r) for r in qs]
+
+
+@router.post(
+    "/reports/zone/generate",
+    response=ZoneSummaryReportOut,
+    summary="Generate a zone summary report",
+)
+def zone_report_generate_endpoint(request: AuthenticatedRequest, payload: ZoneReportGenerateIn) -> ZoneSummaryReportOut:
+    _report_review(request.auth)
+    report = generate_zone_summary(zone_id=payload.zone_id, day=payload.report_date, user=request.auth)
+    return _zone_report_out(zone_report_detail(payload.zone_id, payload.report_date) or report)
+
+
+@router.post(
+    "/reports/zone/{report_id}/submit",
+    response=ZoneSummaryReportOut,
+    summary="Submit a zone summary report",
+)
+def zone_report_submit_endpoint(request: AuthenticatedRequest, report_id: int) -> ZoneSummaryReportOut:
+    report = _load_zone_report_or_404(report_id)
+    _report_review(request.auth)
+    submitted = submit_zone_summary(report=report, user=request.auth)
+    return _zone_report_out(get_zone_report_or_none(submitted.pk) or submitted)
+
+
+@router.post(
+    "/reports/zone/{report_id}/return",
+    response=ZoneSummaryReportOut,
+    summary="Return a zone summary report",
+)
+def zone_report_return_endpoint(
+    request: AuthenticatedRequest, report_id: int, payload: ReportReturnIn
+) -> ZoneSummaryReportOut:
+    report = _load_zone_report_or_404(report_id)
+    _assistant_report_manage(request.auth)
+    returned = return_zone_summary(report=report, user=request.auth, reason=payload.reason)
+    return _zone_report_out(get_zone_report_or_none(returned.pk) or returned)
+
+
+@router.get(
+    "/reports/assistant",
+    response=list[AssistantSummaryOut],
+    summary="List assistant general summaries",
+)
+def assistant_report_list_endpoint(
+    request: AuthenticatedRequest, report_date: date | None = None
+) -> list[AssistantSummaryOut]:
+    _report_read(request.auth)
+    qs = AssistantGeneralSummaryReport.objects.select_related("assistant_general_supervisor")
+    if report_date:
+        qs = qs.filter(report_date=report_date)
+    return [_assistant_report_out(r) for r in qs]
+
+
+@router.post(
+    "/reports/assistant/generate",
+    response=AssistantSummaryOut,
+    summary="Generate an assistant general summary",
+)
+def assistant_report_generate_endpoint(
+    request: AuthenticatedRequest, payload: AssistantSummaryGenerateIn
+) -> AssistantSummaryOut:
+    _assistant_report_manage(request.auth)
+    report = generate_assistant_summary(day=payload.report_date, user=request.auth, zone_ids=payload.zone_ids)
+    return _assistant_report_out(assistant_report_detail(payload.report_date) or report)
+
+
+@router.post(
+    "/reports/assistant/{report_id}/submit",
+    response=AssistantSummaryOut,
+    summary="Submit an assistant general summary",
+)
+def assistant_report_submit_endpoint(request: AuthenticatedRequest, report_id: int) -> AssistantSummaryOut:
+    report = _load_assistant_report_or_404(report_id)
+    _assistant_report_manage(request.auth)
+    submitted = submit_assistant_summary(report=report, user=request.auth)
+    return _assistant_report_out(get_assistant_report_or_none(submitted.pk) or submitted)
+
+
+@router.post(
+    "/reports/assistant/{report_id}/return",
+    response=AssistantSummaryOut,
+    summary="Return an assistant general summary",
+)
+def assistant_report_return_endpoint(
+    request: AuthenticatedRequest, report_id: int, payload: ReportReturnIn
+) -> AssistantSummaryOut:
+    report = _load_assistant_report_or_404(report_id)
+    _general_report_manage(request.auth)
+    returned = return_assistant_summary(report=report, user=request.auth, reason=payload.reason)
+    return _assistant_report_out(get_assistant_report_or_none(returned.pk) or returned)
+
+
+@router.get(
+    "/reports/general",
+    response=list[GeneralReportOut],
+    summary="List general management reports",
+)
+def general_report_list_endpoint(
+    request: AuthenticatedRequest, report_date: date | None = None
+) -> list[GeneralReportOut]:
+    _report_read(request.auth)
+    qs = GeneralManagementReport.objects.select_related("general_supervisor")
+    if report_date:
+        qs = qs.filter(report_date=report_date)
+    return [_general_report_out(r) for r in qs]
+
+
+@router.post(
+    "/reports/general/generate",
+    response=GeneralReportOut,
+    summary="Generate the final management report",
+)
+def general_report_generate_endpoint(
+    request: AuthenticatedRequest, payload: GeneralReportGenerateIn
+) -> GeneralReportOut:
+    _general_report_manage(request.auth)
+    report = generate_general_management_report(day=payload.report_date, user=request.auth)
+    return _general_report_out(general_report_detail(payload.report_date) or report)
+
+
+@router.post(
+    "/reports/general/{report_id}/submit",
+    response=GeneralReportOut,
+    summary="Submit the management report",
+)
+def general_report_submit_endpoint(request: AuthenticatedRequest, report_id: int) -> GeneralReportOut:
+    report = _load_general_report_or_404(report_id)
+    _general_report_manage(request.auth)
+    submitted = submit_general_management_report(report=report, user=request.auth)
+    return _general_report_out(get_general_report_or_none(submitted.pk) or submitted)
+
+
+@router.get("/reports/status", response=ReportingStatusOut, summary="Reporting status dashboard")
+def reporting_status_endpoint(request: AuthenticatedRequest, report_date: date | None = None) -> ReportingStatusOut:
+    _report_read(request.auth)
+    return ReportingStatusOut(**reporting_status_dashboard(request.auth, report_date or date.today()))
+
+
+@router.get(
+    "/reports/missing",
+    response=list[MissingSiteReportOut],
+    summary="Sites missing a submitted report for a date",
+)
+def missing_site_reports_endpoint(
+    request: AuthenticatedRequest, report_date: date | None = None
+) -> list[MissingSiteReportOut]:
+    _report_read(request.auth)
+    return [MissingSiteReportOut(**m) for m in missing_site_reports(request.auth, report_date or date.today())]

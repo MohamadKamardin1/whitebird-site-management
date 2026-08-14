@@ -19,7 +19,37 @@ Module. Each prompt updates this file before its commit.
 | 10     | Site store & stock requests | **Prompt 10 completed** | see CHANGELOG |
 | 11     | Inspections & templates | **Prompt 11 completed** | see CHANGELOG |
 | 12     | Issues, jobs & escalation | **Prompt 12 completed** | see CHANGELOG |
-| 13–20  | (pending)                                    | —                  | —      |
+| 13     | Reporting chain engine | **Prompt 13 completed** | see CHANGELOG |
+| 14–20  | (pending)                                    | —                  | —      |
+
+## Prompt 13 — completed ✅
+
+Implemented the complete reporting chain from Site Supervisor to Management:
+
+- **`DailySiteReport`**: aggregates real operational data (attendance, store,
+  inspections, trainees, issues) for a site/date; immutable snapshot stored on
+  submission; full status chain through zone/assistant/general/management.
+- **`ZoneSummaryReport`**: zone roll-up with `issues_extracted` and site-report
+  snapshots; **`AssistantGeneralSummaryReport`**: cross-zone summary with
+  `problems_extracted`; **`GeneralManagementReport`**: final management output
+  with `key_issues` and `assigned_jobs`.
+- **Services**: generate/submit/return/review at every level (transactional +
+  audited), `recalculate_report_snapshots`, report cache invalidation, and
+  `SiteReportSubmitted` / `ZoneReportSubmitted` / `AssistantReportSubmitted` /
+  `GeneralReportSubmitted` domain events. Return flow preserves history.
+- **Selectors**: report details, `missing_site_reports`,
+  `reporting_status_dashboard`.
+- **API**: `/reports/site`, `/reports/zone`, `/reports/assistant`,
+  `/reports/general` (list/generate/submit/return), `/reports/status`,
+  `/reports/missing`; read = management/viewer, site report manage = site
+  scope, zone review = zone supervisor+, assistant authoring = AGS/GS, general
+  authoring = GS.
+- **Admin**: reporting admin for all four levels (status badges, readonly JSON
+  snapshots, date hierarchy, submit/return actions, delete guard).
+- **Factories** + migration (`site_management.0011`).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 428 passed ·
+coverage 90.30% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 12 — completed ✅
 

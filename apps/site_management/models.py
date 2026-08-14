@@ -1813,3 +1813,178 @@ class Job(UserStampedModel):
         super().clean()
         if self.issue_id and self.issue is not None and self.issue.site_id != self.site_id:
             raise ValidationError("Issue must belong to the job's site.", code="issue_site_mismatch")
+
+
+# --------------------------------------------------------------------------- #
+# Reporting chain
+# --------------------------------------------------------------------------- #
+
+
+class SiteReportStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    RETURNED = "returned", "Returned"
+    ZONE_REVIEWED = "zone_reviewed", "Zone Reviewed"
+    ASSISTANT_REVIEWED = "assistant_reviewed", "Assistant Reviewed"
+    GENERAL_APPROVED = "general_approved", "General Approved"
+    MANAGEMENT_SUBMITTED = "management_submitted", "Management Submitted"
+
+
+class ZoneReportStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    RETURNED = "returned", "Returned"
+    ASSISTANT_REVIEWED = "assistant_reviewed", "Assistant Reviewed"
+
+
+class AssistantReportStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    RETURNED = "returned", "Returned"
+    GENERAL_REVIEWED = "general_reviewed", "General Reviewed"
+
+
+class GeneralReportStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED_TO_MANAGEMENT = "submitted_to_management", "Submitted to Management"
+
+
+class DailySiteReport(UserStampedModel):
+    """A site's daily operational report aggregating real module data.
+
+    On submission an immutable ``snapshot`` is stored; the per-domain JSON
+    fields hold the live aggregates used to build it.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="daily_reports")
+    report_date = models.DateField(db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="daily_reports_created",
+    )
+    attendance_summary = models.JSONField(default=dict, blank=True)
+    store_summary = models.JSONField(default=dict, blank=True)
+    inspection_summary = models.JSONField(default=dict, blank=True)
+    trainee_summary = models.JSONField(default=dict, blank=True)
+    issues_summary = models.JSONField(default=dict, blank=True)
+    general_comments = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=24, choices=SiteReportStatus.choices, default=SiteReportStatus.DRAFT, db_index=True
+    )
+    snapshot = models.JSONField(default=dict, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    returned_reason = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Daily site report"
+        verbose_name_plural = "Daily site reports"
+        ordering = ["-report_date", "site__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["site", "report_date"], name="uniq_daily_site_report"),
+        ]
+        indexes = [models.Index(fields=["site", "report_date", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.site.name} {self.report_date} ({self.status})"
+
+
+class ZoneSummaryReport(UserStampedModel):
+    """Zone supervisor's roll-up of a zone's site reports for a date."""
+
+    zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name="zone_reports")
+    report_date = models.DateField(db_index=True)
+    zone_supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="zone_reports_authored",
+    )
+    summary = models.TextField(blank=True, default="")
+    issues_extracted = models.JSONField(default=list, blank=True)
+    site_reports = models.JSONField(default=list, blank=True)
+    status = models.CharField(
+        max_length=24, choices=ZoneReportStatus.choices, default=ZoneReportStatus.DRAFT, db_index=True
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Zone summary report"
+        verbose_name_plural = "Zone summary reports"
+        ordering = ["-report_date", "zone__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["zone", "report_date"], name="uniq_zone_report"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.zone.name} {self.report_date} ({self.status})"
+
+
+class AssistantGeneralSummaryReport(UserStampedModel):
+    """Assistant general supervisor's cross-zone summary for a date."""
+
+    report_date = models.DateField(db_index=True)
+    assistant_general_supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assistant_reports_authored",
+    )
+    zone_ids = models.JSONField(default=list, blank=True)
+    summary = models.TextField(blank=True, default="")
+    problems_extracted = models.JSONField(default=list, blank=True)
+    recommendations = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=24, choices=AssistantReportStatus.choices, default=AssistantReportStatus.DRAFT, db_index=True
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Assistant general summary report"
+        verbose_name_plural = "Assistant general summary reports"
+        ordering = ["-report_date"]
+        constraints = [
+            models.UniqueConstraint(fields=["report_date"], name="uniq_assistant_report"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Assistant summary {self.report_date} ({self.status})"
+
+
+class GeneralManagementReport(UserStampedModel):
+    """Final management output compiled by the general supervisor."""
+
+    report_date = models.DateField(db_index=True)
+    general_supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="general_reports_authored",
+    )
+    final_summary = models.TextField(blank=True, default="")
+    key_issues = models.JSONField(default=list, blank=True)
+    assigned_jobs = models.JSONField(default=list, blank=True)
+    recommendations = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=24,
+        choices=GeneralReportStatus.choices,
+        default=GeneralReportStatus.DRAFT,
+        db_index=True,
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "General management report"
+        verbose_name_plural = "General management reports"
+        ordering = ["-report_date"]
+        constraints = [
+            models.UniqueConstraint(fields=["report_date"], name="uniq_general_report"),
+        ]
+
+    def __str__(self) -> str:
+        return f"General report {self.report_date} ({self.status})"

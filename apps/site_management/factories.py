@@ -11,6 +11,7 @@ from apps.accounts.factories import UserFactory
 
 from .models import (
     AssetCategory,
+    AssistantGeneralSummaryReport,
     AssistantGeneralSupervisorAssignment,
     AttendanceRecord,
     Cleaner,
@@ -18,6 +19,8 @@ from .models import (
     CleanerDocument,
     CleanerShiftAssignment,
     CleanerSiteAssignment,
+    DailySiteReport,
+    GeneralManagementReport,
     Inspection,
     InspectionResult,
     InspectionTemplate,
@@ -40,6 +43,7 @@ from .models import (
     TraineeProgram,
     WorkMode,
     Zone,
+    ZoneSummaryReport,
     ZoneSupervisorAssignment,
 )
 
@@ -401,4 +405,46 @@ class JobFactory(factory.django.DjangoModelFactory):
     due_date = date.today() + timedelta(days=3)
     priority = "medium"
     status = "open"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class DailySiteReportFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = DailySiteReport
+
+    site = factory.SubFactory(SiteFactory)
+    report_date = date.today()
+    created_by = factory.SubFactory(UserFactory)
+    status = "draft"
+
+
+class ZoneSummaryReportFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ZoneSummaryReport
+
+    zone = factory.SubFactory(ZoneFactory)
+    report_date = date.today()
+    zone_supervisor = factory.SubFactory(UserFactory)
+    status = "draft"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class AssistantGeneralSummaryReportFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AssistantGeneralSummaryReport
+
+    report_date = date.today()
+    assistant_general_supervisor = factory.SubFactory(UserFactory)
+    zone_ids = []
+    status = "draft"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class GeneralManagementReportFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GeneralManagementReport
+
+    report_date = date.today()
+    general_supervisor = factory.SubFactory(UserFactory)
+    status = "draft"
     created_by = factory.SubFactory(UserFactory)

@@ -17,7 +17,9 @@ from apps.core.files import create_file_token
 from .models import (
     Asset,
     AssetCategory,
+    AssistantGeneralSummaryReport,
     AssistantGeneralSupervisorAssignment,
+    AssistantReportStatus,
     AttendanceRecord,
     AttendanceReviewStatus,
     Cleaner,
@@ -26,7 +28,10 @@ from .models import (
     CleanerDocumentStatus,
     CleanerShiftAssignment,
     CleanerSiteAssignment,
+    DailySiteReport,
     Department,
+    GeneralManagementReport,
+    GeneralReportStatus,
     Inspection,
     InspectionResult,
     InspectionTemplate,
@@ -40,6 +45,7 @@ from .models import (
     OperationalRole,
     Site,
     SiteArea,
+    SiteReportStatus,
     SiteShift,
     SiteStatus,
     SiteStore,
@@ -55,6 +61,8 @@ from .models import (
     TraineeProgram,
     TraineeProgramStatus,
     Zone,
+    ZoneReportStatus,
+    ZoneSummaryReport,
     ZoneSupervisorAssignment,
 )
 
@@ -1291,3 +1299,183 @@ class JobAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
         if obj is None:
             return True
         return not obj.is_terminal
+
+
+class DailySiteReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("report_date", "site", "status_badge", "submitted_at", "returned_reason")
+    list_filter = ("status", "report_date", "site")
+    search_fields = ("site__name", "general_comments")
+    date_hierarchy = "report_date"
+    raw_id_fields = ("site", "created_by", "updated_by")
+    readonly_fields = (
+        "attendance_summary",
+        "store_summary",
+        "inspection_summary",
+        "trainee_summary",
+        "issues_summary",
+        "snapshot",
+        "submitted_at",
+        "status",
+    )
+    actions = ["submit_reports", "return_reports"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: DailySiteReport) -> str:
+        return obj.status
+
+    def get_readonly_fields(self, request: Any, obj: DailySiteReport | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = (
+            "status",
+            "submitted_at",
+            "attendance_summary",
+            "store_summary",
+            "inspection_summary",
+            "trainee_summary",
+            "issues_summary",
+            "snapshot",
+        )
+        if obj is not None and obj.status != SiteReportStatus.DRAFT:
+            readonly += ("site", "report_date", "general_comments", "returned_reason")
+        return readonly
+
+    def has_delete_permission(self, request: Any, obj: DailySiteReport | None = None) -> bool:
+        if obj is None:
+            return True
+        return obj.status == SiteReportStatus.DRAFT
+
+    @admin.action(description="Submit selected reports")
+    def submit_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import submit_site_report  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=SiteReportStatus.DRAFT):
+            try:
+                submit_site_report(report=report, user=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} report(s) submitted.")
+
+    @admin.action(description="Return selected reports")
+    def return_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import return_site_report  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status__in=[SiteReportStatus.SUBMITTED, SiteReportStatus.ZONE_REVIEWED]):
+            try:
+                return_site_report(report=report, user=request.user, reason="Returned via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} report(s) returned.")
+
+
+class ZoneSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("report_date", "zone", "status_badge", "zone_supervisor", "submitted_at")
+    list_filter = ("status", "report_date", "zone")
+    search_fields = ("zone__name", "summary")
+    date_hierarchy = "report_date"
+    raw_id_fields = ("zone", "zone_supervisor", "created_by", "updated_by")
+    readonly_fields = ("site_reports", "issues_extracted", "status", "submitted_at")
+    actions = ["submit_zone_reports", "return_zone_reports"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: ZoneSummaryReport) -> str:
+        return obj.status
+
+    @admin.action(description="Submit selected zone reports")
+    def submit_zone_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import submit_zone_summary  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=ZoneReportStatus.DRAFT):
+            try:
+                submit_zone_summary(report=report, user=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} zone report(s) submitted.")
+
+    @admin.action(description="Return selected zone reports")
+    def return_zone_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import return_zone_summary  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=ZoneReportStatus.SUBMITTED):
+            try:
+                return_zone_summary(report=report, user=request.user, reason="Returned via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} zone report(s) returned.")
+
+
+class AssistantGeneralSummaryReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("report_date", "status_badge", "assistant_general_supervisor", "submitted_at")
+    list_filter = ("status", "report_date")
+    date_hierarchy = "report_date"
+    raw_id_fields = ("assistant_general_supervisor", "created_by", "updated_by")
+    readonly_fields = ("zone_ids", "problems_extracted", "status", "submitted_at")
+    actions = ["submit_assistant_reports", "return_assistant_reports"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: AssistantGeneralSummaryReport) -> str:
+        return obj.status
+
+    @admin.action(description="Submit selected assistant reports")
+    def submit_assistant_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import submit_assistant_summary  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=AssistantReportStatus.DRAFT):
+            try:
+                submit_assistant_summary(report=report, user=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} assistant report(s) submitted.")
+
+    @admin.action(description="Return selected assistant reports")
+    def return_assistant_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import return_assistant_summary  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=AssistantReportStatus.SUBMITTED):
+            try:
+                return_assistant_summary(report=report, user=request.user, reason="Returned via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} assistant report(s) returned.")
+
+
+class GeneralManagementReportAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("report_date", "status_badge", "general_supervisor", "submitted_at")
+    list_filter = ("status", "report_date")
+    date_hierarchy = "report_date"
+    raw_id_fields = ("general_supervisor", "created_by", "updated_by")
+    readonly_fields = ("key_issues", "assigned_jobs", "status", "submitted_at")
+    actions = ["submit_general_reports"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: GeneralManagementReport) -> str:
+        return obj.status
+
+    @admin.action(description="Submit selected general reports")
+    def submit_general_reports(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.reporting_services import submit_general_management_report  # noqa: PLC0415
+
+        updated = 0
+        for report in queryset.filter(status=GeneralReportStatus.DRAFT):
+            try:
+                submit_general_management_report(report=report, user=request.user)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} general report(s) submitted.")
+
+
+admin.site.register(DailySiteReport, DailySiteReportAdmin)
+admin.site.register(ZoneSummaryReport, ZoneSummaryReportAdmin)
+admin.site.register(AssistantGeneralSummaryReport, AssistantGeneralSummaryReportAdmin)
+admin.site.register(GeneralManagementReport, GeneralManagementReportAdmin)

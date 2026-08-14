@@ -5,6 +5,40 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 13] — 2026-08-14
+
+### Added
+
+- **`DailySiteReport`**: per-site daily report aggregating real operational
+  data (attendance, store, inspections, trainees, issues) with per-domain JSON
+  fields, immutable `snapshot` on submission, and the full status chain
+  (DRAFT → SUBMITTED → RETURNED → ZONE_REVIEWED → ASSISTANT_REVIEWED →
+  GENERAL_APPROVED → MANAGEMENT_SUBMITTED).
+- **`ZoneSummaryReport`**: zone roll-up of its site reports with
+  `issues_extracted` and site-report snapshots; DRAFT → SUBMITTED → RETURNED →
+  ASSISTANT_REVIEWED.
+- **`AssistantGeneralSummaryReport`**: cross-zone summary with
+  `problems_extracted`; DRAFT → SUBMITTED → RETURNED → GENERAL_REVIEWED.
+- **`GeneralManagementReport`**: final management output with `key_issues` and
+  `assigned_jobs`; DRAFT → SUBMITTED_TO_MANAGEMENT.
+- **Services** (transactional + audited): generate/submit/return/review for
+  every level, `recalculate_report_snapshots`; site reports aggregate real
+  data and store an immutable snapshot on submit; return flow preserves
+  history; report caches invalidated; domain events `SiteReportSubmitted`,
+  `ZoneReportSubmitted`, `AssistantReportSubmitted`, `GeneralReportSubmitted`.
+- **Selectors**: report details at each level, `missing_site_reports`,
+  `reporting_status_dashboard` (per-site statuses + chain status).
+- **API**: `/reports/site` (list/detail/generate/submit/return),
+  `/reports/zone` (list/generate/submit/return), `/reports/assistant`
+  (list/generate/submit/return), `/reports/general` (list/generate/submit),
+  `/reports/status`, `/reports/missing`; read = management/viewer,
+  site report manage = site scope, zone review/summary = zone supervisor+,
+  assistant authoring = AGS/GS, general authoring = GS.
+- **Admin**: reporting admin for all four levels with status badges, readonly
+  JSON snapshots, date hierarchy, submit/return actions, delete guard on
+  submitted reports.
+- **Factories** + migration (`site_management.0011`).
+
 ## [Prompt 12] — 2026-08-14
 
 ### Added

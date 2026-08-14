@@ -330,6 +330,35 @@ manage (raise/update/complete) = site scope; review/close/reopen = zone
 supervisor+; escalate = GS/AGS; assign/verify = RBAC custom permissions + site
 scope.
 
+### Reports
+
+| Method | Path                              | Description                                    |
+| ------ | --------------------------------- | ---------------------------------------------- |
+| GET    | `/reports/site`                   | List daily site reports (`report_date`/`site_id`/`status`) |
+| GET    | `/reports/site/{site_id}/{date}`  | Site report detail (live aggregates + snapshot)|
+| POST   | `/reports/site/{site_id}/{date}/generate` | Generate a DRAFT site report from real data |
+| POST   | `/reports/site/{site_id}/{date}/submit` | Submit (immutable snapshot stored)     |
+| POST   | `/reports/site/{site_id}/{date}/return` | Return for correction (`reason`)      |
+| GET    | `/reports/zone`                   | List zone summaries (`report_date`)            |
+| POST   | `/reports/zone/generate`          | Generate zone summary (`zone_id`, `report_date`) |
+| POST   | `/reports/zone/{id}/submit`       | Submit zone summary                            |
+| POST   | `/reports/zone/{id}/return`       | Return zone summary (`reason`)                 |
+| GET    | `/reports/assistant`              | List assistant summaries                       |
+| POST   | `/reports/assistant/generate`     | Generate (`report_date`, `zone_ids?`)          |
+| POST   | `/reports/assistant/{id}/submit`  | Submit assistant summary                       |
+| POST   | `/reports/assistant/{id}/return`  | Return assistant summary (`reason`)            |
+| GET    | `/reports/general`                | List general management reports                |
+| POST   | `/reports/general/generate`       | Generate final report (`report_date`)          |
+| POST   | `/reports/general/{id}/submit`    | Submit to management                           |
+| GET    | `/reports/status`                 | Reporting status dashboard (per-site + chain)  |
+| GET    | `/reports/missing`                | Sites without a submitted report for a date    |
+
+Chain: site report → zone summary → assistant summary → general report. Site
+reports aggregate attendance/store/inspection/trainee/issues data and freeze an
+immutable snapshot at submission; returns preserve history. Permissions: read =
+management/viewer; site report generate/submit = site scope; return/review =
+zone supervisor+; assistant authoring = AGS/GS; general authoring = GS.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

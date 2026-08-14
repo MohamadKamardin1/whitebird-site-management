@@ -374,3 +374,26 @@ engineering contract.
 102. **Permissions**: reads = any management role or viewer (scoped to
     `visible_sites`); raise/update/complete = site-scoped; review/close/reopen
     = ZONE_SUPERVISOR or above; escalate = GENERAL/ASSISTANT_GENERAL (or admin).
+
+## Reporting chain engine (Prompt 13)
+
+103. **Site reports aggregate real data**: attendance (statuses + rate on the
+     date), store (movements by type on the date + current low-stock count),
+     inspections (overall statuses + average score for non-draft inspections on
+     the date), trainees (program statuses where `start_date <= date`), issues
+     (raised today + open/escalated/urgent). Missing data yields zero values,
+     never an error.
+104. **Immutable snapshot**: on submit the full aggregation is frozen into
+     `DailySiteReport.snapshot`; subsequent data changes never alter it. Only
+     DRAFT (or RETURNED) reports can be resubmitted/regenerated.
+105. **Return flow** preserves history: the snapshot stays, the status becomes
+     RETURNED with `returned_reason`, and the report can be resubmitted.
+106. **Zone summary** rolls up that zone's SUBMITTED/ZONE_REVIEWED site reports;
+     `issues_extracted` only lists sites with urgent or escalated issues.
+     Assistant summary collects those problems across the chosen zones; the
+     general report flattens them into `key_issues` plus that day's assigned
+     jobs.
+107. **Status transitions** are service-controlled: site reports advance one
+     level at a time (skipping is rejected). Permission gates: site report
+     generate/submit = site scope; return/review = zone supervisor+; assistant
+     authoring = AGS/GS; general authoring = GS; management viewer is read-only.
