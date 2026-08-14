@@ -26,7 +26,29 @@ Module. Each prompt updates this file before its commit.
 | 17     | Jazzmin soft-gold admin theme | **Prompt 17 completed** | see CHANGELOG |
 | 18     | Role-based dashboards | **Prompt 18 completed** | see CHANGELOG |
 | 19     | Events, notifications, tasks, exports | **Prompt 19 completed** | see CHANGELOG |
-| 20     | (pending)                                    | —                  | —      |
+| 20     | Production hardening & final QA | **Prompt 20 completed - production ready** | v0.1.0 |
+
+## Prompt 20 — completed ✅ production ready
+
+Finalized the backend as a production-ready, premium system:
+
+- **Production settings**: `prod.py` hardened (required secrets/hosts/origins,
+  secure cookies, HSTS, referrer policy, proxy SSL header, docs off by default,
+  optional Sentry, configurable CSP via `SecurityHeadersMiddleware`).
+- **Seed data**: `seed_demo` creates a complete, idempotent demo tenant; joins
+  `seed_rbac` and `seed_volume`.
+- **E2E tests** (`test_e2e.py`): three full operational flows pass.
+- **CI/CD**: GitHub Actions (lint, format, mypy, migrations check, pytest ≥ 90%,
+  Docker build).
+- **Docker**: `docker-compose.prod.yml` with web + Celery worker + beat +
+  Postgres + Redis and persistent volumes.
+- **Backups**: `scripts/backup_db.sh`, `backup_media.sh`, `restore_notes.md`.
+- **Docs**: full `README.md`, `docs/DEPLOYMENT.md`, `docs/SECURITY.md`,
+  `docs/OPERATIONS.md`.
+- **Release**: `API_VERSION` = `0.1.0`, git tag `v0.1.0`.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest ≥ 90% coverage ·
+`makemigrations --check` clean.
 
 ## Prompt 19 — completed ✅
 

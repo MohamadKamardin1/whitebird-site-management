@@ -5,6 +5,37 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 20] — 2026-08-14 — production hardening & final QA
+
+### Added
+
+- **Production settings hardening** (`config/settings/prod.py`): `DEBUG=False`,
+  required `SECRET_KEY`/`ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS`, secure cookies,
+  HSTS, `SECURE_CONTENT_TYPE_NOSNIFF`, `SECURE_REFERRER_POLICY`,
+  `SECURE_PROXY_SSL_HEADER`, API docs off by default, optional Sentry
+  (`SENTRY_DSN`, no PII), configurable Content-Security-Policy via the new
+  `SecurityHeadersMiddleware`.
+- **Seed data**: `seed_demo` — a complete, idempotent demo tenant (users for
+  every role, zones, sites, shifts, areas, cleaners, trainees, assignments,
+  attendance, inspections, issues/jobs, stores/stock/requests, and a completed
+  reporting chain) with fake, safe data.
+- **E2E suite** (`apps/site_management/tests/test_e2e.py`): three full flows —
+  (1) zone/site → config → cleaner+document → assignment → attendance →
+  inspection → issue → job → reports → store request; (2) trainee applicant →
+  trainee → pass → active cleaner (+ fail → inactive); (3) store low-stock
+  alert + stock-request workflow.
+- **CI**: `.github/workflows/ci.yml` — Python 3.12, Ruff lint + format, Mypy
+  strict, missing-migrations check, pytest with the 90% coverage gate, Docker
+  build; tags `v0.1.0` on release commits.
+- **Docker**: `docker-compose.prod.yml` (web + Celery worker + beat + Postgres +
+  Redis, healthchecks, persistent volumes for postgres/redis/static/media).
+- **Backup scripts**: `scripts/backup_db.sh`, `scripts/backup_media.sh`,
+  `scripts/restore_notes.md`.
+- **Documentation**: rewritten `README.md` (overview, quickstart, Docker,
+  tests, seeds, env table), new `docs/DEPLOYMENT.md`, `docs/SECURITY.md`,
+  `docs/OPERATIONS.md`.
+- **Version**: default `API_VERSION` now `0.1.0`; release tag `v0.1.0`.
+
 ## [Prompt 19] — 2026-08-14
 
 ### Added

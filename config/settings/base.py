@@ -196,7 +196,7 @@ CONSTANCE_CONFIG = {
 # --------------------------------------------------------------------------- #
 
 API_V1_PREFIX = "api/site-management/v1"
-API_VERSION = env.str("API_VERSION", default="1.0.0")
+API_VERSION = env.str("API_VERSION", default="0.1.0")
 
 NINJA_PAGINATION_CLASS = "ninja.pagination.LimitOffsetPagination"
 NINJA_PAGINATION_PER_PAGE = env.int("API_PAGE_SIZE", default=25)
