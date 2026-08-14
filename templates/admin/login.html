@@ -1,0 +1,67 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in | {{ brand.name }}</title>
+  <link rel="stylesheet" href="{% static 'css/material_soft_gold.css' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+  <style>
+    :root {
+      --wb-primary: {{ brand.primary_color }};
+      --wb-accent: {{ brand.accent_color }};
+      --wb-background: {{ brand.background_color }};
+    }
+  </style>
+</head>
+<body>
+  <main class="wb-login">
+    <div class="wb-login-card" role="main">
+      <img src="{% static 'images/logo.svg' %}" alt="{{ brand.name }}" class="wb-login-logo">
+      <h1 class="wb-login-brand">{{ brand.name }}</h1>
+      <p class="wb-login-sub">Site Management Platform</p>
+
+      {% if form.errors and not form.non_field_errors %}
+        <div class="wb-login-errors" role="alert">
+          Please correct the errors below and try again.
+        </div>
+      {% endif %}
+      {% if form.non_field_errors %}
+        <div class="wb-login-errors" role="alert">
+          {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+      {% endif %}
+
+      <form action="{{ app_path }}" method="post" id="login-form">
+        {% csrf_token %}
+        <div class="form-row">
+          <label for="id_username">Email</label>
+          <input type="text" name="username" id="id_username" autofocus autocapitalize="none"
+                 autocomplete="username" required value="{{ form.username.value|default_if_none:'' }}">
+          {{ form.username.errors }}
+        </div>
+        <div class="form-row">
+          <label for="id_password">Password</label>
+          <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+          <input type="hidden" name="next" value="{{ next }}">
+          {{ form.password.errors }}
+        </div>
+        <div class="submit-row">
+          <input type="submit" value="Sign in">
+        </div>
+      </form>
+
+      <div class="wb-login-links">
+        {% url 'admin_password_reset' as password_reset_url %}
+        {% if password_reset_url %}
+          <a href="{{ password_reset_url }}">Forgot password?</a>
+        {% endif %}
+      </div>
+      <p class="wb-login-sub" style="margin-top:1.5rem;margin-bottom:0">
+        © {{ brand.name }} · Internal operations
+      </p>
+    </div>
+  </main>
+</body>
+</html>

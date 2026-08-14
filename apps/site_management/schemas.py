@@ -1207,3 +1207,5 @@ class ThemeOut(Schema):
     brand_primary_color: str
     brand_accent_color: str
     brand_background_color: str
+    logo_url: str | None = None
+    version: str = "1.0.0"

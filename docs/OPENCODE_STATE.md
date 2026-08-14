@@ -23,7 +23,34 @@ Module. Each prompt updates this file before its commit.
 | 14     | Complete API surface | **Prompt 14 completed** | see CHANGELOG |
 | 15     | RBAC hardening & scoping | **Prompt 15 completed** | see CHANGELOG |
 | 16     | Performance & caching | **Prompt 16 completed** | see CHANGELOG |
-| 17–20  | (pending)                                    | —                  | —      |
+| 17     | Jazzmin soft-gold admin theme | **Prompt 17 completed** | see CHANGELOG |
+| 18–20  | (pending)                                    | —                  | —      |
+
+## Prompt 17 — completed ✅
+
+Created a beautiful, professional Django admin experience (django-jazzmin +
+Material 2-inspired light soft gold):
+
+- **Jazzmin config**: full branding (logo, welcome, copyright), icons for every
+  model, sidebar ordering, top-menu links (Dashboard, API Docs, OpenAPI JSON,
+  Settings), `custom_links` for all essential screens, hidden system models,
+  horizontal-tab change forms; `materia` theme, light navbar, gold accent,
+  filled buttons.
+- **Brand context processor**: constance `BRAND_*` values injected into every
+  template as CSS variables.
+- **Premium login** (`admin/login.html`): centred card on a soft-gold gradient,
+  brand logo/name, material inputs, styled errors, forgot-password link.
+- **Custom templates + assets**: `admin/base_site.html`, branded `404/403/500`
+  pages, web `base.html`; `material_soft_gold.css` (design system),
+  `whitebird_admin.css` (admin polish), `whitebird_admin.js` (badge helper),
+  `logo.svg`, `favicon.svg`.
+- **Theme API**: `GET /theme` now returns `logo_url` + `version` with the brand
+  palette.
+- **Tests** (`apps/web/tests/test_admin_theme.py`): branded login, stylesheet
+  loading, essential links, staff-only admin, theme payload, error pages.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 477 passed ·
+coverage 90.29% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 16 — completed ✅
 

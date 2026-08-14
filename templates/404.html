@@ -1,0 +1,20 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not found | {{ brand.name }}</title>
+  <link rel="stylesheet" href="{% static 'css/material_soft_gold.css' %}">
+</head>
+<body>
+  <main class="wb-login">
+    <div class="wb-login-card" style="text-align:center">
+      <img src="{% static 'images/logo.svg' %}" alt="" class="wb-login-logo">
+      <h1 class="wb-login-brand">404</h1>
+      <p class="wb-login-sub">The page you requested could not be found.</p>
+      <a class="btn btn-primary" href="/">Back to home</a>
+    </div>
+  </main>
+</body>
+</html>

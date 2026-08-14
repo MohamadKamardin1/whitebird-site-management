@@ -1,0 +1,78 @@
+/* White Bird Zanzibar — admin-specific polish layered on the Material Soft
+   Gold design system. Loaded after the Jazzmin custom stylesheet. */
+
+/* Readonly / submitted clarity */
+.field-box.readonly .readonly,
+.fieldBox.readonly,
+.form-row.readonly .readonly,
+.readonly {
+  background: #fdf6e3;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+}
+
+/* Inline forms: clean rows and dividers */
+.inline-group .tabular td.original p {
+  margin: 0;
+  font-weight: 700;
+}
+
+.inline-group {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--wb-border, #eadfc3);
+}
+
+.inline-group .module {
+  border: none;
+}
+
+/* Prominent search + filters */
+#changelist #toolbar {
+  background: var(--wb-surface, #fffdf8);
+  border: none;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+#changelist #toolbar input {
+  min-width: 260px;
+}
+
+.actions {
+  border-radius: 12px;
+}
+
+/* Elegant pagination */
+.paginator {
+  color: var(--wb-text-secondary, #6b5b33);
+}
+
+.paginator a {
+  border-radius: 8px;
+  padding: 0.2rem 0.6rem;
+}
+
+/* Object tools */
+.object-tools a {
+  border-radius: 999px;
+  background: var(--wb-primary, #a47c00);
+  color: #fff;
+  padding: 0.4rem 0.9rem;
+}
+
+/* Breadcrumbs */
+.breadcrumbs {
+  background: transparent;
+  color: var(--wb-text-secondary, #6b5b33);
+  border-radius: 10px;
+}
+
+.breadcrumbs a {
+  color: var(--wb-primary, #a47c00);
+}
+
+/* Sidebar small polish */
+.brand-link {
+  border-bottom: 1px solid var(--wb-border, #eadfc3);
+}

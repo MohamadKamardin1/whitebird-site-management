@@ -5,6 +5,39 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 17] — 2026-08-14
+
+### Added
+
+- **Jazzmin configuration**: expanded `JAZZMIN_SETTINGS` — brand logo/welcome/
+  copyright, icon set for every model, sidebar `order_with_respect_to`,
+  `topmenu_links` (Dashboard, API Docs, OpenAPI JSON, Settings), `custom_links`
+  (Zones, Sites, Cleaners, Attendance, Trainees, Stores, Inspections, Issues,
+  Jobs, Reports, Audit Logs, Users), hidden system models, horizontal-tab
+  change forms, `custom_css`/`custom_js`; `JAZZMIN_UI_TWEAKS` with the
+  `materia` theme, light navbar, gold accent and filled action buttons.
+- **Brand context processor** (`apps.core.context_processors.brand`) injecting
+  constance `BRAND_*` values + version into every template as CSS variables.
+- **Custom templates**: premium `admin/login.html` (centred card, soft-gold
+  radial gradient, brand logo, material inputs, styled errors, forgot-password
+  link), `admin/base_site.html` (brand variables, favicon, `whitebird_admin.css`,
+  branded header + user links), branded `404/403/500` error pages, and web
+  `base.html` brand wiring.
+- **Static assets**: `material_soft_gold.css` (full Material Soft Gold design
+  system — variables, cards, shadows, tables, buttons, badges, forms, sidebar,
+  focus states, responsive), `whitebird_admin.css` (admin polish), the small
+  `whitebird_admin.js` badge helper, `logo.svg`, and `favicon.svg`.
+- **Theme API**: `GET /theme` now returns `logo_url` and `version` alongside
+  the brand palette (constance-backed, briefly cached).
+- **Tests** (`apps/web/tests/test_admin_theme.py`): branded login page,
+  stylesheet/favicon loading, essential links on the admin index, admin
+  requires staff, theme payload, branded error page, login still works.
+
+### Changed
+
+- `API_VERSION` setting added (used by theme payload and branding).
+- `docs/THEME.md` rewritten as the design-direction + implementation guide.
+
 ## [Prompt 16] — 2026-08-14
 
 ### Added

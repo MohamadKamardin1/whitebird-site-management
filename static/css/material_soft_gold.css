@@ -1,0 +1,396 @@
+/*!
+ * White Bird Zanzibar — Material Soft Gold design system (admin + web).
+ * Brand values come from Constance and are injected as CSS variables in
+ * `:root` by the base template; every rule uses a var() with a sane fallback.
+ */
+
+:root {
+  --wb-primary: #A47C00;
+  --wb-primary-600: #8A6600;
+  --wb-primary-50: #FFF8E1;
+  --wb-accent: #C9A227;
+  --wb-background: #FBF7EF;
+  --wb-surface: #FFFDF8;
+  --wb-sidebar: #FFF9EC;
+  --wb-text: #231A05;
+  --wb-text-secondary: #6B5B33;
+  --wb-success: #2E7D32;
+  --wb-warning: #B26A00;
+  --wb-error: #B3261E;
+  --wb-border: #EADFC3;
+  --wb-radius: 14px;
+  --wb-radius-sm: 10px;
+  --wb-shadow: 0 8px 24px rgba(35, 26, 5, 0.08);
+  --wb-shadow-sm: 0 2px 8px rgba(35, 26, 5, 0.06);
+  --wb-font: "Nunito Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background-color: var(--wb-background);
+  font-family: var(--wb-font);
+  color: var(--wb-text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Layout & surfaces                                                    */
+/* ------------------------------------------------------------------ */
+
+.wrapper,
+.content-wrapper,
+.main-header,
+.main-sidebar {
+  background-color: var(--wb-background);
+}
+
+.content-wrapper {
+  background: linear-gradient(180deg, var(--wb-background) 0%, #fffdf6 100%);
+}
+
+.card,
+.module,
+#changelist,
+.login-box,
+.content-header {
+  border-radius: var(--wb-radius);
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-shadow-sm);
+}
+
+.card-header,
+.card-footer,
+.card-title {
+  background: transparent;
+  border-color: var(--wb-border);
+}
+
+/* Sidebar polish */
+.main-sidebar {
+  background: var(--wb-sidebar);
+  border-right: 1px solid var(--wb-border);
+}
+
+.sidebar a,
+.brand-link {
+  color: var(--wb-text-secondary);
+  border-radius: 10px;
+}
+
+.sidebar a:hover {
+  background: var(--wb-primary-50);
+  color: var(--wb-primary-600);
+}
+
+.sidebar .nav-item.active > .nav-link {
+  background: var(--wb-primary);
+  color: #ffffff;
+  box-shadow: var(--wb-shadow-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                              */
+/* ------------------------------------------------------------------ */
+
+.btn-primary,
+input[type="submit"].default,
+.button.default {
+  background-color: var(--wb-primary);
+  border-color: var(--wb-primary);
+  border-radius: 12px;
+  padding: 0.5rem 1.1rem;
+  font-weight: 600;
+  box-shadow: var(--wb-shadow-sm);
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover,
+input[type="submit"].default:hover {
+  background-color: var(--wb-primary-600);
+  border-color: var(--wb-primary-600);
+  transform: translateY(-1px);
+}
+
+.btn-danger,
+.deletelink {
+  background-color: var(--wb-error);
+  border-color: var(--wb-error);
+  border-radius: 12px;
+}
+
+.btn-success {
+  background-color: var(--wb-success);
+  border-color: var(--wb-success);
+  border-radius: 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tables                                                               */
+/* ------------------------------------------------------------------ */
+
+#result_list,
+table {
+  border-radius: var(--wb-radius-sm);
+  overflow: hidden;
+}
+
+#result_list thead th,
+.table thead th {
+  background: var(--wb-primary-50);
+  color: var(--wb-primary-600);
+  font-weight: 700;
+  border-bottom: 2px solid var(--wb-border);
+}
+
+#result_list tbody tr:hover {
+  background: var(--wb-primary-50);
+}
+
+#result_list td,
+.table td {
+  border-color: var(--wb-border);
+}
+
+/* Status / priority badges */
+.wb-badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.wb-badge-passed,
+.wb-badge-completed,
+.wb-badge-verified,
+.wb-badge-closed,
+.wb-badge-active,
+.wb-badge-submitted {
+  background: #E8F5E9;
+  color: var(--wb-success);
+}
+
+.wb-badge-failed,
+.wb-badge-urgent,
+.wb-badge-damaged,
+.wb-badge-lost {
+  background: #FDECEA;
+  color: var(--wb-error);
+}
+
+.wb-badge-needs_attention,
+.wb-badge-in_progress,
+.wb-badge-high,
+.wb-badge-returned,
+.wb-badge-reopened {
+  background: #FFF3E0;
+  color: var(--wb-warning);
+}
+
+.wb-badge-open,
+.wb-badge-draft,
+.wb-badge-low,
+.wb-badge-medium,
+.wb-badge-pending {
+  background: var(--wb-primary-50);
+  color: var(--wb-primary-600);
+}
+
+/* ------------------------------------------------------------------ */
+/* Forms                                                                */
+/* ------------------------------------------------------------------ */
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+input[type="url"],
+select,
+textarea,
+.vTextField {
+  border: 1px solid var(--wb-border);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  background: var(--wb-surface);
+  color: var(--wb-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.vTextField:focus {
+  border-color: var(--wb-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(164, 124, 0, 0.18);
+}
+
+label,
+.required {
+  color: var(--wb-text);
+  font-weight: 600;
+}
+
+.aligned label {
+  color: var(--wb-text-secondary);
+}
+
+/* Accessible focus states */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--wb-primary);
+  outline-offset: 2px;
+}
+
+/* Readonly submitted records */
+.field-box.readonly,
+.readonly,
+.form-row.readonly .readonly {
+  background: var(--wb-primary-50);
+  border-radius: 8px;
+  color: var(--wb-text-secondary);
+}
+
+/* ------------------------------------------------------------------ */
+/* Messages                                                             */
+/* ------------------------------------------------------------------ */
+
+.alert,
+.callout {
+  border-radius: var(--wb-radius-sm);
+  border-left: 4px solid var(--wb-primary);
+}
+
+.messagelist li.success {
+  background: #E8F5E9;
+  color: var(--wb-success);
+}
+
+.messagelist li.error {
+  background: #FDECEA;
+  color: var(--wb-error);
+}
+
+/* ------------------------------------------------------------------ */
+/* Login page                                                           */
+/* ------------------------------------------------------------------ */
+
+.wb-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(201, 162, 39, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 110% 110%, rgba(164, 124, 0, 0.16), transparent 55%),
+    var(--wb-background);
+}
+
+.wb-login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--wb-surface);
+  border: 1px solid var(--wb-border);
+  border-radius: 20px;
+  box-shadow: var(--wb-shadow);
+  padding: 2.25rem 2rem;
+}
+
+.wb-login-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 0.75rem;
+  display: block;
+  filter: drop-shadow(0 4px 10px rgba(164, 124, 0, 0.25));
+}
+
+.wb-login-brand {
+  text-align: center;
+  color: var(--wb-primary-600);
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.25rem;
+}
+
+.wb-login-sub {
+  text-align: center;
+  color: var(--wb-text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.wb-login-card .form-row {
+  margin-bottom: 1rem;
+}
+
+.wb-login-card input[type="text"],
+.wb-login-card input[type="password"] {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+}
+
+.wb-login-card .submit-row {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.wb-login-card .submit-row input {
+  width: 100%;
+  padding: 0.8rem;
+  font-size: 1rem;
+}
+
+.wb-login-errors {
+  background: #FDECEA;
+  color: var(--wb-error);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+}
+
+.wb-login-links {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.wb-login-links a {
+  color: var(--wb-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.wb-login-links a:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                           */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 991.98px) {
+  .card,
+  .module,
+  #changelist {
+    border-radius: var(--wb-radius-sm);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .wb-login-card {
+    padding: 1.75rem 1.25rem;
+  }
+  .content-header h1 {
+    font-size: 1.25rem;
+  }
+}

@@ -4081,12 +4081,14 @@ def theme_endpoint(request: AuthenticatedRequest) -> ThemeOut:
     _report_read(request.auth)
     from apps.core.cache import cached_or
 
-    def _load() -> dict[str, str]:
+    def _load() -> dict[str, Any]:
         return {
             "brand_name": config.BRAND_NAME,
             "brand_primary_color": config.BRAND_PRIMARY_COLOR,
             "brand_accent_color": config.BRAND_ACCENT_COLOR,
             "brand_background_color": config.BRAND_BACKGROUND_COLOR,
+            "logo_url": "/static/images/logo.svg",
+            "version": getattr(settings, "API_VERSION", "1.0.0"),
         }
 
     return ThemeOut(**cached_or("theme", (), _load, int(config.REPORT_CACHE_TTL)))

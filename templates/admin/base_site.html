@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{% block title %}{{ title }} | {{ brand.name }}{% endblock %}
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    :root {
+      --wb-primary: {{ brand.primary_color }};
+      --wb-accent: {{ brand.accent_color }};
+      --wb-background: {{ brand.background_color }};
+    }
+  </style>
+  <link rel="stylesheet" href="{% static 'css/whitebird_admin.css' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+{% endblock %}
+{% block branding %}
+  <div class="brand-link d-flex align-items-center gap-2">
+    <img src="{% static 'images/logo.svg' %}" alt="" width="28" height="28" class="img-circle">
+    <span class="brand-text font-weight-light">{{ brand.name }}</span>
+  </div>
+{% endblock %}
+{% block welcome-msg %}
+  <strong>{{ brand.name }}</strong>
+{% endblock %}
+{% block userlinks %}
+  {{ block.super }}
+  <a class="dropdown-item" href="/api/site-management/v1/docs" target="_blank" rel="noopener">API Docs</a>
+{% endblock %}
