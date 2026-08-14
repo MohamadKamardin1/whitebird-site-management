@@ -5,6 +5,37 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 16] — 2026-08-14
+
+### Added
+
+- **Database**: composite indexes (migration `0012`) for attendance date+status,
+  issue status/priority/due_date, job assignee/status, store stock scans,
+  cleaner document status/type, and report date+status; `CheckConstraint`s for
+  movement quantity, item stock non-negativity and request quantities.
+- **Query optimisation**: cleaner list verified-ID flag via `Exists` subquery
+  (kills N+1); `get_all_site_stats` collapsed to a single annotated aggregate
+  (was 4N queries).
+- **Caching**: namespaced read-through caches for the cross-site KPI overview
+  (`kpi`, exact-key invalidation), the report status dashboard (`report:status`,
+  prefix invalidation), and theme metadata (`theme`); TTLs from
+  constance/settings; DB fallback via `cached_or`; write-path lookups stay
+  uncached.
+- **Exports**: streaming CSV export `GET /issues/export`
+  (`StreamingHttpResponse` + `iterator(chunk_size=500)`), guarded by
+  `can_export_data`.
+- **Load readiness**: `seed_volume` management command (zones/sites/cleaners/
+  attendance 30 days/inspections/issues/jobs/store data, bulk-created,
+  idempotent per `--run-tag`) and `benchmark` command (per-selector timing +
+  query counts, warns and exits non-zero on slowness).
+- **Performance tests** (`test_performance.py`): query-count tests for cleaner
+  list, issue list, store list, inspection summary; cache-hit tests (KPI,
+  report dashboard, theme); cache invalidation test; pagination sanity; CSV
+  export; `seed_volume` smoke test.
+- **Docs**: `docs/PERFORMANCE.md` extended with indexes/constraints, cache
+  strategy table, query-optimisation patterns, volume/benchmark instructions
+  and production tuning recommendations.
+
 ## [Prompt 15] — 2026-08-14
 
 ### Added

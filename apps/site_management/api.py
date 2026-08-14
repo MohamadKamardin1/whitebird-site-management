@@ -13,7 +13,7 @@ from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, StreamingHttpResponse
 from ninja import File, Form, Query, Router, UploadedFile
 
 from apps.accounts.models import RoleCode, User
@@ -171,6 +171,7 @@ from .models import (
     Zone,
     ZoneSummaryReport,
 )
+from .policies import can_export_data
 from .reporting_selectors import (
     assistant_report_detail,
     general_report_detail,
@@ -314,7 +315,7 @@ from .schemas import (
 from .scoping import site_in_user_scope, visible_sites, visible_zones
 from .selectors import (
     SiteFilter,
-    get_all_site_stats,
+    get_kpi_overview,
     get_site_detail,
     get_site_or_none,
     get_site_stats,
@@ -1237,24 +1238,7 @@ def site_stats(request: AuthenticatedRequest, site_id: int) -> SiteStatsOut:
 )
 def stats_overview(request: AuthenticatedRequest) -> dict[str, object]:
     _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
-    per_site = get_all_site_stats()
-    total_capacity = sum(s["capacity"] for s in per_site.values())
-    total_staff = sum(s["staff"] for s in per_site.values())
-    return {
-        "site_count": len(per_site),
-        "total_capacity": total_capacity,
-        "total_staff": total_staff,
-        "occupancy_ratio": round(total_staff / total_capacity, 4) if total_capacity else 0.0,
-        "status_breakdown": _status_breakdown(list(per_site.values())),
-    }
-
-
-def _status_breakdown(rows: list[dict[str, object]]) -> dict[str, int]:
-    breakdown: dict[str, int] = {}
-    for row in rows:
-        status = "unknown" if row.get("status") is None else str(row["status"])
-        breakdown[status] = breakdown.get(status, 0) + 1
-    return breakdown
+    return get_kpi_overview()
 
 
 # --------------------------------------------------------------------------- #
@@ -3413,6 +3397,53 @@ def issue_create(request: AuthenticatedRequest, payload: IssueCreateIn) -> Issue
     return _issue_out(get_issue_or_none(created.pk) or created)
 
 
+@router.get(
+    "/issues/export",
+    summary="Stream visible issues as CSV",
+    tags=["Issues & Jobs"],
+)
+def issues_export_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+) -> StreamingHttpResponse:
+    """Export the caller's visible issues as CSV (streamed, never loaded fully)."""
+    _issues_read(request.auth)
+    if not can_export_data(request.auth, "issues"):
+        raise PermissionDenied("You do not have permission to export data.")
+
+    spec = IssueFilter(site_id=site_id, status=status, priority=priority)
+    headers = ["id", "title", "site", "category", "priority", "status", "created_at"]
+    rows = (
+        issue_list(request.auth, spec)
+        .order_by("created_at")
+        .values("id", "title", "site__name", "issue_category", "priority", "status", "created_at")
+    )
+
+    def _stream() -> Any:
+        yield _csv_line(headers)
+        for row in rows.iterator(chunk_size=500):
+            yield _csv_line(
+                [
+                    str(row["id"]),
+                    row["title"],
+                    row["site__name"],
+                    row["issue_category"],
+                    row["priority"],
+                    row["status"],
+                    row["created_at"].isoformat() if row["created_at"] else "",
+                ]
+            )
+
+    return StreamingHttpResponse(_stream(), content_type="text/csv")
+
+
+def _csv_line(fields: list[str]) -> str:
+    escaped = [f'"{field.replace(chr(34), chr(34) + chr(34))}"' for field in fields]
+    return ",".join(escaped) + "\n"
+
+
 @router.get("/issues/{issue_id}", response=IssueOut, summary="Issue detail")
 def issue_detail_endpoint(request: AuthenticatedRequest, issue_id: int) -> IssueOut:
     _issues_read(request.auth)
@@ -4046,11 +4077,16 @@ def missing_site_reports_endpoint(
 
 @router.get("/theme", response=ThemeOut, summary="Brand theme metadata", tags=["Theme"])
 def theme_endpoint(request: AuthenticatedRequest) -> ThemeOut:
-    """Return brand identity for the frontend (name + colours)."""
+    """Return brand identity for the frontend (name + colours), cached briefly."""
     _report_read(request.auth)
-    return ThemeOut(
-        brand_name=config.BRAND_NAME,
-        brand_primary_color=config.BRAND_PRIMARY_COLOR,
-        brand_accent_color=config.BRAND_ACCENT_COLOR,
-        brand_background_color=config.BRAND_BACKGROUND_COLOR,
-    )
+    from apps.core.cache import cached_or
+
+    def _load() -> dict[str, str]:
+        return {
+            "brand_name": config.BRAND_NAME,
+            "brand_primary_color": config.BRAND_PRIMARY_COLOR,
+            "brand_accent_color": config.BRAND_ACCENT_COLOR,
+            "brand_background_color": config.BRAND_BACKGROUND_COLOR,
+        }
+
+    return ThemeOut(**cached_or("theme", (), _load, int(config.REPORT_CACHE_TTL)))

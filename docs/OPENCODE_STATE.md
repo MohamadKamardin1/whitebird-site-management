@@ -22,7 +22,34 @@ Module. Each prompt updates this file before its commit.
 | 13     | Reporting chain engine | **Prompt 13 completed** | see CHANGELOG |
 | 14     | Complete API surface | **Prompt 14 completed** | see CHANGELOG |
 | 15     | RBAC hardening & scoping | **Prompt 15 completed** | see CHANGELOG |
-| 16–20  | (pending)                                    | —                  | —      |
+| 16     | Performance & caching | **Prompt 16 completed** | see CHANGELOG |
+| 17–20  | (pending)                                    | —                  | —      |
+
+## Prompt 16 — completed ✅
+
+Made the backend fast and production-ready through performance engineering:
+
+- **Indexes & constraints** (migration `0012`): composite indexes for
+  attendance date+status, issue status/priority/due_date, job assignee/status,
+  store stock scans, cleaner document status/type, report date+status; safe
+  `CheckConstraint`s (movement quantity, item stock, request quantities).
+- **Query optimisation**: cleaner-list verified-ID flag annotated with an
+  `Exists` subquery (N+1 removed); `get_all_site_stats` reduced from 4N queries
+  to a single annotated aggregate.
+- **Caching**: namespaced read-through caches for KPI overview, report status
+  dashboard and theme; TTLs from constance/settings; DB fallback; exact-key
+  invalidation for KPI, prefix invalidation for report dashboards; write-path
+  lookups stay uncached for freshness.
+- **Exports**: streaming CSV `GET /issues/export` (`StreamingHttpResponse` +
+  `iterator`), guarded by `can_export_data`.
+- **Load readiness**: `seed_volume` + `benchmark` management commands.
+- **Performance tests** (`test_performance.py`): query-count, cache hit/
+  invalidation, pagination sanity, CSV export, seed smoke test.
+- **Docs**: `PERFORMANCE.md` extended (indexes, cache strategy, patterns,
+  benchmark instructions, production tuning).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 470 passed ·
+coverage 90.30% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 15 — completed ✅
 

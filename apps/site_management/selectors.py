@@ -31,6 +31,7 @@ from .models import (
 
 SITE_DETAIL_PREFIX = "site:detail"
 SITE_STATS_PREFIX = "site:stats"
+KPI_PREFIX = "kpi"
 NOTIFICATIONS_PREFIX = "site:notifications"
 
 DETAIL_CACHE_TTL = 300
@@ -210,8 +211,58 @@ def get_site_stats(site_id: int) -> dict[str, Any]:
 
 
 def get_all_site_stats() -> dict[int, dict[str, Any]]:
-    """Compute statistics for every active site (used by the beat task)."""
-    return {site.pk: _compute_site_stats(site.pk) for site in Site.objects.filter(is_active=True)}
+    """Compute statistics for every active site in a single annotated query.
+
+    Previously each site fired 3 extra ``.count()`` queries (departments,
+    assets, staff); the annotated aggregate collapses the whole call into one
+    query.
+    """
+    from django.db.models import Count
+
+    qs = (
+        Site.objects.filter(is_active=True)
+        .select_related("status")
+        .annotate(
+            n_departments=Count("departments", distinct=True),
+            n_assets=Count("assets", distinct=True),
+            n_staff=Count("staff_assignments", distinct=True),
+        )
+    )
+    return {
+        site.pk: {
+            "site_id": site.pk,
+            "name": site.name,
+            "status": site.status.slug if site.status else None,
+            "departments": site.n_departments,
+            "assets": site.n_assets,
+            "staff": site.n_staff,
+            "capacity": site.capacity,
+            "occupancy_ratio": round(site.n_staff / site.capacity, 4) if site.capacity else 0.0,
+        }
+        for site in qs
+    }
+
+
+def get_kpi_overview() -> dict[str, Any]:
+    """Cache-aware cross-site KPI overview (single aggregated query)."""
+
+    def _compute() -> dict[str, Any]:
+        per_site = get_all_site_stats()
+        total_capacity = sum(s["capacity"] for s in per_site.values())
+        total_staff = sum(s["staff"] for s in per_site.values())
+        breakdown: dict[str, int] = {}
+        for row in per_site.values():
+            status = "unknown" if row.get("status") is None else str(row["status"])
+            breakdown[status] = breakdown.get(status, 0) + 1
+        return {
+            "site_count": len(per_site),
+            "total_capacity": total_capacity,
+            "total_staff": total_staff,
+            "occupancy_ratio": round(total_staff / total_capacity, 4) if total_capacity else 0.0,
+            "status_breakdown": breakdown,
+        }
+
+    return cached_or(KPI_PREFIX, ("overview",), _compute, STATS_CACHE_TTL)
 
 
 def refresh_all_site_stats_cache() -> None:
@@ -224,6 +275,7 @@ def refresh_all_site_stats_cache() -> None:
             STATS_CACHE_TTL,
         )
     invalidate_prefix(SITE_STATS_PREFIX)
+    invalidate(KPI_PREFIX, "overview")
 
 
 def _pass_through(payload: dict[str, Any]) -> dict[str, Any]:

@@ -797,7 +797,11 @@ class CleanerDocument(PrivateFileModel):
         verbose_name = "Cleaner document"
         verbose_name_plural = "Cleaner documents"
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["cleaner", "status"])]
+        indexes = [
+            models.Index(fields=["cleaner", "status"]),
+            models.Index(fields=["status", "document_type"]),
+            models.Index(fields=["cleaner", "status", "document_type"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.document_type} for {self.cleaner} ({self.status})"
@@ -1060,6 +1064,8 @@ class AttendanceRecord(UserStampedModel):
             models.Index(fields=["site", "attendance_date"]),
             models.Index(fields=["site", "attendance_date", "shift"]),
             models.Index(fields=["cleaner", "attendance_date"]),
+            models.Index(fields=["attendance_date", "status"]),
+            models.Index(fields=["site", "attendance_date", "status"]),
         ]
 
     def __str__(self) -> str:
@@ -1251,8 +1257,14 @@ class StoreItem(UserStampedModel, ActivatableModel):
                 condition=models.Q(item_code__gt=""),
                 name="uniq_store_item_code",
             ),
+            models.CheckConstraint(condition=models.Q(opening_stock__gte=0), name="ck_storeitem_opening_nonneg"),
+            models.CheckConstraint(condition=models.Q(minimum_stock_level__gte=0), name="ck_storeitem_min_nonneg"),
         ]
-        indexes = [models.Index(fields=["store", "is_active"])]
+        indexes = [
+            models.Index(fields=["store", "is_active"]),
+            models.Index(fields=["store", "current_stock"]),
+            models.Index(fields=["current_stock", "minimum_stock_level"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.item_name} @ {self.store}"
@@ -1294,6 +1306,9 @@ class StockMovement(UserStampedModel):
         verbose_name_plural = "Stock movements"
         ordering = ["-movement_date", "-created_at"]
         indexes = [models.Index(fields=["store_item", "movement_date"])]
+        constraints = [
+            models.CheckConstraint(condition=~models.Q(quantity=0), name="ck_stockmovement_nonzero"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.movement_type} {self.quantity} {self.store_item.item_name} ({self.movement_date})"
@@ -1392,6 +1407,15 @@ class StockRequestItem(TimeStampedModel):
         verbose_name = "Stock request item"
         verbose_name_plural = "Stock request items"
         ordering = ["request", "store_item__item_name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(requested_quantity__gt=0), name="ck_stockrequestitem_requested_positive"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(approved_quantity__gte=0) | models.Q(approved_quantity__isnull=True),
+                name="ck_stockrequestitem_approved_nonneg",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.requested_quantity} x {self.store_item.item_name} (request {self.request_id})"
@@ -1711,6 +1735,8 @@ class Issue(UserStampedModel):
             models.Index(fields=["site", "status"]),
             models.Index(fields=["site", "priority"]),
             models.Index(fields=["status", "due_date"]),
+            models.Index(fields=["status", "priority", "due_date"]),
+            models.Index(fields=["site", "created_at"]),
         ]
 
     def __str__(self) -> str:
@@ -1792,6 +1818,8 @@ class Job(UserStampedModel):
             models.Index(fields=["site", "status"]),
             models.Index(fields=["status", "due_date"]),
             models.Index(fields=["issue", "status"]),
+            models.Index(fields=["assigned_to_user", "status"]),
+            models.Index(fields=["site", "created_at"]),
         ]
 
     def __str__(self) -> str:
@@ -1885,7 +1913,10 @@ class DailySiteReport(UserStampedModel):
         constraints = [
             models.UniqueConstraint(fields=["site", "report_date"], name="uniq_daily_site_report"),
         ]
-        indexes = [models.Index(fields=["site", "report_date", "status"])]
+        indexes = [
+            models.Index(fields=["site", "report_date", "status"]),
+            models.Index(fields=["report_date", "status"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.site.name} {self.report_date} ({self.status})"
@@ -1918,6 +1949,7 @@ class ZoneSummaryReport(UserStampedModel):
         constraints = [
             models.UniqueConstraint(fields=["zone", "report_date"], name="uniq_zone_report"),
         ]
+        indexes = [models.Index(fields=["report_date", "status"])]
 
     def __str__(self) -> str:
         return f"{self.zone.name} {self.report_date} ({self.status})"
@@ -1950,6 +1982,7 @@ class AssistantGeneralSummaryReport(UserStampedModel):
         constraints = [
             models.UniqueConstraint(fields=["report_date"], name="uniq_assistant_report"),
         ]
+        indexes = [models.Index(fields=["report_date", "status"])]
 
     def __str__(self) -> str:
         return f"Assistant summary {self.report_date} ({self.status})"
@@ -1985,6 +2018,7 @@ class GeneralManagementReport(UserStampedModel):
         constraints = [
             models.UniqueConstraint(fields=["report_date"], name="uniq_general_report"),
         ]
+        indexes = [models.Index(fields=["report_date", "status"])]
 
     def __str__(self) -> str:
         return f"General report {self.report_date} ({self.status})"

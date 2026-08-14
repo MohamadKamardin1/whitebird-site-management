@@ -9,6 +9,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.cache import cached_or
 
 from .models import (
     AssistantGeneralSummaryReport,
@@ -19,8 +20,12 @@ from .models import (
 )
 from .scoping import visible_sites
 
+REPORT_CACHE_PREFIX = "report"
+_REPORT_CACHE_TTL = 600
+
 
 def site_report_detail(site_id: int, day: datetime.date) -> DailySiteReport | None:
+    """Single-row lookup used by write paths — always fresh (indexed)."""
     return DailySiteReport.objects.select_related("site", "created_by").filter(site_id=site_id, report_date=day).first()
 
 
@@ -90,34 +95,42 @@ def missing_site_reports(user: User, day: datetime.date) -> list[dict[str, Any]]
 
 
 def reporting_status_dashboard(user: User, day: datetime.date) -> dict[str, Any]:
-    """Per-site report statuses plus the higher-report chain status for a day."""
-    site_reports = site_reports_for_day(user, day)
-    today = timezone.localdate()
-    rows = [
-        {
-            "site_id": sr.site_id,
-            "site_name": sr.site.name,
-            "status": sr.status,
-            "submitted_at": sr.submitted_at,
-            "overdue": day < today and sr.status == SiteReportStatus.DRAFT,
+    """Per-site report statuses plus the higher-report chain status for a day.
+
+    Cached per user scope + date; report writes invalidate the ``report:``
+    prefix family.
+    """
+
+    def _compute() -> dict[str, Any]:
+        site_reports = site_reports_for_day(user, day)
+        today = timezone.localdate()
+        rows = [
+            {
+                "site_id": sr.site_id,
+                "site_name": sr.site.name,
+                "status": sr.status,
+                "submitted_at": sr.submitted_at,
+                "overdue": day < today and sr.status == SiteReportStatus.DRAFT,
+            }
+            for sr in site_reports
+        ]
+        missing = [
+            {"site_id": m["site_id"], "site_name": m["site_name"], "zone_id": m["zone_id"], "zone_name": m["zone_name"]}
+            for m in missing_site_reports(user, day)
+        ]
+        return {
+            "report_date": day.isoformat(),
+            "site_reports": rows,
+            "missing_site_reports": missing,
+            "zone_summary_status": (
+                ZoneSummaryReport.objects.filter(report_date=day).values_list("status", flat=True).first()
+            ),
+            "assistant_summary_status": (
+                AssistantGeneralSummaryReport.objects.filter(report_date=day).values_list("status", flat=True).first()
+            ),
+            "general_report_status": (
+                GeneralManagementReport.objects.filter(report_date=day).values_list("status", flat=True).first()
+            ),
         }
-        for sr in site_reports
-    ]
-    missing = [
-        {"site_id": m["site_id"], "site_name": m["site_name"], "zone_id": m["zone_id"], "zone_name": m["zone_name"]}
-        for m in missing_site_reports(user, day)
-    ]
-    return {
-        "report_date": day.isoformat(),
-        "site_reports": rows,
-        "missing_site_reports": missing,
-        "zone_summary_status": (
-            ZoneSummaryReport.objects.filter(report_date=day).values_list("status", flat=True).first()
-        ),
-        "assistant_summary_status": (
-            AssistantGeneralSummaryReport.objects.filter(report_date=day).values_list("status", flat=True).first()
-        ),
-        "general_report_status": (
-            GeneralManagementReport.objects.filter(report_date=day).values_list("status", flat=True).first()
-        ),
-    }
+
+    return cached_or(REPORT_CACHE_PREFIX, ("status", day, user.pk), _compute, _REPORT_CACHE_TTL)

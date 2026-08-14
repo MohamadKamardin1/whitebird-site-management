@@ -48,8 +48,28 @@ class CleanerFilter:
 
 
 def cleaner_list_queryset(user: User, spec: CleanerFilter) -> QuerySet[Cleaner]:
-    """Cleaners visible to the user (all statuses; management roles only)."""
-    qs: QuerySet[Cleaner] = Cleaner.objects.all()
+    """Cleaners visible to the user (all statuses; management roles only).
+
+    The verified-identity flag is annotated with an ``Exists`` subquery so
+    serializing a page never fires a per-cleaner document query (N+1).
+    """
+    from django.db.models import Exists, OuterRef
+
+    from .models import CleanerDocument, CleanerDocumentStatus, CleanerDocumentType
+
+    qs: QuerySet[Cleaner] = Cleaner.objects.annotate(
+        has_verified_id_flag=Exists(
+            CleanerDocument.objects.filter(
+                cleaner=OuterRef("pk"),
+                status=CleanerDocumentStatus.VERIFIED,
+                document_type__in=[
+                    CleanerDocumentType.BIRTH_CERTIFICATE,
+                    CleanerDocumentType.NIDA,
+                    CleanerDocumentType.ZANZIBAR_ID,
+                ],
+            )
+        )
+    )
     if spec.search:
         qs = qs.filter(
             Q(first_name__icontains=spec.search)
@@ -104,7 +124,11 @@ def cleaner_serialize(cleaner: Cleaner, user: User) -> dict[str, Any]:
         "near_person_phone": cleaner.near_person_phone if full else mask_value(cleaner.near_person_phone),
         "status": cleaner.status,
         "registration_date": cleaner.registration_date.isoformat(),
-        "has_verified_id": cleaner.has_verified_id,
+        "has_verified_id": (
+            bool(getattr(cleaner, "has_verified_id_flag", None))
+            if getattr(cleaner, "has_verified_id_flag", None) is not None
+            else cleaner.has_verified_id
+        ),
         "notes": cleaner.notes,
         "created_at": cleaner.created_at.isoformat(),
         "updated_at": cleaner.updated_at.isoformat(),
