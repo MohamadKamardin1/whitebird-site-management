@@ -219,6 +219,27 @@ Submission requires all scheduled cleaners to be marked. Bulk payload:
 `{site_id, attendance_date, entries: [{record_id | cleaner_id, status,
 check_in_time, check_out_time, notes}]}`.
 
+### Trainees
+
+| Method | Path                              | Description                                     |
+| ------ | --------------------------------- | ----------------------------------------------- |
+| GET    | `/trainees`                       | Paginated list (`site_id`/`status`/`search`)    |
+| POST   | `/trainees`                       | Start a program (`cleaner_id`, `site_id`, dates)|
+| GET    | `/trainees/{id}`                  | Program detail                                  |
+| PUT    | `/trainees/{id}`                  | Update supervisor / notes                       |
+| GET    | `/trainees/{id}/evaluations`      | Evaluations for a program                       |
+| POST   | `/trainees/{id}/evaluations`      | Record an evaluation (`is_final`, four scores)  |
+| POST   | `/trainees/{id}/extend`           | Extend (`new_expected_end_date`, `reason`)      |
+| POST   | `/trainees/{id}/pass`             | Pass → cleaner ACTIVE (final eval + verified ID)|
+| POST   | `/trainees/{id}/fail`             | Fail → cleaner INACTIVE (`reason`)              |
+| POST   | `/trainees/{id}/drop`             | Drop → cleaner INACTIVE (`reason`)              |
+| GET    | `/trainees/summary`               | Counts per status (`site_id`/`status` filters)  |
+
+Lifecycle: in_training → extended | passed | failed | dropped. One active
+program per cleaner. Read = management roles or viewer; start/update/evaluate =
+site-scoped management; pass/fail/drop = senior management only. `/trainees`
+routes are registered before `{id}` routes so `/trainees/summary` resolves.
+
 ## Outside the API
 
 - `/healthz` — liveness (no dependencies touched)

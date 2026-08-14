@@ -270,3 +270,28 @@ engineering contract.
     bulk entry use `bulk_create`/`bulk_update`. Query-count tests enforce this.
 75. **`attendance_rate`** = `(present + late) / (present + late + absent)`
     (sick/leave/permission/off are excused and excluded).
+
+## Trainee lifecycle & conversion (Prompt 9)
+
+76. **One active program** per cleaner: a partial unique constraint
+    (`uniq_active_trainee_program`) forbids a second `in_training`/`extended`
+    program while an earlier one is still open; final statuses free the slot.
+77. **Starting** a program flips the cleaner to TRAINEE and is rejected for
+    ACTIVE cleaners. Cleaners must be APPLICANT or INACTIVE to be re-entered
+    (they may re-train after a fail/drop).
+78. **Final decisions** require `actual_end_date` (services default it to
+    today) and: pass requires a final evaluation plus a verified ID document
+    (`Cleaner.has_verified_id`); fail/drop require a non-empty reason.
+79. **Conversion**: pass sets the cleaner to ACTIVE; fail/drop set it to
+    INACTIVE. Program status, actual end date, and cleaner status change in the
+    same transaction with audit + `Trainee*` domain events.
+80. **Scoring**: each of attendance/performance/behavior/skill is 0–100;
+    `total_score` is their sum (≤ 400), computed automatically when omitted and
+    re-computed on save. `trainee_average_score` averages a program's
+    evaluations.
+81. **Permissions**: reads require any management role or management viewer;
+    start/update/evaluate require site-scoped management (`user_can_manage_site`);
+    pass/fail/drop are restricted to SYSTEM_ADMIN / GENERAL_SUPERVISOR /
+    ASSISTANT_GENERAL_SUPERVISOR.
+82. **Admin**: actions reuse the services (pass/fail/drop/extend), completed
+    programs are readonly, and deletion is blocked once a program is final.

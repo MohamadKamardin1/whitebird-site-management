@@ -100,6 +100,8 @@ from .models import (
     SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    TraineeEvaluation,
+    TraineeProgram,
     WorkMode,
     Zone,
 )
@@ -157,6 +159,14 @@ from .schemas import (
     SiteUpdateIn,
     StatusRef,
     StatusUpdateIn,
+    TraineeDecisionIn,
+    TraineeEvaluationCreateIn,
+    TraineeEvaluationOut,
+    TraineeExtendIn,
+    TraineeProgramCreateIn,
+    TraineeProgramOut,
+    TraineeProgramUpdateIn,
+    TraineeSummaryOut,
     ZoneOut,
 )
 from .scoping import site_in_user_scope, visible_sites, visible_zones
@@ -203,6 +213,22 @@ from .services import (
     update_operational_role,
     update_shift,
     update_site,
+)
+from .trainee_selectors import (
+    TraineeFilter,
+    get_trainee_program_or_none,
+    trainee_evaluations,
+    trainee_list_queryset,
+    trainee_summary,
+)
+from .trainee_services import (
+    drop_trainee,
+    extend_trainee_program,
+    fail_trainee,
+    pass_trainee,
+    record_trainee_evaluation,
+    start_trainee_program,
+    update_trainee_program,
 )
 
 PAGE_PARAMS_DEFAULT: Any = Query()  # type: ignore[type-arg]
@@ -1881,3 +1907,254 @@ def attendance_single(
         notes=payload.notes,
     )
     return _attendance_out(updated)
+
+
+# --------------------------------------------------------------------------- #
+# Trainee lifecycle
+# --------------------------------------------------------------------------- #
+
+
+def _trainee_read(user: User) -> None:
+    if not (management_required(user) or user.is_management_viewer):
+        raise PermissionDenied("Trainee records require a management role.")
+
+
+def _trainee_manage(user: User, site_id: int) -> None:
+    _trainee_read(user)
+    if not user_can_manage_site(user, site_id):
+        raise PermissionDenied("You cannot manage trainees for this site.")
+
+
+def _trainee_decide(user: User) -> None:
+    if not (user.is_system_admin or user.role in {RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
+        raise PermissionDenied("Only senior management can make final trainee decisions.")
+
+
+def _trainee_out(p: TraineeProgram) -> TraineeProgramOut:
+    latest = p.evaluations.order_by("-evaluation_date").first()
+    return TraineeProgramOut(
+        id=p.pk,
+        cleaner_id=p.cleaner_id,
+        cleaner_name=p.cleaner.full_name,
+        site_id=p.site_id,
+        site_name=p.site.name,
+        assigned_site_supervisor=p.assigned_site_supervisor.email if p.assigned_site_supervisor else None,
+        start_date=p.start_date,
+        expected_end_date=p.expected_end_date,
+        actual_end_date=p.actual_end_date,
+        status=p.status,
+        notes=p.notes,
+        evaluation_count=p.evaluations.count(),
+        latest_total=latest.total_score if latest else None,
+    )
+
+
+def _evaluation_out(e: TraineeEvaluation) -> TraineeEvaluationOut:
+    return TraineeEvaluationOut(
+        id=e.pk,
+        trainee_program_id=e.trainee_program_id,
+        evaluation_date=e.evaluation_date,
+        attendance_score=e.attendance_score,
+        performance_score=e.performance_score,
+        behavior_score=e.behavior_score,
+        skill_score=e.skill_score,
+        total_score=e.total_score or 0,
+        comments=e.comments,
+        is_final=e.is_final,
+        evaluated_by=e.evaluated_by.email if e.evaluated_by else None,
+    )
+
+
+@router.get(
+    "/trainees",
+    response=Paginated[TraineeProgramOut],
+    summary="List trainee programs (paginated, role-scoped)",
+)
+def trainee_list(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    site_id: int | None = None,
+    status: str | None = None,
+    search: str | None = None,
+) -> Paginated[TraineeProgramOut]:
+    _trainee_read(request.auth)
+    spec = TraineeFilter(site_id=site_id, status=status, search=search)
+    qs = trainee_list_queryset(request.auth, spec)
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    results = [_trainee_out(p) for p in items]
+    return paginated_response(request, qs, page, page_size, results, count)
+
+
+@router.post("/trainees", response=TraineeProgramOut, summary="Start a trainee program")
+def trainee_create(request: AuthenticatedRequest, payload: TraineeProgramCreateIn) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    cleaner = get_cleaner_or_none(payload.cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    site = get_site_or_none(payload.site_id)
+    if site is None:
+        raise Http404("Site not found.")
+    _trainee_manage(request.auth, site.pk)
+    supervisor = (
+        User.objects.filter(pk=payload.assigned_site_supervisor_id).first()
+        if payload.assigned_site_supervisor_id
+        else None
+    )
+    program = start_trainee_program(
+        cleaner=cleaner,
+        site=site,
+        expected_end_date=payload.expected_end_date,
+        start_date=payload.start_date,
+        assigned_site_supervisor=supervisor,
+        notes=payload.notes,
+        actor=request.auth,
+    )
+    return _trainee_out(program)
+
+
+@router.get("/trainees/summary", response=TraineeSummaryOut, summary="Trainee summary")
+def trainee_summary_endpoint(
+    request: AuthenticatedRequest,
+    site_id: int | None = None,
+    status: str | None = None,
+) -> TraineeSummaryOut:
+    _trainee_read(request.auth)
+    return TraineeSummaryOut(**trainee_summary(request.auth, TraineeFilter(site_id=site_id, status=status)))
+
+
+@router.get("/trainees/{program_id}", response=TraineeProgramOut, summary="Trainee program detail")
+def trainee_detail(request: AuthenticatedRequest, program_id: int) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    if not site_in_user_scope(request.auth, program.site_id):
+        raise PermissionDenied("You do not have access to this trainee program.")
+    return _trainee_out(program)
+
+
+@router.put("/trainees/{program_id}", response=TraineeProgramOut, summary="Update a trainee program")
+def trainee_update(
+    request: AuthenticatedRequest, program_id: int, payload: TraineeProgramUpdateIn
+) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_manage(request.auth, program.site_id)
+    supervisor = (
+        User.objects.filter(pk=payload.assigned_site_supervisor_id).first()
+        if payload.assigned_site_supervisor_id
+        else None
+    )
+    updated = update_trainee_program(
+        program=program, actor=request.auth, assigned_site_supervisor=supervisor, notes=payload.notes
+    )
+    return _trainee_out(updated)
+
+
+@router.get(
+    "/trainees/{program_id}/evaluations",
+    response=list[TraineeEvaluationOut],
+    summary="List trainee evaluations",
+)
+def trainee_evaluations_list(request: AuthenticatedRequest, program_id: int) -> list[TraineeEvaluationOut]:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    if not site_in_user_scope(request.auth, program.site_id):
+        raise PermissionDenied("You do not have access to this trainee program.")
+    return [_evaluation_out(e) for e in trainee_evaluations(program_id)]
+
+
+@router.post(
+    "/trainees/{program_id}/evaluations",
+    response=TraineeEvaluationOut,
+    summary="Record a trainee evaluation",
+)
+def trainee_evaluation_create(
+    request: AuthenticatedRequest, program_id: int, payload: TraineeEvaluationCreateIn
+) -> TraineeEvaluationOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_manage(request.auth, program.site_id)
+    evaluation = record_trainee_evaluation(
+        program=program,
+        evaluation_date=payload.evaluation_date,
+        actor=request.auth,
+        attendance_score=payload.attendance_score,
+        performance_score=payload.performance_score,
+        behavior_score=payload.behavior_score,
+        skill_score=payload.skill_score,
+        total_score=payload.total_score,
+        comments=payload.comments,
+        is_final=payload.is_final,
+    )
+    return _evaluation_out(evaluation)
+
+
+@router.post(
+    "/trainees/{program_id}/extend",
+    response=TraineeProgramOut,
+    summary="Extend a trainee program",
+)
+def trainee_extend(request: AuthenticatedRequest, program_id: int, payload: TraineeExtendIn) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_manage(request.auth, program.site_id)
+    updated = extend_trainee_program(
+        program=program, new_expected_end_date=payload.new_expected_end_date, reason=payload.reason, actor=request.auth
+    )
+    return _trainee_out(updated)
+
+
+@router.post(
+    "/trainees/{program_id}/pass",
+    response=TraineeProgramOut,
+    summary="Pass a trainee (converts to ACTIVE cleaner)",
+)
+def trainee_pass(request: AuthenticatedRequest, program_id: int, payload: TraineeDecisionIn) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_decide(request.auth)
+    updated = pass_trainee(
+        program=program, actor=request.auth, actual_end_date=payload.actual_end_date, reason=payload.reason
+    )
+    return _trainee_out(updated)
+
+
+@router.post(
+    "/trainees/{program_id}/fail",
+    response=TraineeProgramOut,
+    summary="Fail a trainee",
+)
+def trainee_fail(request: AuthenticatedRequest, program_id: int, payload: TraineeDecisionIn) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_decide(request.auth)
+    updated = fail_trainee(program=program, actor=request.auth, reason=payload.reason)
+    return _trainee_out(updated)
+
+
+@router.post(
+    "/trainees/{program_id}/drop",
+    response=TraineeProgramOut,
+    summary="Drop a trainee",
+)
+def trainee_drop(request: AuthenticatedRequest, program_id: int, payload: TraineeDecisionIn) -> TraineeProgramOut:
+    _trainee_read(request.auth)
+    program = get_trainee_program_or_none(program_id)
+    if program is None:
+        raise Http404("Trainee program not found.")
+    _trainee_decide(request.auth)
+    updated = drop_trainee(program=program, actor=request.auth, reason=payload.reason)
+    return _trainee_out(updated)

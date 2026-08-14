@@ -592,3 +592,77 @@ class AttendanceSummaryOut(Schema):
     permission: int
     off: int
     attendance_rate: float
+
+
+class TraineeProgramOut(Schema):
+    id: int
+    cleaner_id: int
+    cleaner_name: str
+    site_id: int
+    site_name: str
+    assigned_site_supervisor: str | None = None
+    start_date: date
+    expected_end_date: date
+    actual_end_date: date | None = None
+    status: str
+    notes: str
+    evaluation_count: int = 0
+    latest_total: int | None = None
+
+
+class TraineeProgramCreateIn(Schema):
+    cleaner_id: int
+    site_id: int
+    expected_end_date: date
+    start_date: date | None = None
+    assigned_site_supervisor_id: int | None = None
+    notes: str = ""
+
+
+class TraineeProgramUpdateIn(Schema):
+    assigned_site_supervisor_id: int | None = None
+    notes: str | None = None
+
+
+class TraineeEvaluationOut(Schema):
+    id: int
+    trainee_program_id: int
+    evaluation_date: date
+    attendance_score: int
+    performance_score: int
+    behavior_score: int
+    skill_score: int
+    total_score: int
+    comments: str
+    is_final: bool
+    evaluated_by: str | None = None
+
+
+class TraineeEvaluationCreateIn(Schema):
+    evaluation_date: date
+    attendance_score: int = Field(default=0, ge=0, le=100)
+    performance_score: int = Field(default=0, ge=0, le=100)
+    behavior_score: int = Field(default=0, ge=0, le=100)
+    skill_score: int = Field(default=0, ge=0, le=100)
+    total_score: int | None = Field(default=None, ge=0, le=400)
+    comments: str = ""
+    is_final: bool = False
+
+
+class TraineeExtendIn(Schema):
+    new_expected_end_date: date
+    reason: str = Field(min_length=1)
+
+
+class TraineeDecisionIn(Schema):
+    reason: str = Field(default="", min_length=1)
+    actual_end_date: date | None = None
+
+
+class TraineeSummaryOut(Schema):
+    total_trainees: int
+    in_training: int
+    extended: int
+    passed: int
+    failed: int
+    dropped: int

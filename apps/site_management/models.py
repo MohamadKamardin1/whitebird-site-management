@@ -1071,3 +1071,107 @@ class AttendanceRecord(UserStampedModel):
             AttendanceReviewStatus.DRAFT,
             AttendanceReviewStatus.RETURNED,
         }
+
+
+# --------------------------------------------------------------------------- #
+# Trainee lifecycle
+# --------------------------------------------------------------------------- #
+
+
+class TraineeProgramStatus(models.TextChoices):
+    IN_TRAINING = "in_training", "In Training"
+    EXTENDED = "extended", "Extended"
+    PASSED = "passed", "Passed"
+    FAILED = "failed", "Failed"
+    DROPPED = "dropped", "Dropped"
+
+
+class TraineeProgram(UserStampedModel):
+    """A training program a cleaner must pass before becoming an official cleaner."""
+
+    cleaner = models.ForeignKey(Cleaner, on_delete=models.CASCADE, related_name="trainee_programs")
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="trainee_programs")
+    assigned_site_supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supervised_trainees",
+    )
+    start_date = models.DateField(db_index=True)
+    expected_end_date = models.DateField()
+    actual_end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=TraineeProgramStatus.choices,
+        default=TraineeProgramStatus.IN_TRAINING,
+        db_index=True,
+    )
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Trainee program"
+        verbose_name_plural = "Trainee programs"
+        ordering = ["-start_date", "cleaner__last_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cleaner"],
+                condition=models.Q(status__in=[TraineeProgramStatus.IN_TRAINING, TraineeProgramStatus.EXTENDED]),
+                name="uniq_active_trainee_program",
+            )
+        ]
+        indexes = [models.Index(fields=["site", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.cleaner.full_name} trainee @ {self.site.name} ({self.status})"
+
+    @property
+    def is_active_program(self) -> bool:
+        return self.status in {TraineeProgramStatus.IN_TRAINING, TraineeProgramStatus.EXTENDED}
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.status in {TraineeProgramStatus.PASSED, TraineeProgramStatus.FAILED, TraineeProgramStatus.DROPPED}
+            and not self.actual_end_date
+        ):
+            raise ValidationError(
+                "actual_end_date is required for final program statuses.",
+                code="actual_end_date_required",
+            )
+        if self.expected_end_date and self.expected_end_date < self.start_date:
+            raise ValidationError("expected_end_date cannot be earlier than start_date.", code="invalid_dates")
+
+
+class TraineeEvaluation(TimeStampedModel):
+    """Periodic or final evaluation of a trainee program."""
+
+    trainee_program = models.ForeignKey(TraineeProgram, on_delete=models.CASCADE, related_name="evaluations")
+    evaluation_date = models.DateField(db_index=True)
+    attendance_score = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(100)])
+    performance_score = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(100)])
+    behavior_score = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(100)])
+    skill_score = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(100)])
+    total_score = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(400)])
+    comments = models.TextField(blank=True, default="")
+    is_final = models.BooleanField(default=False, help_text="Final evaluation required before a trainee can pass.")
+    evaluated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trainee_evaluations",
+    )
+
+    class Meta:
+        verbose_name = "Trainee evaluation"
+        verbose_name_plural = "Trainee evaluations"
+        ordering = ["-evaluation_date"]
+
+    def __str__(self) -> str:
+        return f"Evaluation for {self.trainee_program.cleaner.full_name} on {self.evaluation_date}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.total_score is None:
+            self.total_score = self.attendance_score + self.performance_score + self.behavior_score + self.skill_score

@@ -15,7 +15,34 @@ Module. Each prompt updates this file before its commit.
 | 6      | Cleaner registry & secure documents | Prompt 6 completed | —      |
 | 7      | Assignments & scheduling engine | Prompt 7 completed | —      |
 | 8      | Attendance engine | **Prompt 8 completed** | see CHANGELOG |
-| 9–20   | (pending)                                    | —                  | —      |
+| 9      | Trainee lifecycle & conversion | **Prompt 9 completed** | see CHANGELOG |
+| 10–20  | (pending)                                    | —                  | —      |
+
+## Prompt 9 — completed ✅
+
+Implemented the trainee lifecycle and cleaner conversion:
+
+- **`TraineeProgram`**: cleaner→site training with status
+  (in_training/extended/passed/failed/dropped), date window, assigned site
+  supervisor, notes, partial-unique `uniq_active_trainee_program` (one active
+  program per cleaner), `is_active_program`.
+- **`TraineeEvaluation`**: scored evaluations (attendance/performance/behavior/
+  skill ≤ 100 each, computed `total_score` ≤ 400), `is_final`, evaluated-by.
+- **Services** (transactional + audited): start (cleaner → TRAINEE, rejects
+  ACTIVE), update, extend (reason required), record evaluation, pass (final
+  evaluation + verified ID → cleaner ACTIVE), fail/drop (reason required →
+  cleaner INACTIVE); `TraineeStarted/Extended/Passed/Failed/Dropped` events.
+- **Selectors**: `TraineeFilter`, role-scoped `trainee_list_queryset`,
+  `trainee_evaluations`, `trainee_summary`, `trainee_average_score`.
+- **API**: `/trainees` list/create, `/trainees/{id}` detail/update,
+  evaluations list/create, `extend`/`pass`/`fail`/`drop`, `/trainees/summary`;
+  read = management or viewer, manage = site scope, decide = senior only.
+- **Admin**: `TraineeProgramAdmin` with evaluation inline, avg score,
+  extend/pass/fail/drop actions, readonly + delete guard for completed programs.
+- **Factory** + migration (`site_management.0007`).
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 348 passed ·
+coverage 90.13% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 8 — completed ✅
 

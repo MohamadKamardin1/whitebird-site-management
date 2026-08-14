@@ -5,6 +5,34 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 09] — 2026-08-14
+
+### Added
+
+- **`TraineeProgram`**: cleaner→site training lifecycle with status
+  (in_training/extended/passed/failed/dropped), date window, assigned site
+  supervisor, notes, partial-unique `uniq_active_trainee_program` constraint
+  (one active program per cleaner), `is_active_program` helper.
+- **`TraineeEvaluation`**: scored evaluations (attendance/performance/behavior/
+  skill, each ≤ 100, computed `total_score` ≤ 400), `is_final` flag, evaluated-by.
+- **Services** (transactional + audited): `start_trainee_program` (cleaner →
+  TRAINEE, rejects ACTIVE cleaners), `update_trainee_program`,
+  `extend_trainee_program` (reason required), `record_trainee_evaluation`,
+  `pass_trainee` (final evaluation + verified ID required; cleaner → ACTIVE),
+  `fail_trainee` / `drop_trainee` (reason required; cleaner → INACTIVE);
+  `TraineeStarted/Extended/Passed/Failed/Dropped` domain events.
+- **Selectors**: `TraineeFilter` (site_id/status/search), role-scoped
+  `trainee_list_queryset`, `trainee_evaluations`, `trainee_summary`,
+  `trainee_average_score`.
+- **API**: `/trainees` list (paginated, filtered) & create, `/trainees/{id}`
+  detail & update, evaluations list & create, `extend`/`pass`/`fail`/`drop`
+  actions, `/trainees/summary`; read = management or viewer, manage = site
+  scope, decide = senior management only.
+- **Admin**: `TraineeProgramAdmin` (evaluation inline, status filter, avg
+  score, extend/pass/fail/drop actions, readonly + delete guard for completed
+  programs).
+- **Factory** + migration for trainee programs and evaluations.
+
 ## [Prompt 08] — 2026-08-13
 
 ### Added

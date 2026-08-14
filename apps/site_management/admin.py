@@ -6,6 +6,7 @@ from typing import Any
 
 from django.contrib import admin
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Avg
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.utils import timezone
 from django.utils.safestring import mark_safe
@@ -32,6 +33,9 @@ from .models import (
     SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    TraineeEvaluation,
+    TraineeProgram,
+    TraineeProgramStatus,
     Zone,
     ZoneSupervisorAssignment,
 )
@@ -622,3 +626,108 @@ class AttendanceRecordAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
             updated_by=request.user,
         )
         self.message_user(request, f"{updated} record(s) reviewed.")
+
+
+class TraineeEvaluationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = TraineeEvaluation
+    extra = 0
+    fk_name = "trainee_program"
+    fields = (
+        "evaluation_date",
+        "attendance_score",
+        "performance_score",
+        "behavior_score",
+        "skill_score",
+        "total_score",
+        "is_final",
+        "comments",
+    )
+    readonly_fields = ("total_score",)
+    show_change_link = True
+
+
+@admin.register(TraineeProgram)
+class TraineeProgramAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = (
+        "cleaner",
+        "site",
+        "status_badge",
+        "start_date",
+        "expected_end_date",
+        "actual_end_date",
+        "avg_score",
+        "assigned_site_supervisor",
+    )
+    list_filter = ("status", "site", "start_date")
+    search_fields = ("cleaner__first_name", "cleaner__last_name", "site__name")
+    date_hierarchy = "start_date"
+    raw_id_fields = ("cleaner", "site", "assigned_site_supervisor", "created_by", "updated_by")
+    inlines = [TraineeEvaluationInline]
+    actions = ["extend_programs", "pass_programs", "fail_programs", "drop_programs"]
+
+    @admin.display(description="Status")
+    def status_badge(self, obj: TraineeProgram) -> str:
+        return obj.status
+
+    @admin.display(description="Avg score")
+    def avg_score(self, obj: TraineeProgram) -> str:
+        total = obj.evaluations.aggregate(avg=Avg("total_score"))["avg"]
+        return f"{total:.1f}" if total is not None else "—"
+
+    def get_readonly_fields(self, request: Any, obj: TraineeProgram | None = None) -> tuple[Any, ...]:
+        readonly: tuple[Any, ...] = ("created_at", "updated_at")
+        if obj is not None and not obj.is_active_program:
+            readonly += ("cleaner", "site", "start_date", "expected_end_date", "actual_end_date", "status")
+        return readonly
+
+    def has_delete_permission(self, request: Any, obj: TraineeProgram | None = None) -> bool:
+        if obj is None:
+            return True
+        return obj.is_active_program
+
+    @admin.action(description="Extend selected programs")
+    def extend_programs(self, request: Any, queryset: Any) -> None:
+        from datetime import date, timedelta  # noqa: PLC0415
+
+        updated = 0
+        for program in queryset.filter(status__in=["in_training", "extended"]):
+            program.expected_end_date = date.today() + timedelta(days=30)
+            program.status = TraineeProgramStatus.EXTENDED
+            program.notes = (program.notes + "\n" if program.notes else "") + "Extended: admin batch action"
+            program.updated_by = request.user
+            program.save()
+            updated += 1
+        self.message_user(request, f"{updated} program(s) extended by 30 days.")
+
+    @admin.action(description="Pass selected programs")
+    def pass_programs(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.trainee_services import pass_trainee  # noqa: PLC0415
+
+        updated = 0
+        for program in queryset.filter(status__in=["in_training", "extended"]):
+            try:
+                pass_trainee(program=program, actor=request.user, reason="Passed via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} program(s) passed.")
+
+    @admin.action(description="Fail selected programs")
+    def fail_programs(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.trainee_services import fail_trainee  # noqa: PLC0415
+
+        updated = 0
+        for program in queryset.filter(status__in=["in_training", "extended"]):
+            fail_trainee(program=program, actor=request.user, reason="Failed via admin")
+            updated += 1
+        self.message_user(request, f"{updated} program(s) failed.")
+
+    @admin.action(description="Drop selected programs")
+    def drop_programs(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.trainee_services import drop_trainee  # noqa: PLC0415
+
+        updated = 0
+        for program in queryset.filter(status__in=["in_training", "extended"]):
+            drop_trainee(program=program, actor=request.user, reason="Dropped via admin")
+            updated += 1
+        self.message_user(request, f"{updated} program(s) dropped.")

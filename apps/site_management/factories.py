@@ -25,6 +25,8 @@ from .models import (
     SiteStatus,
     SiteSupervisorAssignment,
     SiteType,
+    TraineeEvaluation,
+    TraineeProgram,
     WorkMode,
     Zone,
     ZoneSupervisorAssignment,
@@ -233,3 +235,28 @@ class AttendanceRecordFactory(factory.django.DjangoModelFactory):
     status = "present"
     review_status = "draft"
     recorded_by = factory.SubFactory(UserFactory)
+
+
+class TraineeProgramFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TraineeProgram
+
+    cleaner = factory.SubFactory(CleanerFactory)
+    site = factory.SubFactory(SiteFactory)
+    start_date = date.today() - timedelta(days=10)
+    expected_end_date = date.today() + timedelta(days=50)
+    status = "in_training"
+    created_by = factory.SubFactory(UserFactory)
+
+
+class TraineeEvaluationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TraineeEvaluation
+
+    trainee_program = factory.SubFactory(TraineeProgramFactory)
+    evaluation_date = date.today()
+    attendance_score = 80
+    performance_score = 80
+    behavior_score = 80
+    skill_score = 80
+    evaluated_by = factory.SubFactory(UserFactory)
