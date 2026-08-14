@@ -5,6 +5,44 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 04] — 2026-08-13
+
+### Added
+
+- **`Zone` model**: name, unique `code`, description, soft-deactivate
+  (`ActivatableModel` + `UserStampedModel`).
+- **`Site` organisation fields**: `zone` FK, `building_name`, `location`,
+  `contact_person`, `work_mode` (`FULL_TIME`/`SHIFT`/`FULL_TIME_AND_SHIFT`),
+  validated `working_days` weekday codes, `start_date`, `notes`, plus
+  `has_operational_history` and `supervisor_count`.
+- **Supervisor assignments**: `SiteSupervisorAssignment`,
+  `ZoneSupervisorAssignment`, `AssistantGeneralSupervisorAssignment` — date
+  windows (`assigned_from`/`assigned_to`), soft `is_active`, partial-unique
+  active constraints, `clean()` rules (AGS zone required unless `all_zones`,
+  per-site supervisor cap from constance `MAX_SITE_SUPERVISORS_PER_SITE`,
+  date-range validation).
+- **Scoping selectors** (`apps/site_management/scoping.py`): `visible_zones`,
+  `visible_sites`, `supervised_sites`, `assigned_zone_ids`,
+  `site_in_user_scope`, `active_site_supervisor_ids`; `user_can_manage_site`
+  rewritten for the assignment-based rules.
+- **Services** for zone lifecycle (`create`/`update`/`deactivate`/`restore`)
+  and supervisor assignment/ending (transactional, audited, cache-safe).
+- **Admin**: `ZoneAdmin`, `SiteAdmin` (supervisor inline, delete guard),
+  and the three assignment admins (search/filter/date-hierarchy/
+  activate-deactivate actions/raw id fields).
+- **API foundation**: paginated role-scoped `GET /zones`, `GET /zones/{id}`,
+  paginated `GET /sites` (Paginated envelope + `zone_id`/`work_mode` filters),
+  `GET /sites/{id}/supervisors`.
+- **Factories**: `ZoneFactory`, updated `SiteFactory`, and the three
+  assignment factories.
+
+### Changed
+
+- `/sites` list response is now the paginated envelope
+  (`count`/`next`/`previous`/`results`) instead of a bare array.
+- Site list/detail include zone and work-mode data; visibility is
+  assignment/zone-based via the new scoping selectors.
+
 ## [Prompt 03] — 2026-08-13
 
 ### Added

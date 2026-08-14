@@ -44,7 +44,11 @@ def _validation_fields(exc: DjangoValidationError) -> dict[str, Any]:
     else:
         for error in getattr(exc, "error_list", []):
             key = getattr(error, "field", None) or "_"
-            fields.setdefault(key, []).append(str(error))
+            messages = getattr(error, "messages", None)
+            if messages:
+                fields.setdefault(key, []).extend(str(message) for message in messages)
+            else:
+                fields.setdefault(key, []).append(str(error))
     return fields
 
 

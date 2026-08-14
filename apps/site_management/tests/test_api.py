@@ -29,24 +29,26 @@ def test_site_list_admin_sees_all(admin_client, site):
     create_site(draft=SiteDraft(name="Second"), actor=site.created_by)
     response = admin_client.get("/api/site-management/v1/sites")
     assert response.status_code == 200
-    assert len(response.json()) == 2
+    assert response.json()["count"] == 2
+    assert len(response.json()["results"]) == 2
 
 
 @pytest.mark.django_db
-def test_site_list_staff_sees_only_assigned(admin_client, staff_client, site):
+def test_site_list_site_supervisor_sees_only_assigned(admin_client, site_supervisor_client, site_supervisor_user, site):
     create_site(draft=SiteDraft(name="Hidden"), actor=site.created_by)
-    staff = User.objects.get(email="viewer@whitebird.test")
-    assign_staff(site=site, user=staff, actor=site.created_by)
-    response = staff_client.get("/api/site-management/v1/sites")
+    from apps.site_management.factories import SiteSupervisorAssignmentFactory
+
+    SiteSupervisorAssignmentFactory(site=site, user=site_supervisor_user)
+    response = site_supervisor_client.get("/api/site-management/v1/sites")
     assert response.status_code == 200
-    assert [s["name"] for s in response.json()] == [site.name]
+    assert [s["name"] for s in response.json()["results"]] == [site.name]
 
 
 @pytest.mark.django_db
 def test_site_list_filters(admin_client, site, site_status, site_type):
     response = admin_client.get("/api/site-management/v1/sites", {"status": "active", "region": "Unguja North"})
     assert response.status_code == 200
-    assert len(response.json()) == 1
+    assert response.json()["count"] == 1
 
 
 @pytest.mark.django_db
@@ -206,8 +208,8 @@ def test_openapi_schema_available(anon_client):
 
 
 @pytest.mark.django_db
-def test_staff_cannot_read_unassigned_site(staff_client, site):
-    assert staff_client.get(f"/api/site-management/v1/sites/{site.pk}").status_code == 403
+def test_site_supervisor_cannot_read_unassigned_site(site_supervisor_client, site):
+    assert site_supervisor_client.get(f"/api/site-management/v1/sites/{site.pk}").status_code == 403
 
 
 @pytest.mark.django_db

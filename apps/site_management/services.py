@@ -8,6 +8,7 @@ invalidates affected caches and schedules asynchronous side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -15,6 +16,7 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from apps.accounts.models import User
+from apps.core.cache import invalidate_prefix
 from apps.core.models import AuditLog
 from apps.core.services import model_data, record_audit
 
@@ -22,12 +24,16 @@ from .models import (
     Asset,
     AssetCategory,
     AssignmentRole,
+    AssistantGeneralSupervisorAssignment,
     Department,
     Notification,
     Site,
     SiteStatus,
+    SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    Zone,
+    ZoneSupervisorAssignment,
 )
 from .selectors import invalidate_site
 
@@ -435,3 +441,244 @@ def _serialise(value: object) -> object:
     if hasattr(value, "slug"):
         return value.slug
     return value
+
+
+# --------------------------------------------------------------------------- #
+# Zones
+# --------------------------------------------------------------------------- #
+
+
+def _unique_zone_code(base: str, *, length: int = 8) -> str:
+    raw = slugify(base).upper().replace("-", "")[: length - 2] or "ZONE"
+    candidate = raw
+    counter = 2
+    while Zone.objects.filter(code=candidate).exists():
+        candidate = f"{raw[: length - 1]}{counter}"
+        counter += 1
+    return candidate
+
+
+def create_zone(*, name: str, description: str = "", actor: User) -> Zone:
+    with transaction.atomic():
+        zone = Zone.objects.create(
+            name=name,
+            code=_unique_zone_code(name),
+            description=description,
+            created_by=actor,
+            updated_by=actor,
+        )
+        record_audit(
+            action=AuditLog.Action.CREATE,
+            actor=actor,
+            entity=zone,
+            summary=f"Created zone {zone.name}",
+            after_data=model_data(zone),
+        )
+    return zone
+
+
+def update_zone(*, zone: Zone, name: str | None = None, description: str | None = None, actor: User) -> Zone:
+    with transaction.atomic():
+        before = model_data(zone)
+        if name is not None and name != zone.name:
+            zone.name = name
+        if description is not None:
+            zone.description = description
+        zone.updated_by = actor
+        zone.save(update_fields=["name", "description", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.UPDATE,
+            actor=actor,
+            entity=zone,
+            summary=f"Updated zone {zone.name}",
+            before_data=before,
+            after_data=model_data(zone),
+        )
+        invalidate_prefix("site:detail")
+        invalidate_prefix("site:stats")
+    return zone
+
+
+def deactivate_zone(*, zone: Zone, actor: User) -> Zone:
+    with transaction.atomic():
+        zone.is_active = False
+        zone.updated_by = actor
+        zone.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.ARCHIVE,
+            actor=actor,
+            entity=zone,
+            summary=f"Deactivated zone {zone.name}",
+            before_data=model_data(zone),
+        )
+        invalidate_prefix("site:detail")
+        invalidate_prefix("site:stats")
+    return zone
+
+
+def restore_zone(*, zone: Zone, actor: User) -> Zone:
+    with transaction.atomic():
+        zone.is_active = True
+        zone.updated_by = actor
+        zone.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.RESTORE,
+            actor=actor,
+            entity=zone,
+            summary=f"Restored zone {zone.name}",
+        )
+        invalidate_prefix("site:detail")
+        invalidate_prefix("site:stats")
+    return zone
+
+
+# --------------------------------------------------------------------------- #
+# Supervisor assignments
+# --------------------------------------------------------------------------- #
+
+
+def assign_site_supervisor(
+    *,
+    site: Site,
+    user: User,
+    assigned_from: date,
+    assigned_to: date | None = None,
+    is_primary: bool = False,
+    actor: User,
+) -> SiteSupervisorAssignment:
+    with transaction.atomic():
+        assignment = SiteSupervisorAssignment(
+            site=site,
+            user=user,
+            assigned_from=assigned_from,
+            assigned_to=assigned_to,
+            is_primary=is_primary,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        assignment.full_clean()
+        if is_primary:
+            SiteSupervisorAssignment.objects.filter(site=site, is_active=True).exclude(pk=assignment.pk).update(
+                is_primary=False
+            )
+        assignment.save()
+        record_audit(
+            action=AuditLog.Action.ASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"{user.email} assigned as supervisor of {site.name}",
+            after_data=model_data(assignment),
+        )
+        invalidate_site(site.pk)
+    return assignment
+
+
+def end_site_supervisor_assignment(*, assignment: SiteSupervisorAssignment, actor: User) -> SiteSupervisorAssignment:
+    with transaction.atomic():
+        assignment.is_active = False
+        assignment.updated_by = actor
+        assignment.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.UNASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"Ended supervisor assignment for {assignment.user.email} at {assignment.site.name}",
+            before_data=model_data(assignment),
+        )
+        invalidate_site(assignment.site_id)
+    return assignment
+
+
+def assign_zone_supervisor(
+    *,
+    zone: Zone,
+    user: User,
+    assigned_from: date,
+    assigned_to: date | None = None,
+    actor: User,
+) -> ZoneSupervisorAssignment:
+    with transaction.atomic():
+        assignment = ZoneSupervisorAssignment(
+            zone=zone,
+            user=user,
+            assigned_from=assigned_from,
+            assigned_to=assigned_to,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        assignment.full_clean()
+        assignment.save()
+        record_audit(
+            action=AuditLog.Action.ASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"{user.email} assigned as supervisor of zone {zone.name}",
+            after_data=model_data(assignment),
+        )
+    return assignment
+
+
+def end_zone_supervisor_assignment(*, assignment: ZoneSupervisorAssignment, actor: User) -> ZoneSupervisorAssignment:
+    with transaction.atomic():
+        assignment.is_active = False
+        assignment.updated_by = actor
+        assignment.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.UNASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"Ended zone supervisor assignment for {assignment.user.email} in {assignment.zone.name}",
+            before_data=model_data(assignment),
+        )
+    return assignment
+
+
+def assign_assistant_general_supervisor(
+    *,
+    user: User,
+    all_zones: bool,
+    zone: Zone | None = None,
+    assigned_from: date,
+    assigned_to: date | None = None,
+    actor: User,
+) -> AssistantGeneralSupervisorAssignment:
+    with transaction.atomic():
+        assignment = AssistantGeneralSupervisorAssignment(
+            user=user,
+            all_zones=all_zones,
+            zone=zone,
+            assigned_from=assigned_from,
+            assigned_to=assigned_to,
+            is_active=True,
+            created_by=actor,
+            updated_by=actor,
+        )
+        assignment.full_clean()
+        assignment.save()
+        record_audit(
+            action=AuditLog.Action.ASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"{user.email} assigned as assistant general supervisor",
+            after_data=model_data(assignment),
+        )
+    return assignment
+
+
+def end_assistant_general_supervisor_assignment(
+    *, assignment: AssistantGeneralSupervisorAssignment, actor: User
+) -> AssistantGeneralSupervisorAssignment:
+    with transaction.atomic():
+        assignment.is_active = False
+        assignment.updated_by = actor
+        assignment.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.UNASSIGN,
+            actor=actor,
+            entity=assignment,
+            summary=f"Ended assistant general supervisor assignment for {assignment.user.email}",
+            before_data=model_data(assignment),
+        )
+    return assignment

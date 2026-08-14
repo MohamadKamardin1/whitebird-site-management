@@ -9,11 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from django.http import Http404
 from ninja import Query, Router
 
 from apps.accounts.models import RoleCode, User
 from apps.accounts.permissions import role_required, user_can_manage_site
+from apps.core.pagination import PageParams, Paginated, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
 from .models import (
@@ -23,8 +25,11 @@ from .models import (
     Notification,
     Site,
     SiteStatus,
+    SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    WorkMode,
+    Zone,
 )
 from .schemas import (
     AssetCategoryOut,
@@ -43,10 +48,13 @@ from .schemas import (
     SiteStatsOut,
     SiteStatusOut,
     SiteSummaryOut,
+    SiteSupervisorOut,
     SiteTypeOut,
     SiteUpdateIn,
     StatusRef,
+    ZoneOut,
 )
+from .scoping import site_in_user_scope, visible_sites, visible_zones
 from .selectors import (
     SiteFilter,
     get_all_site_stats,
@@ -59,7 +67,7 @@ from .selectors import (
     list_notifications,
     list_site_statuses,
     list_site_types,
-    list_sites,
+    list_sites_queryset,
     unread_notification_count,
 )
 from .services import (
@@ -73,13 +81,14 @@ from .services import (
     deactivate_department,
     mark_notifications_read,
     restore_site,
-    scoped_site_ids,
     set_primary_assignment,
     unassign_staff,
     update_asset,
     update_department,
     update_site,
 )
+
+PAGE_PARAMS_DEFAULT: Any = Query()  # type: ignore[type-arg]
 
 router = Router()
 
@@ -92,7 +101,7 @@ router = Router()
 def _read_access(user: User, site_id: int) -> None:
     if user.is_system_admin:
         return
-    if not Site.objects.filter(pk=site_id, staff_assignments__user=user).exists():
+    if not site_in_user_scope(user, site_id):
         raise PermissionDenied("You do not have access to this site.")
 
 
@@ -134,8 +143,13 @@ def _summary(site: Site) -> SiteSummaryOut:
         name=site.name,
         slug=site.slug,
         code=site.code,
+        zone_id=site.zone_id,
+        zone_name=site.zone.name if site.zone else None,
         site_type=site.site_type.name if site.site_type else None,
         status=_status_ref(site),
+        work_mode=WorkMode(site.work_mode),
+        building_name=site.building_name,
+        location=site.location,
         city=site.city,
         region=site.region,
         country=site.country,
@@ -193,16 +207,23 @@ def _category_or_none(category_id: int | None) -> AssetCategory | None:
 # --------------------------------------------------------------------------- #
 
 
-@router.get("/sites", response=list[SiteSummaryOut], summary="List sites (filterable)")
+@router.get(
+    "/sites",
+    response=Paginated[SiteSummaryOut],
+    summary="List sites (filterable, paginated)",
+)
 def site_list(
     request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
     search: str | None = None,
     status: str | None = None,
     site_type: str | None = None,
     region: str | None = None,
     country: str | None = None,
+    zone_id: int | None = None,
+    work_mode: str | None = None,
     capacity_min: int | None = Query(None, ge=0),  # type: ignore[type-arg]
-) -> list[SiteSummaryOut]:
+) -> Paginated[SiteSummaryOut]:
     spec = SiteFilter(
         search=search,
         status=status,
@@ -211,11 +232,17 @@ def site_list(
         country=country,
         capacity_min=capacity_min,
     )
-    sites = list_sites(spec)
-    if not request.auth.is_admin:
-        allowed = set(scoped_site_ids(request.auth))
-        sites = [site for site in sites if site.pk in allowed]
-    return [_summary(site) for site in sites]
+    qs = list_sites_queryset(spec)
+    if zone_id is not None:
+        qs = qs.filter(zone_id=zone_id)
+    if work_mode is not None:
+        qs = qs.filter(work_mode=work_mode)
+    if not request.auth.is_system_admin:
+        qs = qs.filter(pk__in=visible_sites(request.auth))
+
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    summaries = [_summary(site) for site in items]
+    return paginated_response(request, qs, page, page_size, summaries, count)
 
 
 @router.get("/sites/{site_id}", response=SiteDetailOut, summary="Site detail (cached)")
@@ -323,6 +350,72 @@ def site_restore(request: AuthenticatedRequest, site_id: int) -> SiteDetailOut:
         raise Http404("Site not found.")
     restore_site(site=site, actor=request.auth)
     return _reload_detail(site.pk)
+
+
+# --------------------------------------------------------------------------- #
+# Zones
+# --------------------------------------------------------------------------- #
+
+
+def _zone_out(zone: Zone) -> ZoneOut:
+    return ZoneOut(
+        id=zone.pk,
+        name=zone.name,
+        code=zone.code,
+        description=zone.description,
+        is_active=zone.is_active,
+        site_count=zone.sites.filter(is_active=True).count(),
+        created_at=zone.created_at,
+    )
+
+
+@router.get(
+    "/zones",
+    response=Paginated[ZoneOut],
+    summary="List zones (paginated, role-scoped)",
+)
+def zone_list(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    search: str | None = None,
+) -> Paginated[ZoneOut]:
+    qs = visible_zones(request.auth)
+    if search:
+        qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+    items, count, page, page_size = paginate(qs, filters.page, filters.page_size)
+    zones = [_zone_out(zone) for zone in items]
+    return paginated_response(request, qs, page, page_size, zones, count)
+
+
+@router.get("/zones/{zone_id}", response=ZoneOut, summary="Zone detail")
+def zone_detail(request: AuthenticatedRequest, zone_id: int) -> ZoneOut:
+    zone = visible_zones(request.auth).filter(pk=zone_id).first()
+    if zone is None:
+        raise Http404("Zone not found.")
+    return _zone_out(zone)
+
+
+@router.get(
+    "/sites/{site_id}/supervisors",
+    response=list[SiteSupervisorOut],
+    summary="Active supervisors of a site",
+)
+def site_supervisors(request: AuthenticatedRequest, site_id: int) -> list[SiteSupervisorOut]:
+    _read_access(request.auth, site_id)
+    qs = SiteSupervisorAssignment.objects.filter(site_id=site_id, is_active=True).select_related("user", "site")
+    return [
+        SiteSupervisorOut(
+            id=assignment.pk,
+            user_id=assignment.user_id,
+            email=assignment.user.email,
+            full_name=assignment.user.full_name,
+            assigned_from=assignment.assigned_from,
+            assigned_to=assignment.assigned_to,
+            is_primary=assignment.is_primary,
+            is_active=assignment.is_active,
+        )
+        for assignment in qs.order_by("-is_primary", "assigned_from")
+    ]
 
 
 # --------------------------------------------------------------------------- #

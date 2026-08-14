@@ -8,14 +8,34 @@ Design notes
   trails survive an archive.
 * Assignment roles are code-level (permission-relevant), see
   :class:`AssignmentRole`.
+* The organisation hierarchy (zones, sites, supervisor assignments) is the
+  backbone of the module; supervisor access is derived from *active*
+  assignments.
 """
 
+from constance import config
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.core.managers import SoftDeleteManager
-from apps.core.models import TimeStampedModel
+from apps.core.models import ActivatableModel, TimeStampedModel, UserStampedModel
+
+from .validators import validate_working_days
+
+
+class WorkMode(models.TextChoices):
+    """How a site schedules its workforce.
+
+    ``work_mode`` is manually configured per site (never inferred) and
+    validated on every write path.
+    """
+
+    FULL_TIME = "full_time", "Full Time"
+    SHIFT = "shift", "Shift"
+    FULL_TIME_AND_SHIFT = "full_time_and_shift", "Full Time & Shift"
 
 
 class SiteType(TimeStampedModel):
@@ -58,14 +78,34 @@ class SiteStatus(TimeStampedModel):
         return self.name
 
 
-class Site(TimeStampedModel):
-    """A physical site (property/location) under management."""
+class Zone(UserStampedModel, ActivatableModel):
+    """A geographic/administrative grouping of sites (e.g. Unguja North)."""
 
     name = models.CharField(max_length=160)
-    slug = models.SlugField(max_length=160, unique=True)
     code = models.CharField(max_length=12, unique=True, db_index=True)
+    description = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Zone"
+        verbose_name_plural = "Zones"
+        ordering = ["name"]
+        indexes = [models.Index(fields=["is_active", "name"])]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Site(TimeStampedModel):
+    """A physical site (property/building) under management."""
+
+    name = models.CharField(max_length=160, help_text="Site name (site_name).")
+    slug = models.SlugField(max_length=160, unique=True)
+    code = models.CharField(max_length=12, unique=True, db_index=True, help_text="Unique site code (site_code).")
+    zone = models.ForeignKey(Zone, on_delete=models.SET_NULL, related_name="sites", null=True, blank=True)
     site_type = models.ForeignKey(SiteType, on_delete=models.PROTECT, related_name="sites", null=True, blank=True)
     status = models.ForeignKey(SiteStatus, on_delete=models.PROTECT, related_name="sites", null=True, blank=True)
+    building_name = models.CharField(max_length=200, blank=True, default="")
+    location = models.CharField(max_length=255, blank=True, default="")
     description = models.TextField(blank=True, default="")
     address = models.CharField(max_length=255, blank=True, default="")
     city = models.CharField(max_length=120, blank=True, default="")
@@ -75,9 +115,25 @@ class Site(TimeStampedModel):
     latitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
     longitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
     capacity = models.PositiveIntegerField(default=0, help_text="Maximum concurrent guests.")
+    contact_person = models.CharField(max_length=150, blank=True, default="")
     contact_email = models.EmailField(blank=True, default="")
     contact_phone = models.CharField(max_length=32, blank=True, default="")
-    is_active = models.BooleanField(default=True, db_index=True, help_text="Soft-delete flag.")
+    work_mode = models.CharField(
+        max_length=24,
+        choices=WorkMode.choices,
+        default=WorkMode.FULL_TIME,
+        db_index=True,
+        help_text="Manually configured staffing schedule model.",
+    )
+    working_days = models.JSONField(
+        default=list,
+        blank=True,
+        validators=[validate_working_days],
+        help_text='Working weekday codes (mon..sun), e.g. ["mon","tue"]. Portable ArrayField equivalent.',
+    )
+    start_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True, help_text="Active/inactive operational flag.")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -95,10 +151,16 @@ class Site(TimeStampedModel):
         indexes = [
             models.Index(fields=["status", "site_type"]),
             models.Index(fields=["is_active", "status"]),
+            models.Index(fields=["zone", "is_active"]),
+            models.Index(fields=["work_mode", "is_active"]),
         ]
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        validate_working_days(self.working_days)
 
     @property
     def department_count(self) -> int:
@@ -111,6 +173,23 @@ class Site(TimeStampedModel):
     @property
     def staff_count(self) -> int:
         return self.staff_assignments.count()
+
+    @property
+    def supervisor_count(self) -> int:
+        return self.supervisor_assignments.filter(is_active=True).count()
+
+    @property
+    def has_operational_history(self) -> bool:
+        """True when the site holds operational records.
+
+        Guards the admin against accidental hard deletion (see ``SiteAdmin``).
+        """
+        return (
+            self.departments.exists()
+            or self.assets.exists()
+            or self.staff_assignments.exists()
+            or self.supervisor_assignments.exists()
+        )
 
 
 class Department(TimeStampedModel):
@@ -226,6 +305,132 @@ class StaffAssignment(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.user} -> {self.site.name} ({self.role})"
+
+
+class AssignmentMixin(models.Model):
+    """Shared fields/behaviour for supervisor assignments.
+
+    An assignment is *active* when ``is_active`` is true and the current date
+    falls inside ``[assigned_from, assigned_to]``. ``created_by``/``updated_by``
+    come from ``UserStampedModel`` on the concrete models.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    assigned_from = models.DateField(db_index=True)
+    assigned_to = models.DateField(null=True, blank=True, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        abstract = True
+
+    def clean(self) -> None:
+        super().clean()
+        if self.assigned_from and self.assigned_to and self.assigned_to < self.assigned_from:
+            raise ValidationError("assigned_to cannot be earlier than assigned_from.")
+
+    @property
+    def is_current(self) -> bool:
+        today = timezone.localdate()
+        return not (self.assigned_from > today or (self.assigned_to is not None and self.assigned_to < today))
+
+
+class SiteSupervisorAssignment(AssignmentMixin, UserStampedModel):
+    """A user assigned as supervisor of a site for a date range."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="site_supervisor_assignments"
+    )
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="supervisor_assignments")
+    is_primary = models.BooleanField(default=False, help_text="Primary supervisor of the site.")
+
+    class Meta:
+        verbose_name = "Site supervisor assignment"
+        verbose_name_plural = "Site supervisor assignments"
+        ordering = ["site__name", "user__email"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["site", "user"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_site_supervisor",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+            models.Index(fields=["site", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} supervises {self.site.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.is_active:
+            return
+        maximum = int(config.MAX_SITE_SUPERVISORS_PER_SITE)
+        active = SiteSupervisorAssignment.objects.filter(site=self.site, is_active=True)
+        if self.pk is not None:
+            active = active.exclude(pk=self.pk)
+        if active.count() >= maximum:
+            raise ValidationError(f"A site can have at most {maximum} active supervisors.")
+
+
+class ZoneSupervisorAssignment(AssignmentMixin, UserStampedModel):
+    """A user assigned as supervisor of a zone for a date range."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="zone_supervisor_assignments"
+    )
+    zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name="supervisor_assignments")
+
+    class Meta:
+        verbose_name = "Zone supervisor assignment"
+        verbose_name_plural = "Zone supervisor assignments"
+        ordering = ["zone__name", "user__email"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone", "user"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_zone_supervisor",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+            models.Index(fields=["zone", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} supervises zone {self.zone.name}"
+
+
+class AssistantGeneralSupervisorAssignment(AssignmentMixin, UserStampedModel):
+    """A user acting as assistant general supervisor.
+
+    ``all_zones=True`` grants coverage of every zone (``zone`` may be null);
+    otherwise ``zone`` is required.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ags_assignments")
+    zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name="ags_assignments", null=True, blank=True)
+    all_zones = models.BooleanField(default=False, help_text="Covers every zone when true.")
+
+    class Meta:
+        verbose_name = "Assistant general supervisor assignment"
+        verbose_name_plural = "Assistant general supervisor assignments"
+        ordering = ["user__email"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"], condition=models.Q(is_active=True), name="uniq_active_ags_assignment"
+            )
+        ]
+
+    def __str__(self) -> str:
+        scope = "all zones" if self.all_zones else (self.zone.name if self.zone else "—")
+        return f"{self.user} assists general ({scope})"
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.all_zones and self.zone is None:
+            raise ValidationError("A zone is required when all_zones is false.")
 
 
 class Notification(TimeStampedModel):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from ninja import Field, ModelSchema, Schema
 
@@ -12,6 +12,7 @@ from .models import (
     Department,
     SiteStatus,
     SiteType,
+    WorkMode,
 )
 
 
@@ -21,13 +22,28 @@ class StatusRef(Schema):
     color: str = ""
 
 
+class ZoneOut(Schema):
+    id: int
+    name: str
+    code: str
+    description: str = ""
+    is_active: bool = True
+    site_count: int = 0
+    created_at: datetime
+
+
 class SiteSummaryOut(Schema):
     id: int
     name: str
     slug: str
     code: str
+    zone_id: int | None = None
+    zone_name: str | None = None
     site_type: str | None = None
     status: StatusRef | None = None
+    work_mode: WorkMode = WorkMode.FULL_TIME
+    building_name: str = ""
+    location: str = ""
     city: str = ""
     region: str = ""
     country: str = "TZ"
@@ -43,10 +59,25 @@ class SiteDetailOut(SiteSummaryOut):
     postal_code: str = ""
     latitude: float | None = None
     longitude: float | None = None
+    contact_person: str = ""
     contact_email: str = ""
     contact_phone: str = ""
+    working_days: list[str] = Field(default_factory=list)
+    start_date: date | None = None
+    notes: str = ""
     created_at: datetime
     updated_at: datetime
+
+
+class SiteSupervisorOut(Schema):
+    id: int
+    user_id: int
+    email: str
+    full_name: str
+    assigned_from: date
+    assigned_to: date | None = None
+    is_primary: bool = False
+    is_active: bool = True
 
 
 class SiteCreateIn(Schema):

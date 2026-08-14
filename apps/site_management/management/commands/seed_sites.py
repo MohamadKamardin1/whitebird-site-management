@@ -7,6 +7,7 @@ assignments. Idempotent: re-running updates rather than duplicates.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from django.conf import settings
@@ -22,8 +23,10 @@ from apps.site_management.models import (
     Department,
     Site,
     SiteStatus,
+    SiteSupervisorAssignment,
     SiteType,
     StaffAssignment,
+    Zone,
 )
 
 SITE_TYPES = [
@@ -124,12 +127,18 @@ class Command(BaseCommand):
 
         self._seed_reference_data()
 
+        operational_zone, _ = Zone.objects.get_or_create(
+            code="ZN01",
+            defaults={"name": "Coastal Unguja", "description": "Primary coastal operating zone.", "created_by": admin},
+        )
+
         for spec in SITES:
             site, created = Site.objects.get_or_create(
                 code=self._code(spec["name"]),
                 defaults={
                     "name": spec["name"],
                     "slug": slugify(spec["name"]),
+                    "zone": operational_zone,
                     "site_type": SiteType.objects.get(slug=spec["type"]),
                     "status": SiteStatus.objects.get(slug=spec["status"]),
                     "city": spec["city"],
@@ -145,7 +154,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"  site: {site.name}")
             else:
                 site.status = SiteStatus.objects.get(slug=spec["status"])
-                site.save(update_fields=["status", "updated_at"])
+                site.zone = operational_zone
+                site.save(update_fields=["status", "zone", "updated_at"])
 
             for dept_name in spec["departments"]:
                 Department.objects.get_or_create(site=site, name=dept_name)
@@ -183,6 +193,16 @@ class Command(BaseCommand):
             site=resort,
             user=viewer,
             defaults={"role": AssignmentRole.STAFF, "assigned_by": admin},
+        )
+        SiteSupervisorAssignment.objects.get_or_create(
+            site=resort,
+            user=site_supervisor,
+            defaults={
+                "assigned_from": date.today(),
+                "is_primary": True,
+                "is_active": True,
+                "created_by": admin,
+            },
         )
 
         self.stdout.write(

@@ -15,12 +15,7 @@ from django.test import Client
 from apps.accounts.factories import UserFactory
 from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
-from apps.site_management.factories import (
-    AssetCategory,
-    Site,
-    SiteStatus,
-    SiteType,
-)
+from apps.site_management.factories import AssetCategory, Site, SiteStatus, SiteType, Zone, ZoneFactory
 
 
 @pytest.fixture(autouse=True)
@@ -177,11 +172,23 @@ def asset_category(db: Any) -> AssetCategory:
 
 
 @pytest.fixture
-def site(db: Any, site_type: SiteType, site_status: SiteStatus, admin_user: User) -> Site:
+def zone(db: Any) -> Zone:
+    return cast(Zone, ZoneFactory(name="Unguja North"))
+
+
+@pytest.fixture
+def site(
+    db: Any,
+    site_type: SiteType,
+    site_status: SiteStatus,
+    admin_user: User,
+    zone: Zone,
+) -> Site:
     return Site.objects.create(
         name="White Bird Beach Resort",
         slug="white-bird-beach-resort",
         code="WBBR01",
+        zone=zone,
         site_type=site_type,
         status=site_status,
         city="Nungwi",

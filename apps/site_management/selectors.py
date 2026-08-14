@@ -70,10 +70,10 @@ def _apply_filters(queryset: QuerySet[Site], spec: SiteFilter) -> QuerySet[Site]
     return qs
 
 
-def list_sites(spec: SiteFilter) -> list[Site]:
-    """List active sites with denormalised aggregate counts."""
-    qs = (
-        Site.objects.select_related("site_type", "status")
+def list_sites_queryset(spec: SiteFilter) -> QuerySet[Site]:
+    """Annotated site queryset used by paginated list endpoints."""
+    qs: QuerySet[Site] = (
+        Site.objects.select_related("site_type", "status", "zone")
         .annotate(
             n_departments=Count("departments", filter=Q(departments__is_active=True), distinct=True),
             n_assets=Count("assets", filter=Q(assets__is_active=True), distinct=True),
@@ -81,12 +81,17 @@ def list_sites(spec: SiteFilter) -> list[Site]:
         )
         .order_by("name")
     )
-    return list(_apply_filters(qs, spec))
+    return _apply_filters(qs, spec)
+
+
+def list_sites(spec: SiteFilter) -> list[Site]:
+    """List active sites with denormalised aggregate counts."""
+    return list(list_sites_queryset(spec))
 
 
 def get_site_or_none(site_id: int) -> Site | None:
     """Uncached direct lookup used by write paths and permission checks."""
-    return Site.objects.select_related("site_type", "status").filter(pk=site_id).first()
+    return Site.objects.select_related("site_type", "status", "zone").filter(pk=site_id).first()
 
 
 def get_site_detail(site_id: int) -> dict[str, Any] | None:
@@ -101,6 +106,8 @@ def get_site_detail(site_id: int) -> dict[str, Any] | None:
             "name": site.name,
             "slug": site.slug,
             "code": site.code,
+            "zone_id": site.zone_id,
+            "zone_name": site.zone.name if site.zone else None,
             "site_type": site.site_type.name if site.site_type else None,
             "status": (
                 {
@@ -111,6 +118,9 @@ def get_site_detail(site_id: int) -> dict[str, Any] | None:
                 if site.status
                 else None
             ),
+            "work_mode": site.work_mode,
+            "building_name": site.building_name,
+            "location": site.location,
             "description": site.description,
             "address": site.address,
             "city": site.city,
@@ -120,8 +130,12 @@ def get_site_detail(site_id: int) -> dict[str, Any] | None:
             "latitude": site.latitude,
             "longitude": site.longitude,
             "capacity": site.capacity,
+            "contact_person": site.contact_person,
             "contact_email": site.contact_email,
             "contact_phone": site.contact_phone,
+            "working_days": list(site.working_days),
+            "start_date": site.start_date.isoformat() if site.start_date else None,
+            "notes": site.notes,
             "department_count": site.department_count,
             "asset_count": site.asset_count,
             "staff_count": site.staff_count,

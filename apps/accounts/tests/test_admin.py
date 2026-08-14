@@ -74,8 +74,48 @@ def test_activate_and_deactivate_actions(admin_user: User) -> None:
 
 
 @pytest.mark.django_db
-def test_admin_requires_staff(admin_user: User, viewer_user: User) -> None:
+def test_admin_requires_staff(admin_user, viewer_user) -> None:
     viewer = UserFactory(is_active=True, is_staff=False)
     client = Client()
     client.force_login(viewer)
     assert client.get("/admin/").status_code == 302
+
+
+@pytest.mark.django_db
+def test_admin_delete_model_guard_via_client(admin_user) -> None:
+    from apps.core.models import AuditLog
+
+    client = Client()
+    client.force_login(admin_user)
+    target = UserFactory()
+    AuditLog.objects.create(user=target, action="create", model_name="x", object_id="1")
+
+    response = client.post(
+        "/admin/accounts/user/",
+        data={
+            "action": "delete_selected",
+            "post": "yes",
+            "_selected_action": [target.pk],
+        },
+    )
+    # Deletion is refused (confirmation/error page re-rendered, user remains).
+    assert User.objects.filter(pk=target.pk).exists()
+    assert response.status_code in (200, 403)
+
+
+@pytest.mark.django_db
+def test_admin_deletes_fresh_user(admin_user) -> None:
+    client = Client()
+    client.force_login(admin_user)
+    target = UserFactory()
+
+    response = client.post(
+        "/admin/accounts/user/",
+        data={
+            "action": "delete_selected",
+            "post": "yes",
+            "_selected_action": [target.pk],
+        },
+    )
+    assert response.status_code in (200, 302)
+    assert not User.objects.filter(pk=target.pk).exists()

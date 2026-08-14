@@ -74,6 +74,85 @@ def test_error_payload_shape() -> None:
     }
 
 
+@pytest.mark.django_db
+def test_object_does_not_exist_maps_to_404() -> None:
+    import sys
+    import types
+
+    from django.core.exceptions import ObjectDoesNotExist
+    from django.test import override_settings
+    from django.urls import include, path
+    from ninja import NinjaAPI
+
+    from apps.core.handlers import register_error_handlers
+
+    api = NinjaAPI(auth=None, urls_namespace="doesnotexist")
+    register_error_handlers(api)
+
+    @api.get("/missing")
+    def missing(request):
+        raise ObjectDoesNotExist("gone")
+
+    urls_module = types.ModuleType("missing_urls")
+    api_urls, app_name, _ = api.urls
+    urls_module.urlpatterns = [path("", include((api_urls, app_name), namespace="missing"))]
+    sys.modules["missing_urls"] = urls_module
+
+    with override_settings(ROOT_URLCONF="missing_urls"):
+        response = Client().get("/missing")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+@pytest.mark.django_db
+def test_validation_fields_handles_list_errors() -> None:
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    from apps.core.handlers import _validation_fields
+
+    exc = DjangoValidationError(["Something failed"])
+    fields = _validation_fields(exc)
+    assert fields["_"] == ["Something failed"]
+
+
+@pytest.mark.django_db
+def test_unexpected_exception_maps_to_safe_500() -> None:
+    import sys
+    import types
+
+    from django.test import override_settings
+    from django.urls import include, path
+    from ninja import NinjaAPI
+
+    from apps.core.handlers import register_error_handlers
+
+    boom_api = NinjaAPI(auth=None, urls_namespace="boom")
+    register_error_handlers(boom_api)
+
+    @boom_api.get("/boom")
+    def boom(request):
+        raise RuntimeError("secret-boom")
+
+    urls_module = types.ModuleType("boom_urls")
+    api_urls, app_name, _ = boom_api.urls
+    urls_module.urlpatterns = [path("", include((api_urls, app_name), namespace="boom"))]
+    sys.modules["boom_urls"] = urls_module
+
+    with override_settings(ROOT_URLCONF="boom_urls"):
+        response = Client().get("/boom")
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"]["code"] == "internal_error"
+    assert "secret-boom" not in body["error"]["message"]  # internals never leak
+
+
+@pytest.mark.django_db
+def test_not_found_envelope(admin_client) -> None:
+    response = admin_client.get("/api/site-management/v1/zones/999999")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
 def test_domain_error_defaults() -> None:
     assert ConflictError("x").status_code == 409
     assert ConflictError("x").code == "conflict"

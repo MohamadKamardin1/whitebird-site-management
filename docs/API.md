@@ -88,12 +88,29 @@ write endpoints are restricted to admin/manager (or site-manager assignment).
 | Router prefix        | Purpose                                        |
 | -------------------- | ---------------------------------------------- |
 | `/auth`              | Login, profile, tokens, staff directory        |
-| `/sites`             | Sites + nested departments/assets/assignments  |
+| `/zones`             | Zones (paginated, role-scoped)                 |
+| `/sites`             | Sites + nested departments/assets/assignments/supervisors |
 | `/catalog`           | Site types, statuses, asset categories         |
 | `/stats`             | Cross-site statistics overview                 |
 | `/notifications`     | In-platform notifications                      |
 | `/files/signed/…`    | Signed private-file download                   |
 | `/` (core)           | Health, audit logs                             |
+
+### Organisation hierarchy endpoints (read-only foundation)
+
+| Method | Path                                | Description                                   |
+| ------ | ----------------------------------- | --------------------------------------------- |
+| GET    | `/zones`                            | List zones (paginated, role-scoped)           |
+| GET    | `/zones/{id}`                       | Zone detail (role-scoped)                     |
+| GET    | `/sites`                            | List sites (paginated, filterable, role-scoped) |
+| GET    | `/sites/{id}`                       | Site detail (role-scoped)                     |
+| GET    | `/sites/{id}/supervisors`           | Active site-supervisor assignments            |
+
+Site list filters: `search`, `status` (slug), `site_type` (slug), `region`,
+`country`, `zone_id`, `work_mode`, `capacity_min`, plus pagination
+(`page`, `page_size`). Responses use the `Paginated` envelope
+(`count`/`next`/`previous`/`results`). Visibility follows the scoping rules
+in `RBAC.md`.
 
 ## Private file downloads
 

@@ -74,3 +74,28 @@ added to their role's group automatically by a `post_save` signal, so
   `_write_access` before any service call.
 - Services assume the caller passed authorization; they never re-authorize.
 - Superusers bypass all checks (`is_system_admin` includes superusers).
+
+## Data scoping (organisation hierarchy)
+
+Scoping selectors (`apps/site_management/scoping.py`) answer "what can this
+user see/supervise?":
+
+| Role                            | `visible_sites` / `visible_zones`        | `supervised_sites` (write)          |
+| ------------------------------- | ---------------------------------------- | ----------------------------------- |
+| System Admin                    | all                                      | all                                 |
+| General Supervisor              | all                                      | all                                 |
+| Assistant General Supervisor    | all if `all_zones`, else assigned zones  | same                                |
+| Zone Supervisor                 | assigned zones' sites                    | assigned zones' sites               |
+| Site Supervisor                 | actively assigned sites only             | actively assigned sites only        |
+| Management Viewer               | all (read-only)                          | none                                |
+
+Write capacity for a site (`user_can_manage_site`):
+
+- System admin or general supervisor → yes.
+- Site supervisor with an active `SiteSupervisorAssignment` → yes.
+- Zone supervisor / assistant general whose scope includes the site → yes.
+- Management viewer → never.
+
+Supervisor assignments are date-windowed (`assigned_from`/`assigned_to`),
+soft-deactivatable (`is_active`), and enforce one active assignment per
+user+site/zone plus a constance-driven per-site supervisor cap.

@@ -130,3 +130,33 @@ engineering contract.
     layer as `{"detail": "Unauthorized"}` and is not routed through our
     exception handlers; every *handled* error (400/403/404/409/422/500) uses
     the shared envelope.
+
+## Organisation hierarchy (Prompt 4)
+
+36. **`site_code`/`site_name` map to the existing `Site.code`/`Site.name`**
+    fields established in Prompt 1's foundation; renaming them would have
+    churned every consumer for no behavioural gain. The new hierarchy fields
+    (`zone`, `building_name`, `location`, `contact_person`, `work_mode`,
+    `working_days`, `start_date`, `notes`) were added alongside.
+37. **`working_days` uses a validated `JSONField`** (list of `mon..sun` codes)
+    as the portable equivalent of PostgreSQL `ArrayField`, so the suite stays
+    SQLite-hermetic. A Postgres `ArrayField` can replace it later without
+    schema/API changes.
+38. **Work mode is manually configured** via `WorkMode` choices and validated
+    on every write (`clean()` + schema enum); never inferred.
+39. **Scope rules**: SYSTEM_ADMIN and GENERAL_SUPERVISOR see everything;
+    MANAGEMENT_VIEWER sees everything **read-only** (never writes); a SITE
+    SUPERVISOR sees only actively-assigned sites; a ZONE SUPERVISOR sees
+    assigned zones' sites; an ASSISTANT GENERAL SUPERVISOR sees all zones when
+    an active `all_zones` assignment exists, otherwise only assigned zones.
+40. **Overlap prevention** for supervisor assignments is enforced by a partial
+    unique constraint on `(target, user)` where `is_active=True` (one active
+    assignment per user+site/zone) plus `clean()` date-range validation. A
+    true DB exclusion constraint would be Postgres-only and is deferred.
+41. **Max site supervisors** is enforced in `SiteSupervisorAssignment.clean()`
+    from constance `MAX_SITE_SUPERVISORS_PER_SITE` (default 2).
+42. **`AssignmentMixin`** carries the shared assignment fields and an
+    `is_current` helper (date window); `UserStampedModel` provides
+    `created_by`/`updated_by` on every assignment.
+43. **Admin hard-delete guards**: zones with sites, and sites with operational
+    history, cannot be hard-deleted via the admin — deactivate/archive instead.

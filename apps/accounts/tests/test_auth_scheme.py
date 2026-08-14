@@ -9,8 +9,7 @@ from django.utils import timezone
 from apps.accounts.factories import ApiTokenFactory, UserFactory
 from apps.accounts.models import ApiToken, RoleCode
 from apps.accounts.permissions import management_required, role_required, user_can_manage_site
-from apps.site_management.factories import SiteFactory
-from apps.site_management.models import AssignmentRole, StaffAssignment
+from apps.site_management.factories import SiteFactory, SiteSupervisorAssignmentFactory, ZoneSupervisorAssignmentFactory
 
 
 def _client_with_token(token: ApiToken | str) -> Client:
@@ -81,23 +80,19 @@ def test_management_required() -> None:
 def test_user_can_manage_site_rules() -> None:
     admin = UserFactory(role=RoleCode.SYSTEM_ADMIN)
     general = UserFactory(role=RoleCode.GENERAL_SUPERVISOR)
-    zone = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
+    zone_supervisor = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     site_supervisor = UserFactory(role=RoleCode.SITE_SUPERVISOR)
     viewer = UserFactory(role=RoleCode.MANAGEMENT_VIEWER)
     outsider = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     site = SiteFactory()
 
     assert user_can_manage_site(admin, site.pk) is True
+    assert user_can_manage_site(general, site.pk) is True
     assert user_can_manage_site(outsider, site.pk) is False
-
-    StaffAssignment.objects.create(site=site, user=zone, role=AssignmentRole.STAFF)
-    assert user_can_manage_site(zone, site.pk) is True
-
-    StaffAssignment.objects.create(site=site, user=viewer, role=AssignmentRole.STAFF)
     assert user_can_manage_site(viewer, site.pk) is False
 
-    StaffAssignment.objects.create(site=site, user=site_supervisor, role=AssignmentRole.STAFF)
+    SiteSupervisorAssignmentFactory(site=site, user=site_supervisor)
     assert user_can_manage_site(site_supervisor, site.pk) is True
 
-    StaffAssignment.objects.create(site=site, user=general, role=AssignmentRole.STAFF)
-    assert user_can_manage_site(general, site.pk) is True
+    ZoneSupervisorAssignmentFactory(zone=site.zone, user=zone_supervisor)
+    assert user_can_manage_site(zone_supervisor, site.pk) is True

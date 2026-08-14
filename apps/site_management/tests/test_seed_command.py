@@ -4,7 +4,15 @@ import pytest
 from django.core.management import call_command
 
 from apps.accounts.models import RoleCode, User
-from apps.site_management.models import AssetCategory, Site, SiteStatus, SiteType, StaffAssignment
+from apps.site_management.models import (
+    AssetCategory,
+    Site,
+    SiteStatus,
+    SiteSupervisorAssignment,
+    SiteType,
+    StaffAssignment,
+    Zone,
+)
 
 
 @pytest.mark.django_db
@@ -32,6 +40,9 @@ def test_seed_command_creates_demo_tenant() -> None:
     resort = Site.objects.get(code="WBBR01")
     assert resort.departments.count() == 3
     assert StaffAssignment.objects.filter(site=resort).count() == 4
+    assert Zone.objects.filter(code="ZN01").exists()
+    assert resort.zone is not None
+    assert SiteSupervisorAssignment.objects.filter(site=resort, is_active=True).count() == 1
 
 
 @pytest.mark.django_db
