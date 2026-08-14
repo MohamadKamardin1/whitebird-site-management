@@ -1,15 +1,15 @@
-"""Host-facing views: liveness, readiness, and the landing redirect.
-
-These endpoints power container orchestration and operators. The root URL
-currently redirects to the Django admin until a dashboard ships.
-"""
+"""Host-facing views: probes, the landing redirect, and the role-aware dashboard."""
 
 from __future__ import annotations
 
+from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db import connection
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
+
+from apps.accounts.models import RoleCode
+from apps.site_management.dashboard_selectors import all_dashboard_charts, dashboard_kpis
 
 
 def healthz(request: HttpRequest) -> HttpResponse:
@@ -46,5 +46,83 @@ def readyz(request: HttpRequest) -> HttpResponse:
 
 
 def landing(request: HttpRequest) -> HttpResponseRedirect:
-    """Point the platform root at the admin/dashboard for now."""
+    """Point the platform root at the dashboard when signed in, else the admin."""
+    if request.user.is_authenticated:
+        return redirect("dashboard")
     return redirect("admin:index")
+
+
+_TEMPLATE_BY_ROLE: dict[str, str] = {
+    RoleCode.SYSTEM_ADMIN.value: "web/dashboard/general_supervisor.html",
+    RoleCode.GENERAL_SUPERVISOR.value: "web/dashboard/general_supervisor.html",
+    RoleCode.ASSISTANT_GENERAL_SUPERVISOR.value: "web/dashboard/assistant_general.html",
+    RoleCode.ZONE_SUPERVISOR.value: "web/dashboard/zone_supervisor.html",
+    RoleCode.SITE_SUPERVISOR.value: "web/dashboard/site_supervisor.html",
+    RoleCode.MANAGEMENT_VIEWER.value: "web/dashboard/management.html",
+}
+
+_ROLE_LABELS: dict[str, str] = {
+    RoleCode.SYSTEM_ADMIN.value: "System Administration",
+    RoleCode.GENERAL_SUPERVISOR.value: "General Supervisor",
+    RoleCode.ASSISTANT_GENERAL_SUPERVISOR.value: "Assistant General Supervisor",
+    RoleCode.ZONE_SUPERVISOR.value: "Zone Supervisor",
+    RoleCode.SITE_SUPERVISOR.value: "Site Supervisor",
+    RoleCode.MANAGEMENT_VIEWER.value: "Management Viewer",
+}
+
+_KPI_DISPLAY = [
+    {"key": "active_sites", "label": "Active Sites", "icon": "building", "tone": "primary"},
+    {"key": "active_cleaners", "label": "Active Cleaners", "icon": "users", "tone": "accent"},
+    {"key": "trainees_in_training", "label": "Trainees", "icon": "graduation", "tone": "primary"},
+    {"key": "attendance_rate", "label": "Attendance Rate", "icon": "check", "tone": "success", "suffix": "%"},
+    {"key": "absences_today", "label": "Absences Today", "icon": "user-minus", "tone": "danger"},
+    {"key": "late_today", "label": "Late Today", "icon": "clock", "tone": "warning"},
+    {"key": "open_issues", "label": "Open Issues", "icon": "flag", "tone": "warning"},
+    {"key": "overdue_jobs", "label": "Overdue Jobs", "icon": "wrench", "tone": "danger"},
+    {"key": "low_stock_items", "label": "Low Stock Items", "icon": "box", "tone": "warning"},
+    {
+        "key": "inspections_pass_rate",
+        "label": "Inspections Pass Rate",
+        "icon": "clipboard",
+        "tone": "success",
+        "suffix": "%",
+    },
+    {"key": "missing_site_reports", "label": "Missing Reports", "icon": "file", "tone": "danger"},
+    {"key": "pending_reports", "label": "Pending Reports", "icon": "clock", "tone": "primary"},
+    {"key": "escalated_issues", "label": "Escalated Issues", "icon": "alert", "tone": "danger"},
+]
+
+_CHART_DISPLAY = [
+    {"key": "attendance_trend", "label": "Attendance Trend (7 days)", "type": "line"},
+    {"key": "inspection_trend", "label": "Inspection Trend (7 days)", "type": "line"},
+    {"key": "issues_by_category", "label": "Open Issues by Category", "type": "doughnut"},
+    {"key": "issues_by_site", "label": "Open Issues by Site", "type": "bar"},
+    {"key": "jobs_open_vs_closed", "label": "Open vs Closed Jobs", "type": "doughnut"},
+    {"key": "low_stock_by_site", "label": "Low Stock by Site", "type": "bar"},
+    {"key": "report_status_by_site", "label": "Report Status (today)", "type": "bar"},
+]
+
+
+def dashboard(request: HttpRequest) -> HttpResponse:
+    """Role-aware operations dashboard (session-authenticated)."""
+    user = request.user
+    if not user.is_authenticated:
+        return redirect("admin:login")
+    template = _TEMPLATE_BY_ROLE.get(user.role, "web/dashboard/management.html")
+    kpi_display = [dict(item) for item in _KPI_DISPLAY]
+    kpis = dashboard_kpis(user)
+    for item in kpi_display:
+        item["value"] = kpis.get(item["key"], 0)
+    context = {
+        "role_label": _ROLE_LABELS.get(user.role, "Operations"),
+        "role": user.role,
+        "is_read_only": user.role == RoleCode.MANAGEMENT_VIEWER,
+        "kpis": kpis,
+        "kpi_display": kpi_display,
+        "charts": all_dashboard_charts(user, days=7),
+        "chart_display": _CHART_DISPLAY,
+    }
+    return render(request, template, context)
+
+
+dashboard = login_required(dashboard)

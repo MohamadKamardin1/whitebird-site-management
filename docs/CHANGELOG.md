@@ -5,6 +5,39 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Prompt 18] — 2026-08-14
+
+### Added
+
+- **Dashboard selectors** (`apps/site_management/dashboard_selectors.py`):
+  role-scoped KPI metrics (active sites/cleaners, trainees, attendance rate,
+  absences/late today, open issues, overdue jobs, low-stock items, inspection
+  pass rate, missing/pending reports, escalated issues) plus seven chart
+  datasets (attendance trend, issues by category/site, inspection trend,
+  jobs open vs closed, low stock by site, report status by site). All computed
+  with aggregated queries (no N+1) and cached under versioned namespaced keys
+  (`dash:v1:...`, TTL from `DASHBOARD_CACHE_TTL_SECONDS`).
+- **JSON API endpoints** (`/dashboards/kpis` and `/dashboards/charts/*`) tagged
+  Dashboard, read = management/viewer, scoped to `visible_sites`.
+- **Role-aware dashboard pages** in `apps.web`: `GET /dashboard/` renders a
+  role-specific template (Site/Zone/Assistant General/General/System Admin/
+  Management Viewer); management viewer is read-only with a banner; landing
+  redirects authenticated users to the dashboard.
+- **Templates**: `web/base.html`, `web/dashboard_base.html`, five role variant
+  templates, and partials (`kpi_card`, `chart_card`, `sidebar`, `topbar`);
+  Chart.js renders datasets injected via `json_script`.
+- **Static**: `static/css/dashboard.css` (responsive layout, KPI cards, chart
+  grid, quick links) and `static/js/whitebird_dashboard.js` (Chart.js render +
+  mobile sidebar toggle).
+- **Tests** (`apps/web/tests/test_dashboard.py`): login redirect, role-specific
+  templates, viewer read-only banner, KPI calculations + zone scoping, chart
+  endpoint shapes, cache hit/invalidation behaviour, landing redirect.
+
+### Changed
+
+- `DASHBOARD_CACHE_TTL_SECONDS` setting added (mirrors constance
+  `DASHBOARD_CACHE_TTL`).
+
 ## [Prompt 17] — 2026-08-14
 
 ### Added

@@ -24,7 +24,33 @@ Module. Each prompt updates this file before its commit.
 | 15     | RBAC hardening & scoping | **Prompt 15 completed** | see CHANGELOG |
 | 16     | Performance & caching | **Prompt 16 completed** | see CHANGELOG |
 | 17     | Jazzmin soft-gold admin theme | **Prompt 17 completed** | see CHANGELOG |
-| 18–20  | (pending)                                    | —                  | —      |
+| 18     | Role-based dashboards | **Prompt 18 completed** | see CHANGELOG |
+| 19–20  | (pending)                                    | —                  | —      |
+
+## Prompt 18 — completed ✅
+
+Built a professional, executive-ready dashboard layer:
+
+- **KPI + chart selectors** (`dashboard_selectors.py`): 13 role-scoped KPIs and
+  seven chart datasets, all aggregated in SQL (no N+1) and cached under
+  versioned namespaced keys (`dash:v1:...`, `DASHBOARD_CACHE_TTL_SECONDS`).
+- **JSON endpoints**: `/dashboards/kpis` and `/dashboards/charts/*` (attendance
+  trend, issues by category/site, inspection trend, jobs open vs closed, low
+  stock by site, report status), scoped by `visible_sites`.
+- **Role-aware pages** in `apps.web`: `GET /dashboard/` maps every role to a
+  tailored template; management viewer is read-only with a banner; landing
+  redirects authenticated users to the dashboard.
+- **Templates**: `web/base.html`, `web/dashboard_base.html`, five role
+  variants, partials (kpi_card, chart_card, sidebar, topbar); Chart.js renders
+  `json_script`-injected datasets.
+- **Static**: `dashboard.css` (responsive layout, KPI cards, chart grid, quick
+  links) + `whitebird_dashboard.js` (chart render, mobile sidebar toggle).
+- **Tests** (`apps/web/tests/test_dashboard.py`): login redirect, role-specific
+  templates, viewer read-only, KPI calculations + zone scoping, chart shapes,
+  cache behaviour, landing redirect.
+
+**Quality gates (all green):** Ruff · Mypy strict · pytest 487 passed ·
+coverage 90.33% ≥ 90 · `makemigrations --check` clean.
 
 ## Prompt 17 — completed ✅
 

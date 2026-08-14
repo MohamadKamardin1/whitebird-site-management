@@ -1,0 +1,20 @@
+{% load static %}
+<aside class="wb-sidebar" id="wb-sidebar">
+  <div class="wb-sidebar-brand">
+    <img src="{% static 'images/logo.svg' %}" alt="" width="28" height="28">
+    <span>{{ brand.name }}</span>
+  </div>
+  <nav class="wb-sidebar-nav" aria-label="Sidebar">
+    <a href="/dashboard/">Dashboard</a>
+    <a href="/admin/site_management/attendancerecord/">Attendance</a>
+    <a href="/admin/site_management/site/">Sites</a>
+    <a href="/admin/site_management/cleaner/">Cleaners</a>
+    <a href="/admin/site_management/inspection/">Inspections</a>
+    <a href="/admin/site_management/issue/">Issues</a>
+    <a href="/admin/site_management/job/">Jobs</a>
+    <a href="/admin/site_management/sitestore/">Stores</a>
+    <a href="/admin/site_management/dailysitereport/">Reports</a>
+    <a href="/admin/" class="wb-nav-admin">Admin</a>
+    <a href="/api/site-management/v1/docs" target="_blank" rel="noopener" class="wb-nav-admin">API Docs</a>
+  </nav>
+</aside>

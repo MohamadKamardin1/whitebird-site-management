@@ -78,6 +78,16 @@ from .cleaner_services import (
     upload_cleaner_document,
     verify_cleaner_document,
 )
+from .dashboard_selectors import (
+    attendance_trend,
+    dashboard_kpis,
+    inspection_trend,
+    issues_by_category,
+    issues_by_site,
+    jobs_open_vs_closed,
+    low_stock_by_site,
+    report_status_by_site,
+)
 from .inspection_selectors import (
     InspectionFilter,
     TemplateFilter,
@@ -4092,3 +4102,101 @@ def theme_endpoint(request: AuthenticatedRequest) -> ThemeOut:
         }
 
     return ThemeOut(**cached_or("theme", (), _load, int(config.REPORT_CACHE_TTL)))
+
+
+# --------------------------------------------------------------------------- #
+# Dashboards — KPI & chart endpoints
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/dashboards/kpis",
+    response=dict,
+    summary="Role-scoped dashboard KPIs",
+    tags=["Dashboard"],
+)
+def dashboards_kpis_endpoint(
+    request: AuthenticatedRequest,
+    report_date: date | None = None,
+) -> dict[str, object]:
+    _report_read(request.auth)
+    return dashboard_kpis(request.auth, report_date or date.today())
+
+
+@router.get(
+    "/dashboards/charts/attendance-trend",
+    response=dict,
+    summary="Attendance trend for the last 7/30 days",
+    tags=["Dashboard"],
+)
+def dashboards_attendance_trend_endpoint(request: AuthenticatedRequest, days: int = 7) -> dict[str, object]:
+    _report_read(request.auth)
+    return attendance_trend(request.auth, days)
+
+
+@router.get(
+    "/dashboards/charts/issues-by-category",
+    response=dict,
+    summary="Open issues by category",
+    tags=["Dashboard"],
+)
+def dashboards_issues_by_category_endpoint(request: AuthenticatedRequest) -> dict[str, object]:
+    _report_read(request.auth)
+    return issues_by_category(request.auth)
+
+
+@router.get(
+    "/dashboards/charts/issues-by-site",
+    response=dict,
+    summary="Open issues by site",
+    tags=["Dashboard"],
+)
+def dashboards_issues_by_site_endpoint(request: AuthenticatedRequest) -> dict[str, object]:
+    _report_read(request.auth)
+    return issues_by_site(request.auth)
+
+
+@router.get(
+    "/dashboards/charts/inspection-trend",
+    response=dict,
+    summary="Inspection pass/fail trend",
+    tags=["Dashboard"],
+)
+def dashboards_inspection_trend_endpoint(request: AuthenticatedRequest, days: int = 7) -> dict[str, object]:
+    _report_read(request.auth)
+    return inspection_trend(request.auth, days)
+
+
+@router.get(
+    "/dashboards/charts/jobs-open-vs-closed",
+    response=dict,
+    summary="Open vs closed jobs",
+    tags=["Dashboard"],
+)
+def dashboards_jobs_open_vs_closed_endpoint(request: AuthenticatedRequest) -> dict[str, object]:
+    _report_read(request.auth)
+    return jobs_open_vs_closed(request.auth)
+
+
+@router.get(
+    "/dashboards/charts/low-stock-by-site",
+    response=dict,
+    summary="Low-stock items by site",
+    tags=["Dashboard"],
+)
+def dashboards_low_stock_by_site_endpoint(request: AuthenticatedRequest) -> dict[str, object]:
+    _report_read(request.auth)
+    return low_stock_by_site(request.auth)
+
+
+@router.get(
+    "/dashboards/charts/report-status-by-site",
+    response=dict,
+    summary="Report submission status counts",
+    tags=["Dashboard"],
+)
+def dashboards_report_status_endpoint(
+    request: AuthenticatedRequest, report_date: date | None = None
+) -> dict[str, object]:
+    _report_read(request.auth)
+    return report_status_by_site(request.auth, report_date or date.today())

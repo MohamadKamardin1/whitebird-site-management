@@ -1,0 +1,49 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block web_content %}
+  <div class="wb-shell">
+    {% include "web/partials/sidebar.html" %}
+    <div class="wb-main">
+      {% include "web/partials/topbar.html" %}
+      <main class="wb-content">
+        <header class="wb-page-head">
+          <h1>{% block dashboard_title %}{{ role_label }} Dashboard{% endblock %}</h1>
+          <p class="wb-page-sub">{% block dashboard_intro %}Operational overview across your sites.{% endblock %}</p>
+        </header>
+
+        <div class="wb-kpi-grid">
+          {% for kpi in kpi_display %}
+            {% include "web/partials/kpi_card.html" with kpi=kpi value=kpi.value %}
+          {% endfor %}
+        </div>
+
+        <div class="wb-chart-grid">
+          {% for chart in chart_display %}
+            {% include "web/partials/chart_card.html" with chart=chart %}
+          {% endfor %}
+        </div>
+
+        <section class="wb-links-section" aria-label="Quick links">
+          <h2>Essential links</h2>
+          <div class="wb-quick-links">
+            <a href="/admin/site_management/attendancerecord/">Attendance</a>
+            <a href="/admin/site_management/site/">Sites</a>
+            <a href="/admin/site_management/cleaner/">Cleaners</a>
+            <a href="/admin/site_management/inspection/">Inspections</a>
+            <a href="/admin/site_management/issue/">Issues</a>
+            <a href="/admin/site_management/job/">Jobs</a>
+            <a href="/admin/site_management/sitestore/">Stores</a>
+            <a href="/admin/site_management/dailysitereport/">Reports</a>
+            <a href="/admin/">Admin</a>
+            <a href="/api/site-management/v1/docs" target="_blank" rel="noopener">API Docs</a>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+  {{ charts|json_script:"charts-data" }}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="{% static 'js/whitebird_dashboard.js' %}"></script>
+{% endblock %}

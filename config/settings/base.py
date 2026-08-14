@@ -205,6 +205,8 @@ API_THROTTLE_ANON_RATE = env.str("API_THROTTLE_ANON_RATE", default="30/min")
 API_THROTTLE_AUTH_RATE = env.str("API_THROTTLE_AUTH_RATE", default="300/min")
 # Master switch for the fixed-window API rate limiter (apps.core.throttling).
 API_THROTTLE_ENABLED = env.bool("API_THROTTLE_ENABLED", default=True)
+# Dashboard KPI/chart cache TTL (seconds) — mirrors constance DASHBOARD_CACHE_TTL.
+DASHBOARD_CACHE_TTL_SECONDS = env.int("DASHBOARD_CACHE_TTL_SECONDS", default=300)
 # When false, the interactive docs (Swagger UI / OpenAPI JSON) return 404.
 API_DOCS_ENABLED = env.bool("API_DOCS_ENABLED", default=True)
 

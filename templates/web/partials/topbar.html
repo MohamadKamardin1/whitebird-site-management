@@ -1,0 +1,20 @@
+<header class="wb-topbar">
+  <div class="wb-topbar-inner">
+    <button class="wb-nav-toggle" type="button" aria-label="Toggle navigation" data-wb-toggle="sidebar">
+      <span class="wb-hamburger" aria-hidden="true"></span>
+    </button>
+    <span class="wb-topbar-title">{{ role_label }}</span>
+    <nav class="wb-topbar-links" aria-label="Primary">
+      <a href="/dashboard/">Dashboard</a>
+      <a href="/api/site-management/v1/docs" target="_blank" rel="noopener">API Docs</a>
+      <a href="/admin/" rel="noopener">Admin</a>
+    </nav>
+    <div class="wb-topbar-user">
+      <span>{{ request.user.email }}</span>
+      <a href="{% url 'admin:logout' %}" class="wb-link">Sign out</a>
+    </div>
+  </div>
+</header>
+{% if is_read_only %}
+  <div class="wb-readonly-banner" role="status">Read-only view — management viewer.</div>
+{% endif %}

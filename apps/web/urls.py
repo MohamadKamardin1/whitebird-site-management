@@ -7,5 +7,6 @@ from . import views
 urlpatterns = [
     path("healthz", views.healthz, name="healthz"),
     path("readyz", views.readyz, name="readyz"),
+    path("dashboard/", views.dashboard, name="dashboard"),
     path("", views.landing, name="landing"),
 ]
