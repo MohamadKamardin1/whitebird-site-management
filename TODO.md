@@ -50,3 +50,15 @@
 - [x] Validate the integrated workflows with realistic site-supervisor and management-review scenarios, update documentation, commit, and push the completed upgrade.
 
 **Operational constraint:** the backend remains the authorization source; client-side hiding is only a usability layer. No fabricated operational records or fallback cleanliness results may be introduced.
+
+## Production Deep Links and Operational Workflow Upgrade
+
+- [x] Fix production SPA refresh/deep-link handling so `/app/attendance`, `/app/inspections`, `/app/operations/issues`, `/app/stores`, and `/app/reports` never fall through to the Vite public-base error.
+- [x] Verify the deployed static asset base, Django SPA catch-all route, and authenticated client route prefix work together in production and on browser refresh.
+- [ ] Turn Start a field inspection into a guided, site-scoped workflow with configurable questions, evidence/photos where required, responsible-cleaner attribution, corrective actions, audit history, review/return states, and report-ready results.
+- [ ] Turn Raise a site issue into an intelligent operational intake workflow with category, priority, affected area, responsible cleaner/team, due date, suggested next action, evidence, escalation, ownership, and auditable status transitions.
+- [x] Turn Request configured stock into a simple interactive collection flow that selects configured items, captures quantity remaining, quantity needed, urgency, reason, and optional notes without manual IDs.
+- [x] Upgrade report generation so the user chooses Daily or Weekly; non-Friday generation defaults to a daily report, while Friday generation offers/uses the weekly report containing the complete Monday–Friday operational data set.
+- [ ] Include attendance lifecycle, cleanliness, inspections, issues, stock, and unresolved corrective actions in the appropriate daily and weekly report payloads and review routing.
+- [ ] Add backend/frontend tests for deep-link refreshes, inspection completion, issue ownership/escalation, stock-request validation, and Friday weekly-report selection.
+- [ ] Update documentation, run the full integrated quality suite, commit, and push the production release.

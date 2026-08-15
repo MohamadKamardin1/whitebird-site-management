@@ -8,8 +8,8 @@ import { defineConfig } from "vite";
  * Development serves the React workspace on port 5173 and proxies the Django
  * API; production builds into frontend/dist for collection under /static/frontend/.
  */
-export default defineConfig({
-  base: "/static/frontend/",
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "/static/frontend/" : "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -33,4 +33,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

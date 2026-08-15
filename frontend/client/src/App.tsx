@@ -1,6 +1,6 @@
 /** Coastal Ledger route composition: protected, permission-aware operations workspaces with no navigation dead ends. */
 import { ReactNode } from "react";
-import { Route, Switch } from "wouter";
+import { Route, Router as WouterRouter, Switch } from "wouter";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -15,6 +15,7 @@ import NotificationsPage from "@/pages/NotificationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
 import MarketingPage from "@/pages/MarketingPage";
+import { FieldInspectionsPage, ReportsPage, SiteIssuesPage, StockRequestsPage } from "@/pages/OperationalWorkflowsPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -24,7 +25,8 @@ function Protected({ children }: { children: ReactNode }) {
 function ProtectedPage({ children }: { children: ReactNode }) { return <Protected>{children}</Protected>; }
 
 function Router() {
-  return <Switch>
+  const routeBase = typeof window !== "undefined" && window.location.pathname.startsWith("/app") ? "/app" : "";
+  return <WouterRouter base={routeBase}><Switch>
     <Route path="/marketing" component={MarketingPage} />
     <Route path="/login" component={LoginPage} />
     <Route path="/"><ProtectedPage><DashboardPage /></ProtectedPage></Route>
@@ -33,14 +35,14 @@ function Router() {
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
-    <Route path="/inspections"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Quality assurance", title: "Inspection evidence, ready for review.", description: "Start from current inspection work, templates, results, and the evidence-led workflow required to move an inspection through review.", endpoint: "/inspections", action: "inspection", filterLabel: "inspections" }} /></ProtectedPage></Route>
-    <Route path="/operations/issues"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Operations queue", title: "Issues and jobs that keep ownership visible.", description: "Search current operational risk, raise a well-defined issue, and move authorised jobs through assignment, evidence, verification, and closure.", endpoint: "/issues", action: "issue", filterLabel: "issues and jobs" }} /></ProtectedPage></Route>
-    <Route path="/stores"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Stores & stock", title: "Supply signals before they become delays.", description: "Monitor your authorised stores, stock items, movements, requests, and low-stock conditions from an audit-ready workspace.", endpoint: "/stores", action: "stock_request", filterLabel: "stores and stock" }} /></ProtectedPage></Route>
-    <Route path="/reports"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Management reporting", title: "A reporting chain with clear handovers.", description: "View daily site reports in their structured workflow and use the reporting status workspace to identify the next accountable review or submission.", endpoint: "/reports/site", action: "general_report", filterLabel: "site reports" }} /></ProtectedPage></Route>
+    <Route path="/inspections"><ProtectedPage><FieldInspectionsPage /></ProtectedPage></Route>
+    <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
+    <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>
+    <Route path="/reports"><ProtectedPage><ReportsPage /></ProtectedPage></Route>
     <Route path="/notifications"><ProtectedPage><NotificationsPage /></ProtectedPage></Route>
     <Route path="/settings/profile"><ProtectedPage><ProfilePage /></ProtectedPage></Route>
     <Route component={NotFound} />
-  </Switch>;
+  </Switch></WouterRouter>;
 }
 
 export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><TooltipProvider><AuthProvider><Router /><Toaster richColors position="top-right" /></AuthProvider></TooltipProvider></ThemeProvider></ErrorBoundary>; }

@@ -206,6 +206,7 @@ from .reporting_services import (
     generate_assistant_summary,
     generate_general_management_report,
     generate_site_report,
+    generate_weekly_site_report,
     generate_zone_summary,
     return_assistant_summary,
     return_site_report,
@@ -3933,6 +3934,17 @@ def site_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, r
     _issues_manage(request.auth, site.pk)
     report = generate_site_report(site_id=site_id, day=report_date, user=request.auth)
     return _site_report_out(report)
+
+
+@router.post(
+    "/reports/site/{site_id}/{report_date}/generate-weekly",
+    response=dict,
+    summary="Generate the Friday Monday-to-Friday site report",
+)
+def site_weekly_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, report_date: date) -> dict[str, object]:
+    site = _load_site_or_404(site_id)
+    _issues_manage(request.auth, site.pk)
+    return generate_weekly_site_report(site_id=site.pk, friday=report_date, user=request.auth)
 
 
 @router.post(

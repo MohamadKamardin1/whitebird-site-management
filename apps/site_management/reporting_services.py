@@ -235,6 +235,39 @@ def generate_site_report(*, site_id: int, day: datetime.date, user: User) -> Dai
     return report
 
 
+def generate_weekly_site_report(*, site_id: int, friday: datetime.date, user: User) -> dict[str, Any]:
+    """Aggregate the complete Monday-Friday operational evidence for a site.
+
+    Friday is the only valid weekly reporting date. The weekly response is
+    intentionally composed from the same real daily snapshots used by the
+    daily report generator, so attendance, stock, inspections, trainees, and
+    issues cannot diverge between report formats.
+    """
+    from .models import Site
+
+    if friday.weekday() != 4:
+        raise ValidationError("Weekly site reports can only be generated for Friday.")
+    site = Site._base_manager.filter(pk=site_id).first()
+    if site is None:
+        raise ValidationError("Site not found.")
+    monday = friday - datetime.timedelta(days=4)
+    days: list[dict[str, Any]] = []
+    for offset in range(5):
+        day = monday + datetime.timedelta(days=offset)
+        snapshot = site_data_snapshot(site_id, day)
+        existing = DailySiteReport.objects.filter(site_id=site_id, report_date=day).values("status").first()
+        days.append({"report_date": day.isoformat(), "status": (existing or {}).get("status", "not_generated"), "data": snapshot})
+    _audit(AuditLog.Action.UPDATE, site, user, f"Generated weekly site report {monday} to {friday}")
+    return {
+        "report_type": "weekly",
+        "site_id": site.pk,
+        "site_name": site.name,
+        "week_start": monday.isoformat(),
+        "week_end": friday.isoformat(),
+        "days": days,
+    }
+
+
 def submit_site_report(*, report: DailySiteReport, user: User) -> DailySiteReport:
     """Submit a site report, storing its immutable snapshot."""
     with transaction.atomic():
