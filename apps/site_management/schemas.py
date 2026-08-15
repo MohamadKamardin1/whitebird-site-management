@@ -768,6 +768,7 @@ class StockRequestItemOut(Schema):
     store_item_id: int
     item_name: str
     requested_quantity: Decimal
+    quantity_left: Decimal = Decimal("0")
     approved_quantity: Decimal | None = None
     notes: str = ""
 
@@ -797,6 +798,7 @@ class StockRequestCreateIn(Schema):
 class StockRequestItemIn(Schema):
     store_item_id: int
     requested_quantity: Decimal = Field(gt=0)
+    quantity_left: Decimal = Field(default=Decimal("0"), ge=0)
     notes: str = ""
 
 

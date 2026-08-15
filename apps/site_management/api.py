@@ -1302,12 +1302,9 @@ def _cleaner_read(user: User) -> None:
 
 
 def _cleaner_write(user: User) -> None:
-    if not (
-        user.is_system_admin
-        or user.role == RoleCode.GENERAL_SUPERVISOR
-        or user.has_perm("accounts.manage_site_configuration")
-    ):
-        raise PermissionDenied("You do not have permission to manage cleaners.")
+    """Only system administrators and explicitly authorized HR users may onboard cleaners."""
+    if not (user.is_system_admin or user.has_perm("accounts.manage_cleaners")):
+        raise PermissionDenied("Only HR and system administrators may register or onboard cleaners.")
 
 
 def _document_review(user: User) -> None:
@@ -2348,10 +2345,19 @@ def _store_read(user: User, store_id: int) -> None:
 
 
 def _store_manage(user: User, store_id: int) -> None:
+    """Allow scoped management users to create and submit requests."""
     _store_read(user, store_id)
     store = _load_store_or_404(store_id)
     if not user_can_manage_site(user, store.site_id):
         raise PermissionDenied("You do not have permission to manage this store.")
+
+
+def _store_configure(user: User, store_id: int | None = None) -> None:
+    """Only administrators define stores, stock items, and reorder thresholds."""
+    if not user.is_system_admin:
+        raise PermissionDenied("Only system administrators may define site stock.")
+    if store_id is not None:
+        _store_read(user, store_id)
 
 
 def _store_review(user: User) -> None:
@@ -2441,6 +2447,7 @@ def _request_out(r: StockRequest) -> StockRequestOut:
             store_item_id=item.store_item_id,
             item_name=item.store_item.item_name,
             requested_quantity=item.requested_quantity,
+            quantity_left=item.quantity_left,
             approved_quantity=item.approved_quantity,
             notes=item.notes,
         )
@@ -2509,6 +2516,7 @@ def store_low_stock_endpoint(
 @router.post("/stores", response=StoreOut, summary="Create a store")
 def store_create(request: AuthenticatedRequest, payload: StoreCreateIn) -> StoreOut:
     site = _load_site_or_404(payload.site_id)
+    _store_configure(request.auth)
     if not user_can_manage_site(request.auth, site.pk):
         raise PermissionDenied("You do not have permission to create a store for this site.")
     managed_by = User.objects.filter(pk=payload.managed_by_id).first() if payload.managed_by_id else None
@@ -2538,7 +2546,7 @@ def store_items_endpoint(request: AuthenticatedRequest, store_id: int) -> list[S
 
 @router.post("/stores/{store_id}/items", response=StoreItemOut, summary="Add a store item")
 def store_item_create(request: AuthenticatedRequest, store_id: int, payload: StoreItemCreateIn) -> StoreItemOut:
-    _store_manage(request.auth, store_id)
+    _store_configure(request.auth, store_id)
     store = _load_store_or_404(store_id)
     return _store_item_out(
         add_store_item(
@@ -2562,7 +2570,7 @@ def store_item_create(request: AuthenticatedRequest, store_id: int, payload: Sto
 def store_item_update(
     request: AuthenticatedRequest, store_id: int, item_id: int, payload: StoreItemUpdateIn
 ) -> StoreItemOut:
-    _store_manage(request.auth, store_id)
+    _store_configure(request.auth, store_id)
     item = StoreItem.objects.filter(pk=item_id, store_id=store_id).first()
     if item is None:
         raise Http404("Store item not found.")
@@ -2685,7 +2693,12 @@ def store_request_create(
     _store_manage(request.auth, store_id)
     store = _load_store_or_404(store_id)
     items = [
-        {"store_item_id": row.store_item_id, "requested_quantity": row.requested_quantity, "notes": row.notes}
+        {
+            "store_item_id": row.store_item_id,
+            "requested_quantity": row.requested_quantity,
+            "quantity_left": row.quantity_left,
+            "notes": row.notes,
+        }
         for row in payload.items
     ]
     created = create_stock_request(

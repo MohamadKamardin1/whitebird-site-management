@@ -132,6 +132,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             ("verify_job", "Can verify completed jobs"),
             ("approve_trainee", "Can approve trainees"),
             ("manage_site_configuration", "Can manage site configuration"),
+            ("manage_cleaners", "Can register and onboard cleaners"),
             ("view_sensitive_cleaner_documents", "Can view sensitive cleaner documents"),
             ("export_site_management_data", "Can export site management data"),
         ]

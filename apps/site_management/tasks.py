@@ -7,9 +7,11 @@ duplicate domain logic.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 from celery import shared_task
+from django.utils import timezone
 
 from apps.accounts.models import RoleCode, User
 
@@ -64,3 +66,42 @@ def recompute_site_statistics() -> None:
     """Periodic job: refresh cached per-site statistics."""
     refresh_all_site_stats_cache()
     logger.info("recompute_site_statistics: cache refreshed")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)  # type: ignore[untyped-decorator]
+def deliver_daily_report(self: Any) -> str:
+    """Deliver the previous completed day to the administrator mailbox."""
+    from .models import ReportDelivery
+    from .report_delivery import deliver_scheduled_report
+
+    try:
+        return deliver_scheduled_report(
+            ReportDelivery.ReportType.DAILY,
+            as_of=timezone.localdate() - timedelta(days=1),
+        )
+    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+        raise self.retry(exc=exc) from exc
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=600)  # type: ignore[untyped-decorator]
+def deliver_weekly_report(self: Any) -> str:
+    """Deliver the previous completed ISO week to the administrator mailbox."""
+    from .models import ReportDelivery
+    from .report_delivery import deliver_scheduled_report
+
+    try:
+        return deliver_scheduled_report(ReportDelivery.ReportType.WEEKLY)
+    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+        raise self.retry(exc=exc) from exc
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=900)  # type: ignore[untyped-decorator]
+def deliver_monthly_report(self: Any) -> str:
+    """Deliver the previous completed calendar month to the administrator mailbox."""
+    from .models import ReportDelivery
+    from .report_delivery import deliver_scheduled_report
+
+    try:
+        return deliver_scheduled_report(ReportDelivery.ReportType.MONTHLY)
+    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+        raise self.retry(exc=exc) from exc

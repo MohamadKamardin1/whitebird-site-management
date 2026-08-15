@@ -449,6 +449,7 @@ def create_stock_request(
                 request=request,
                 store_item=store_item,
                 requested_quantity=row["requested_quantity"],
+                quantity_left=row.get("quantity_left", 0),
                 notes=row.get("notes", ""),
             )
             item.full_clean()

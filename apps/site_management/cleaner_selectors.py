@@ -12,9 +12,9 @@ from typing import Any
 
 from django.db.models import Q, QuerySet
 
-from apps.accounts.models import User
+from apps.accounts.models import RoleCode, User
 
-from .models import Cleaner, CleanerDocument
+from .models import Cleaner, CleanerAssignmentStatus, CleanerDocument
 
 SENSITIVE_DOCUMENT_PERMISSION = "accounts.view_sensitive_cleaner_documents"
 
@@ -82,6 +82,17 @@ def cleaner_list_queryset(user: User, spec: CleanerFilter) -> QuerySet[Cleaner]:
         qs = qs.filter(id_type=spec.id_type)
     if spec.gender:
         qs = qs.filter(gender=spec.gender)
+
+    # Site supervisors only see cleaners with an active assignment inside
+    # their authenticated site scope. Zone/assistant/general supervisors keep
+    # portfolio visibility so they can administer and review onboarding work.
+    if user.role == RoleCode.SITE_SUPERVISOR:
+        from .scoping import visible_sites
+
+        qs = qs.filter(
+            site_assignments__site__in=visible_sites(user),
+            site_assignments__status=CleanerAssignmentStatus.ACTIVE,
+        ).distinct()
     return qs
 
 

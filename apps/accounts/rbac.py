@@ -27,6 +27,7 @@ _CUSTOM_PERMISSIONS = [
     "verify_job",
     "approve_trainee",
     "manage_site_configuration",
+    "manage_cleaners",
     "view_sensitive_cleaner_documents",
     "export_site_management_data",
 ]
@@ -86,6 +87,7 @@ ROLE_PERMISSIONS: dict[RoleCode, set[tuple[str, str]]] = {
             "assign_job",
             "verify_job",
             "approve_trainee",
+            "manage_cleaners",
             "view_sensitive_cleaner_documents",
             "export_site_management_data",
         )

@@ -19,7 +19,12 @@ from apps.core.tasks import (
     publish_domain_events,
     warm_dashboard_cache,
 )
-from apps.site_management.tasks import recompute_site_statistics
+from apps.site_management.tasks import (
+    deliver_daily_report,
+    deliver_monthly_report,
+    deliver_weekly_report,
+    recompute_site_statistics,
+)
 
 TASK_NAME = "Recompute site statistics"
 
@@ -65,4 +70,27 @@ def register_default_beat_schedule(sender: Any, **kwargs: Any) -> None:
                 "interval": task_schedule,
                 "enabled": True,
             },
+        )
+
+    # Exact UTC schedules are used for calendar reports; the task bodies remain
+    # idempotent through ReportDelivery's unique period/recipient constraint.
+    from django_celery_beat.models import CrontabSchedule  # noqa: PLC0415
+
+    report_schedules = [
+        ("0", "1", "*", "*", "*", deliver_daily_report, "Deliver daily White Bird report"),
+        ("0", "2", "1", "*", "1", deliver_weekly_report, "Deliver weekly White Bird report"),
+        ("0", "3", "1", "1", "*", deliver_monthly_report, "Deliver monthly White Bird report"),
+    ]
+    for minute, hour, day_of_month, month_of_year, day_of_week, task, name in report_schedules:
+        cron, _ = CrontabSchedule.objects.get_or_create(
+            minute=minute,
+            hour=hour,
+            day_of_week=day_of_week,
+            day_of_month=day_of_month,
+            month_of_year=month_of_year,
+            timezone="UTC",
+        )
+        PeriodicTask.objects.get_or_create(
+            name=name,
+            defaults={"task": task.name, "crontab": cron, "enabled": True},
         )

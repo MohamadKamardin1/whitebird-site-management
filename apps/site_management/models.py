@@ -1421,6 +1421,7 @@ class StockRequestItem(TimeStampedModel):
     request = models.ForeignKey(StockRequest, on_delete=models.CASCADE, related_name="items")
     store_item = models.ForeignKey(StoreItem, on_delete=models.CASCADE, related_name="stock_request_items")
     requested_quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity_left = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     approved_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True, default="")
 
@@ -1436,6 +1437,7 @@ class StockRequestItem(TimeStampedModel):
                 condition=models.Q(approved_quantity__gte=0) | models.Q(approved_quantity__isnull=True),
                 name="ck_stockrequestitem_approved_nonneg",
             ),
+            models.CheckConstraint(condition=models.Q(quantity_left__gte=0), name="ck_stockrequestitem_left_nonneg"),
         ]
 
     def __str__(self) -> str:
@@ -1447,6 +1449,8 @@ class StockRequestItem(TimeStampedModel):
             raise ValidationError("Requested quantity must be positive.", code="requested_quantity_invalid")
         if self.store_item.store_id != self.request.store_id:
             raise ValidationError("Item must belong to the request's store.", code="item_store_mismatch")
+        if self.quantity_left < 0:
+            raise ValidationError("Quantity left cannot be negative.", code="quantity_left_invalid")
         if self.approved_quantity is not None and self.approved_quantity < 0:
             raise ValidationError("Approved quantity cannot be negative.", code="approved_quantity_invalid")
 
@@ -2043,3 +2047,38 @@ class GeneralManagementReport(UserStampedModel):
 
     def __str__(self) -> str:
         return f"General report {self.report_date} ({self.status})"
+
+
+class ReportDelivery(UserStampedModel):
+    """Durable outbound report-delivery ledger used by scheduled Celery tasks."""
+
+    class ReportType(models.TextChoices):
+        DAILY = "daily", "Daily"
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+
+    class DeliveryStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+
+    report_type = models.CharField(max_length=16, choices=ReportType.choices)
+    period_key = models.CharField(max_length=32)
+    report_date = models.DateField(db_index=True)
+    recipient = models.EmailField()
+    status = models.CharField(max_length=16, choices=DeliveryStatus.choices, default=DeliveryStatus.PENDING)
+    provider_message_id = models.CharField(max_length=255, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report_type", "period_key", "recipient"],
+                name="uniq_report_delivery_period_recipient",
+            )
+        ]
+        indexes = [models.Index(fields=["report_type", "report_date", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.report_type} {self.period_key} -> {self.recipient} ({self.status})"

@@ -80,3 +80,10 @@ if SENTRY_DSN:
         send_default_pii=False,
         integrations=[DjangoIntegration(), CeleryIntegration()],
     )
+
+
+# White Bird report delivery. Inbound forwarding is intentionally separate and
+# remains managed at the domain provider; this setting only controls outbound mail.
+RESEND_API_KEY = env.str("RESEND_API_KEY", default="")
+REPORTS_FROM_EMAIL = env.str("REPORTS_FROM_EMAIL", default=DEFAULT_FROM_EMAIL)
+REPORTS_RECIPIENT_EMAIL = env.str("REPORTS_RECIPIENT_EMAIL", default="admin@whitebirdtanzania.com")

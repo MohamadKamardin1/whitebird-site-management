@@ -18,3 +18,18 @@
 **Execution constraint:** marketing content must use only verifiable product capabilities and must not invent customer reviews, ratings, testimonials, or unsupported performance claims.
 
 **Design direction:** extend Coastal Ledger into an editorial 3D command-layer presentation: warm limestone, Indian Ocean navy, Reef Ledger Green, subtle depth, tactile topographic forms, disciplined motion, and direct responsibility-oriented copy.
+
+## Operational Workflow Improvements
+
+- [x] Replace every frontend object-to-string rendering path with safe domain-aware display formatting for nested API objects, status values, dates, and IDs.
+- [x] Derive the authenticated user’s permitted site and zone scope from the backend permission/session contract so site supervisors never manually type site IDs for scoped workflows.
+- [x] Simplify attendance into a daily sheet where scheduled cleaners can be marked present/absent and sign-in/sign-out times can be recorded with minimal input, while preserving backend lifecycle and review states.
+- [x] Restrict cleaner registration and full onboarding actions to HR and system administrators; provide site supervisors read-only visibility into cleaners assigned to their site, including active/trainee status and shift context.
+- [x] Implement site-scoped stock configuration owned by administrators and a supervisor workflow that selects a configured stock item, enters remaining quantity, requested quantity, and an optional reason/message.
+- [x] Implement daily, weekly, and monthly White Bird PDF report templates with attendance and operational summaries, automatic report generation, review routing to zone supervisors, and delivery to admin@whitebirdtanzania.com.
+- [x] Integrate Resend as the outbound email engine with a configurable sending domain and sender identity; document Namecheap forwarding as a separate inbound-mail concern.
+- [x] Register recurring report jobs through the project’s supported scheduled-job mechanism with idempotency, retries, UTC scheduling, durable task identifiers, and observable execution outcomes.
+- [x] Add backend/frontend tests for permissions, object formatting, scope derivation, attendance actions, onboarding visibility, stock requests, PDF output, scheduled handlers, and Resend failure handling.
+- [ ] Validate the full integrated system, update documentation and environment templates, commit the changes, and push them to the configured GitHub branch.
+
+**Operational constraints:** backend authorization remains authoritative; client visibility is not a security boundary. No fabricated customer reviews, ratings, testimonials, or fallback operational data may be added.

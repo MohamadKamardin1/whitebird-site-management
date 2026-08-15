@@ -185,3 +185,34 @@ Use small commits that describe the system-level change, for example `feat: add 
 The public marketing page and operations application share a restrained visual language: warm limestone surfaces for long sessions, Indian Ocean navy for authority, Reef Ledger Green for completion and trust, amber for attention, and hibiscus red for consequential failure states. Manrope is the operational UI typeface, while DM Serif Display is reserved for editorial headings. 3D depth is used to make the operating model tangible, not to decorate every interaction. Motion is short, transform-based, and disabled for users who request reduced motion.
 
 The public story is intentionally evidence-based. White Bird’s marketing language explains what the system is designed to do, how roles and workflows relate, and how the trust layer works. It does not claim customer outcomes that are not documented in the repository and does not include fabricated customer proof.
+
+
+## Operational workflow rules
+
+The API is the authorization source for all operational workflows. A site supervisor receives site scope from active supervisor assignments; attendance sheets therefore load assigned sites rather than requiring a manually typed site ID. A supervisor can mark scheduled cleaners present or absent, capture sign-in and sign-out times, save each editable row, and submit the daily sheet for review. Submitted, reviewed, locked, and returned states remain visible in the client.
+
+Cleaner onboarding is restricted to system administrators and users with the explicit cleaner-management permission. Supervisors can read only cleaners associated with active assignments in their visible sites, including operational status and assignment context. Store and stock definitions are administrator-owned. Scoped operational users may submit a stock request by selecting a configured store item, entering quantity remaining, quantity requested, and an optional reason; the backend validates the store/item relationship and workflow state.
+
+## Scheduled report delivery
+
+Daily, weekly, and monthly report tasks run through Celery Beat’s database scheduler in UTC. The tasks do not use in-process timers. Each period is represented by a unique `ReportDelivery` record so retries are safe and a successful period is never sent twice to the same recipient. The PDF renderer uses the `DailySiteReport` source records only; it does not fabricate operational data. Daily delivery targets the previous completed day, weekly delivery targets the previous ISO week, and monthly delivery targets the previous calendar month. Delivery failures are persisted for operator inspection and retried by Celery.
+
+Outbound report delivery uses the Resend HTTP API. Configure the following production variables after verifying the sender domain in Resend:
+
+```dotenv
+RESEND_API_KEY=re_...
+REPORTS_FROM_EMAIL=reports@whitebirdtanzania.com
+REPORTS_RECIPIENT_EMAIL=admin@whitebirdtanzania.com
+```
+
+The canonical administrative recipient is `admin@whitebirdtanzania.com`. Inbound mail forwarding is a separate DNS/provider responsibility: forwarding from Namecheap to `whitebirdcleaners@gmail.com` does not affect the outbound Resend integration. Resend must have the sending domain verified before production email is enabled.
+
+Celery Beat registration is idempotent and creates these exact UTC schedules:
+
+| Report | Schedule | Window |
+|---|---:|---|
+| Daily | Every day at 01:00 UTC | Previous completed day |
+| Weekly | Monday at 02:00 UTC | Previous ISO week |
+| Monthly | First day of month at 03:00 UTC | Previous calendar month |
+
+For local testing, keep `RESEND_API_KEY` empty and run the report-delivery tests; they verify PDF generation, failure recording, and idempotency without sending an external email. Never place the Resend key in Git or a committed `.env` file.
