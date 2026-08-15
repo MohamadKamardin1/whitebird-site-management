@@ -1,121 +1,187 @@
-# White Bird Zanzibar — Site Management Module
+# White Bird Zanzibar Site Management
 
-Premium Django backend for the White Bird Zanzibar estate: sites, zones,
-supervisors, cleaners, attendance, inspections, issues/jobs, stores, stock,
-reports and a role-aware dashboard. Built to production grade with a hardened
-API, secure private-file handling, a branded Jazzmin admin, Celery background
-jobs and a documented Office Management integration boundary.
+> **An accountable operating layer for teams responsible for every site, person, standard, stock item, issue, and handover.**
 
-## Overview
+White Bird Zanzibar is a production-oriented site-management platform for coordinating distributed operational work. It combines a Django and Django Ninja backend with a role-aware React application, a public Coastal Ledger marketing experience, and a domain model centered on sites, zones, cleaner assignments, attendance, trainees, inspections, issues, jobs, stores, stock, reports, and notifications.
 
-- **Ops backbone** — zones → sites → cleaners → assignments → attendance →
-  inspections → issues/jobs → stores/stock → reporting chain → management
-  dashboards.
-- **RBAC** — six platform roles with a central object-level policy layer,
-  site/zone data scoping, and a management-viewer read-only mode.
-- **Events & notifications** — transactional domain-event outbox + in-app
-  notifications with deduplication and Celery-delivered alerts.
-- **Exports** — scoped, streamed, audit-logged CSV exports (attendance,
-  cleaners, issues, jobs, reports).
+The repository is intentionally split into two experiences. The public marketing surface at `/marketing/` communicates the product and its operating model. The authenticated React workspace provides the daily command layer, while the Django-rendered operational dashboard remains available at `/dashboard/` for server-side role-specific views. The backend is always the source of authorization; the React client makes permissions understandable but never replaces server enforcement.
 
-## Tech stack
+## Product model
 
-| Layer          | Technology                                   |
-| -------------- | -------------------------------------------- |
-| Runtime        | Python 3.12 (Docker) / 3.14 (local)          |
-| Framework      | Django 5.2                                   |
-| API            | Django Ninja — `/api/site-management/v1`     |
-| Database       | PostgreSQL 16                                |
-| Cache / Broker | Redis (`django-redis`)                       |
-| Background     | Celery + `django-celery-beat`                |
-| Admin          | Jazzmin (Material soft-gold theme) + `django-constance` |
-| Tests          | pytest + pytest-django + factory-boy         |
-| Quality gates  | Ruff (120) · Mypy strict · coverage ≥ 90%    |
+White Bird is designed around the movement of work through a site-management chain:
 
-## Quick start (local)
+```mermaid
+flowchart LR
+  Scope[Zones and sites] --> People[People and assignments]
+  People --> Daily[Attendance and schedules]
+  Daily --> Standards[Inspections and evidence]
+  Standards --> Work[Issues and jobs]
+  Work --> Supply[Stores and stock]
+  Supply --> Reports[Reports and handovers]
+  Reports --> Oversight[Review, notifications, management visibility]
+```
+
+The platform uses explicit workflow states rather than hidden transitions. A supervisor can see what is assigned to their scope, what is incomplete, what needs review, and what action is available next. A management viewer can receive read-only oversight without being given operational write authority.
+
+## Repository architecture
+
+| Layer | Location | Responsibility |
+|---|---|---|
+| Django configuration | `config/` | Settings, URL assembly, WSGI/ASGI, API composition, production configuration, and task scheduling. |
+| Site-management domain | `apps/site_management/` | Sites, zones, cleaners, assignments, attendance, inspections, issues, jobs, stock, reports, dashboards, and notifications. |
+| Accounts and access | `apps/accounts/` | Users, roles, authentication, refresh/revocation, permissions, and account administration. |
+| React frontend | `frontend/` | Vite application, Coastal Ledger design system, public marketing page, authenticated workspaces, API client, and local development proxy. |
+| Django host views | `apps/web/` | Health/readiness probes, legacy server dashboard, and collected React SPA delivery. |
+| Data and migrations | `apps/*/migrations/` | Django schema evolution and migration history. |
+| Operational documentation | `docs/` | API, architecture, RBAC, frontend integration, and workflow references. |
+| Deployment | `Dockerfile`, `docker-compose.yml` | Multi-stage frontend build, Django runtime, PostgreSQL, Redis, and worker topology. |
+
+## User experiences and routes
+
+The public landing experience is served by Django at `/marketing/`. It uses a CSS-driven 3D command-layer composition instead of a heavy WebGL dependency, which keeps the marketing surface responsive, accessible, and inexpensive to render. The scene includes topographic depth, floating workflow cards, role context, and trust-layer messaging. It is not presented as a live-data dashboard and does not invent customer reviews, ratings, testimonials, or unsupported performance claims.
+
+The application entry point is served at `/app/` after the frontend bundle has been built and collected into Django static files. The client includes authentication, a role-aware dashboard, sites and zones, cleaners, assignments, attendance, inspections, issues and jobs, stores and stock, reports, notifications, and account context. The server-rendered role dashboard remains at `/dashboard/` for compatibility and direct operational access.
+
+The Django Ninja API is mounted below `/api/site-management/v1`. The frontend API client is centralized in `frontend/client/src/lib/api.ts`; feature pages should not construct ad hoc bearer requests.
+
+## Technology stack
+
+| Concern | Technology |
+|---|---|
+| Backend runtime | Python 3.11+, Django, Django Ninja, Celery, Redis, PostgreSQL |
+| Authentication | Bearer access and refresh tokens with revocation and permission lookup |
+| Frontend runtime | React, TypeScript, Vite, Wouter, Tailwind CSS 4, shadcn/ui primitives, Lucide icons |
+| API integration | Typed client with bearer authorization, query serialization, response normalization, trace IDs, and structured error handling |
+| Static delivery | Vite production bundle collected by Django and served from the combined image |
+| Quality | Pytest, pytest-django, Ruff, TypeScript checking, Vite production build |
+| Deployment | Multi-stage Docker build with separate frontend compilation and Django runtime stages |
+
+## Local development
+
+### Backend
+
+Create a virtual environment, install the development requirements, and populate a local `.env` from the example configuration. A PostgreSQL and Redis service are expected for the normal development topology.
 
 ```bash
-cp .env.example .env          # then edit to taste
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements/dev.txt -r requirements/test.txt
-createdb whitebird
-python manage.py migrate
-python manage.py seed_rbac    # roles/groups/permissions (idempotent)
-python manage.py seed_demo    # realistic demo tenant (idempotent)
-make run                      # dev server on :8000
-```
-
-### URLs after boot
-
-| Page                          | URL                                       |
-| ----------------------------- | ----------------------------------------- |
-| Dashboard                     | `http://localhost:8000/dashboard/`        |
-| Jazzmin admin                 | `http://localhost:8000/admin/`            |
-| API (Swagger docs)            | `http://localhost:8000/api/site-management/v1/docs` |
-| API (OpenAPI JSON)            | `http://localhost:8000/api/site-management/v1/openapi.json` |
-| Health / readiness            | `http://localhost:8000/healthz` · `/readyz` |
-
-Demo admin login (from `seed_demo`): `admin@whitebird.local` / `demo-password-1`.
-
-## Docker
-
-```bash
-# Production-like stack: web + Celery worker + beat + Postgres + Redis
 cp .env.example .env
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec web python manage.py seed_rbac
-docker compose -f docker-compose.prod.yml exec web python manage.py seed_demo
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
 ```
 
-The production image is a multi-stage, non-root build that runs migrations and
-`collectstatic` on boot, then serves Gunicorn (see `scripts/entrypoint.sh`).
-Persistent volumes cover Postgres data, Redis data, static files and private
-media.
+For a hermetic smoke test, the repository test settings support SQLite. The normal development and production settings should continue to use PostgreSQL unless a deliberately isolated local test environment is being created.
 
-## Tests
+### Frontend
+
+The frontend lives inside the Django repository and is developed independently from the backend process. Vite proxies `/api` requests to Django, so browser requests follow the same API path used in production.
 
 ```bash
-pytest                          # full suite (test settings: SQLite, eager Celery)
-pytest --cov=apps --cov-branch --cov-fail-under=90
-ruff check . && ruff format --check .
-mypy apps config
-python manage.py makemigrations --check --dry-run
+cd frontend
+pnpm install
+pnpm dev
 ```
 
-## Seed data
+The API base can be overridden when the client must connect to another environment:
 
-| Command                  | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `python manage.py seed_rbac`  | Idempotently create the six role groups + permissions. |
-| `python manage.py seed_demo`  | Realistic demo tenant: users for every role, zones, sites, shifts/areas, cleaners, trainees, assignments, attendance, inspections, issues/jobs, stores/stock, and a completed reporting chain. |
-| `python manage.py seed_volume` | Large synthetic volume for benchmarking (`--zones`, `--sites-per-zone`, `--cleaners-per-site`, `--days`). |
+```bash
+VITE_API_BASE_URL=https://api.example.com/api/site-management/v1 pnpm build
+```
 
-## Environment variables
+When the variable is omitted for the integrated local setup, the client uses `/api/site-management/v1` and the development proxy points to the local Django server.
 
-See `.env.example` for the full set. The most important:
+### Development seed and safe test data
 
-| Variable                       | Purpose                                   |
-| ------------------------------ | ----------------------------------------- |
-| `DJANGO_SECRET_KEY`            | Required in production.                   |
-| `DJANGO_ALLOWED_HOSTS`         | Required in production.                   |
-| `CSRF_TRUSTED_ORIGINS`         | Required in production.                   |
-| `DJANGO_SETTINGS_MODULE`       | `config.settings.dev` (local) / `config.settings.prod` (deploy). |
-| `DATABASE_URL`                 | PostgreSQL DSN.                           |
-| `REDIS_URL`                    | Cache location.                           |
-| `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery broker/backend (Redis). |
-| `CORS_ALLOWED_ORIGINS`         | Allowed frontend origins.                 |
-| `API_THROTTLE_ANON_RATE` / `API_THROTTLE_AUTH_RATE` | API rate limits. |
-| `SENTRY_DSN`                   | Optional error tracking.                  |
-| `CSP_ENABLED`                  | Content-Security-Policy header (default on in prod). |
+Use the repository’s documented seed tooling only in an isolated development database. Do not copy development credentials into production, and do not use synthetic customer testimonials or ratings as product content. Operational fixtures should remain clearly identifiable as development data.
 
-## Documentation
+## Production build and Docker delivery
 
-- `docs/DEPLOYMENT.md` — production deployment.
-- `docs/SECURITY.md` — security posture.
-- `docs/OPERATIONS.md` — operational runbook.
-- `docs/API.md` — full endpoint catalog & API standards.
-- `docs/FRONTEND_INTEGRATION.md` — how a Vite + Lit frontend consumes the API.
-- `docs/OFFICE_INTEGRATION.md` — future Office Management boundary.
-- `docs/PERFORMANCE.md` — indexes, caching, benchmarking.
-- `docs/RBAC.md` — role/permission matrix.
-- `docs/THEME.md` — design system.
+The root `Dockerfile` uses a multi-stage build. The first stage installs frontend dependencies and creates the Vite bundle. The Django stage installs Python requirements, copies the source, collects static assets, and starts the configured production process. A deployment does not depend on the sandbox asset service or local frontend files outside this repository.
+
+Build and run the combined image with the project’s normal container workflow:
+
+```bash
+docker compose -f docker-compose.prod.yml build web
+docker compose -f docker-compose.prod.yml up -d web worker beat
+```
+
+Before publishing an image, confirm that the deployment environment supplies a strong `DJANGO_SECRET_KEY`, a production PostgreSQL URL, Redis connectivity, allowed hosts, CSRF origins, CORS origins, token configuration, storage configuration, and the correct public frontend/API origins. Ensure migrations run as an explicit release step rather than implicitly during every web process start.
+
+## Environment contract
+
+The complete variable template is `.env.example`. The most important production values are summarized below.
+
+| Variable group | Purpose | Production expectation |
+|---|---|---|
+| Django secrets | Secret key, debug flag, allowed hosts, CSRF trusted origins | Strong secret values, `DEBUG=false`, explicit host and origin allowlists. |
+| Database | PostgreSQL connection URL and pool settings | Managed PostgreSQL with backups, SSL, and a least-privilege application user. |
+| Cache and workers | Redis URL, Celery broker/result configuration | Managed Redis or isolated production Redis with network restrictions. |
+| Auth | JWT/access-token, refresh-token, issuer, and cookie settings | Short access-token lifetime, revocable refresh tokens, secure transport, and stable issuer configuration. |
+| Storage | Private file storage provider, bucket, and signing configuration | Private-by-default objects and short-lived signed downloads. |
+| Frontend | `VITE_API_BASE_URL` when using a separate public API origin | Include the complete `/api/site-management/v1` path and configure Django CORS accordingly. |
+
+## API integration boundaries
+
+The backend contract is documented in `docs/API.md`, `docs/FRONTEND_INTEGRATION.md`, and the implementation under `config/api.py` and the relevant application API modules. The frontend expects the following broad contract categories:
+
+| Category | Representative capabilities |
+|---|---|
+| Session | Login, refresh, logout, current user, permissions, account statistics. |
+| Organisation | Zones, sites, departments, areas, assets, supervisors, shifts, and schedules. |
+| People | Cleaners, documents, trainees, evaluations, and assignment relationships. |
+| Daily operations | Attendance sheets, submissions, review/return states, and attendance summaries. |
+| Standards | Inspection templates, inspection records, scoring, evidence, submit, return, and review. |
+| Work queue | Issues, jobs, priorities, assignment, escalation, evidence, verify, close, and reopen. |
+| Supply | Stores, items, stock movements, low-stock signals, and stock requests. |
+| Oversight | Site, zone, assistant, general reports, status dashboards, exports, and notifications. |
+
+The client treats 401, 403, 404, 409, 422, 429, 5xx, and network failures as distinct user states. A failed API request does not produce fabricated fallback records. It produces an honest loading, empty, scope, retry, or service-response state.
+
+## Security and privacy posture
+
+Authorization is enforced by Django. The client-side permission layer exists to make the experience understandable and to avoid inviting users into actions they cannot perform, but it must not be treated as a security boundary. Sensitive documents and private photos use backend-issued signed downloads. Secrets are not committed to the repository. Access tokens are held in memory and refresh tokens are session-scoped by the current frontend implementation; a production BFF with HttpOnly cookies is preferred when deployment topology supports it.
+
+The application should be deployed behind TLS, with secure cookies, strict host/origin configuration, rate limits, structured audit events, centralized error logging, and a monitored readiness endpoint. Operational data should be scoped by the server before serialization; hiding a field in React is not a substitute for serializer-level access control.
+
+## Quality gates
+
+Run the following checks before creating a release commit:
+
+```bash
+# Backend tests
+DJANGO_DEBUG=false DJANGO_SECRET_KEY=local-test-secret pytest -q
+
+# Backend lint
+ruff check apps config
+
+# Frontend type and production checks
+cd frontend
+pnpm check
+pnpm build
+```
+
+The browser-level smoke path should verify the public `/marketing/` page, `/app/` static delivery, the Vite development shell, health/readiness probes, login, current-user lookup, permissions, dashboard data, and at least one representative read and write workflow in a seeded non-production database. Validate desktop and mobile layouts and confirm `prefers-reduced-motion` removes non-essential 3D transforms.
+
+## Release workflow
+
+A release begins with a clean working tree and a reviewed change list. Backend schema changes must be migrated and tested before application rollout. Frontend changes must pass the TypeScript check and production build. The combined image should be built in CI, scanned, deployed to a non-production environment, and verified through health, API, public marketing, authentication, and role-specific workflow checks before promotion.
+
+Use small commits that describe the system-level change, for example `feat: add public operations marketing surface` or `docs: document combined production workflow`. Push only after tests and static checks have completed. Keep rollback available through the previous image and migration compatibility window.
+
+## Documentation map
+
+| Document | Use |
+|---|---|
+| `docs/API.md` | Endpoint catalogue, response conventions, filtering, pagination, exports, and errors. |
+| `docs/ARCHITECTURE.md` | Domain boundaries, data flow, services, events, and deployment topology. |
+| `docs/RBAC.md` | Role scope, permissions, and frontend expectations. |
+| `docs/FRONTEND_INTEGRATION.md` | API origin, authentication flow, request conventions, and frontend consumption. |
+| `frontend/README.md` | Frontend-local commands and package-level development notes. |
+| `TODO.md` | Current delivery backlog and execution history. |
+
+## Design system: Coastal Ledger
+
+The public marketing page and operations application share a restrained visual language: warm limestone surfaces for long sessions, Indian Ocean navy for authority, Reef Ledger Green for completion and trust, amber for attention, and hibiscus red for consequential failure states. Manrope is the operational UI typeface, while DM Serif Display is reserved for editorial headings. 3D depth is used to make the operating model tangible, not to decorate every interaction. Motion is short, transform-based, and disabled for users who request reduced motion.
+
+The public story is intentionally evidence-based. White Bird’s marketing language explains what the system is designed to do, how roles and workflows relate, and how the trust layer works. It does not claim customer outcomes that are not documented in the repository and does not include fabricated customer proof.

@@ -13,6 +13,7 @@ import AttendancePage from "@/pages/AttendancePage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
+import MarketingPage from "@/pages/MarketingPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -23,6 +24,7 @@ function ProtectedPage({ children }: { children: ReactNode }) { return <Protecte
 
 function Router() {
   return <Switch>
+    <Route path="/marketing" component={MarketingPage} />
     <Route path="/login" component={LoginPage} />
     <Route path="/"><ProtectedPage><DashboardPage /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
