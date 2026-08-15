@@ -125,7 +125,8 @@ TEMPLATES = [
 
 DATABASES = {"default": env.db("DATABASE_URL", default="postgres://postgres:postgres@127.0.0.1:5432/whitebird")}
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("POSTGRES_CONN_MAX_AGE", default=60)
-DATABASES["default"]["OPTIONS"] = {"connect_timeout": env.int("POSTGRES_CONNECT_TIMEOUT", default=10)}
+if DATABASES["default"]["ENGINE"] != "django.db.backends.sqlite3":
+    DATABASES["default"]["OPTIONS"] = {"connect_timeout": env.int("POSTGRES_CONNECT_TIMEOUT", default=10)}
 
 REDIS_URL = env.str("REDIS_URL", default="redis://127.0.0.1:6379/0")
 

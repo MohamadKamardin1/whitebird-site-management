@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1
 
+FROM node:22-bookworm-slim AS frontend-build
+
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY frontend/ ./
+RUN pnpm build
+
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,6 +25,7 @@ COPY requirements/ requirements/
 RUN pip install --no-cache-dir -r requirements/prod.txt
 
 COPY --chown=app:app . .
+COPY --from=frontend-build --chown=app:app /app/frontend/dist /app/static/frontend
 
 # The entrypoint waits for the database, migrates, collects static files,
 # then hands over to Gunicorn.

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db import connection
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 
 from apps.accounts.models import RoleCode
@@ -50,6 +51,18 @@ def landing(request: HttpRequest) -> HttpResponseRedirect:
     if request.user.is_authenticated:
         return redirect("dashboard")
     return redirect("admin:index")
+
+
+def react_app(request: HttpRequest) -> HttpResponse:
+    """Serve the production React entry point produced by the in-repository Vite build."""
+    index = settings.STATIC_ROOT / "frontend" / "index.html"
+    if not index.exists():
+        return HttpResponse(
+            "White Bird frontend is not built. Run `pnpm build` in frontend and `collectstatic`.",
+            content_type="text/plain",
+            status=503,
+        )
+    return FileResponse(index.open("rb"), content_type="text/html")
 
 
 _TEMPLATE_BY_ROLE: dict[str, str] = {
