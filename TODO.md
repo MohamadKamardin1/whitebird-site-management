@@ -62,3 +62,17 @@
 - [ ] Include attendance lifecycle, cleanliness, inspections, issues, stock, and unresolved corrective actions in the appropriate daily and weekly report payloads and review routing.
 - [ ] Add backend/frontend tests for deep-link refreshes, inspection completion, issue ownership/escalation, stock-request validation, and Friday weekly-report selection.
 - [ ] Update documentation, run the full integrated quality suite, commit, and push the production release.
+
+## White Bird AI Optimization Engine
+
+- [x] Define a role-aware AI summary contract: site supervisors receive site-level action guidance, zone supervisors receive zone rollups, assistant-general supervisors receive cross-zone summaries, and general supervisors receive organization-level oversight.
+- [x] Build a server-side operational evidence pack from authoritative attendance, cleanliness, inspections, issues, jobs, stock, and report data, constrained by the authenticated user’s existing scope and permissions.
+- [x] Integrate DeepSeek through a server-only API client with an environment-held key, bounded prompts, structured JSON output validation, request timeouts, and no client-side secret exposure.
+- [x] Add deterministic data-integrity checks that identify missing daily records, incomplete required inspection items, unresolved exceptions, overdue work, low-stock risks, and reporting gaps before AI summarization.
+- [x] Persist auditable AI summary requests and outputs with actor, role scope, evidence snapshot fingerprint, model metadata, generated time, and explicit disclaimer that recommendations do not change operational records automatically.
+- [x] Expose authorized APIs for on-demand AI summaries and reporting-quality optimization, with graceful human-readable fallback when the provider is unavailable or returns invalid structured output.
+- [x] Add a responsive White Bird AI Optimization widget to the dashboard and reporting workspace, including priorities, evidence-backed observations, data-quality warnings, recommended accountable actions, and a refresh control.
+- [x] Keep AI output read-only and require existing backend workflows for every operational action, review, escalation, stock request, report submission, or assignment change.
+- [x] Add backend/frontend tests for role-scope isolation, payload integrity, DeepSeek failure handling, structured-output validation, audit logging, and role-specific UI behavior.
+- [x] Document the DeepSeek environment contract, security boundaries, model-use policy, operational limitations, validation results, release commit, and GitHub push.
+- [x] Deliver the selected hybrid model: on-demand AI optimization plus role-scoped scheduled daily leadership briefs and a Friday weekly optimization brief, with idempotent execution and durable delivery/audit status.

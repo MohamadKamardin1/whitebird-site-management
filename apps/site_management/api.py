@@ -22,6 +22,7 @@ from apps.core.files import create_file_token
 from apps.core.pagination import PageParams, Paginated, apply_ordering, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
 
+from .ai_optimization import generate_optimization_brief, latest_brief
 from .assignment_policies import can_assign_cleaner, can_edit_assignment, can_view_assignment
 from .assignment_selectors import (
     AssignmentFilter,
@@ -4254,6 +4255,46 @@ def dashboards_report_status_endpoint(
 ) -> dict[str, object]:
     _report_read(request.auth)
     return report_status_by_site(request.auth, report_date or date.today())
+
+
+def _ai_brief_out(brief: Any) -> dict[str, object]:
+    return {
+        "id": brief.pk,
+        "brief_type": brief.brief_type,
+        "report_date": brief.report_date.isoformat(),
+        "scope_key": brief.scope_key,
+        "role": brief.role,
+        "status": brief.status,
+        "provider": brief.provider,
+        "model": brief.model,
+        "generated_at": brief.generated_at.isoformat() if brief.generated_at else None,
+        "evidence_fingerprint": brief.evidence_fingerprint,
+        "output": brief.output or {},
+    }
+
+
+@router.get("/ai/optimization/latest", response=dict, summary="Latest role-scoped AI optimization brief", tags=["AI"])
+def ai_optimization_latest_endpoint(request: AuthenticatedRequest) -> dict[str, object]:
+    _report_read(request.auth)
+    brief = latest_brief(user=request.auth)
+    return {"brief": _ai_brief_out(brief) if brief else None}
+
+
+@router.post("/ai/optimization", response=dict, summary="Generate a role-scoped AI optimization brief", tags=["AI"])
+def ai_optimization_generate_endpoint(
+    request: AuthenticatedRequest,
+    report_date: date | None = None,
+    brief_type: str = "on_demand",
+) -> dict[str, object]:
+    _report_read(request.auth)
+    allowed = {"on_demand", "daily", "weekly"}
+    if brief_type not in allowed:
+        raise PermissionDenied("Unsupported AI brief type.")
+    day = report_date or date.today()
+    if brief_type == "weekly" and day.weekday() != 4:
+        raise PermissionDenied("Weekly optimization briefs are only generated for Friday dates.")
+    brief = generate_optimization_brief(user=request.auth, day=day, brief_type=brief_type)
+    return {"brief": _ai_brief_out(brief)}
 
 
 @router.post(

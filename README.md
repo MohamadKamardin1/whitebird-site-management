@@ -236,3 +236,16 @@ The operations workspace includes dedicated pages for guided field-inspection in
 Report generation explicitly asks for Daily or Weekly. A selected non-Friday date is always treated as Daily, even if Weekly is selected. Friday Weekly generation calls the audited weekly aggregation endpoint and returns the complete Monday–Friday evidence set for the selected site, using the same daily operational snapshot sources for attendance, stock, inspections, trainees, and issues. Daily report generation continues to use the existing draft site-report lifecycle.
 
 The next operational increment remains tracked in `TODO.md`: completing checklist answer/evidence editing directly in the dedicated inspection page, adding full issue ownership/job-assignment controls, surfacing all new evidence in PDF and email delivery payloads, and expanding workflow-specific regression coverage.
+
+
+## White Bird AI Optimization Engine
+
+The platform now includes a server-side, role-aware **White Bird AI Optimization Engine**. It uses the authenticated user’s existing visible-site scope and the same authoritative operational aggregations used by the dashboard and reporting chain. Site supervisors receive summaries for their assigned sites; zone supervisors receive their assigned-zone rollup; assistant general supervisors receive their configured cross-zone scope; and general supervisors, management viewers, and system administrators receive organization-level visibility according to the existing policy layer.
+
+The engine generates three brief types: on-demand summaries from the dashboard widget, daily leadership briefs, and Friday weekly optimization briefs covering the Monday–Friday evidence window. The scheduled jobs are registered through the project’s Celery Beat configuration and are idempotent by role, scope, brief type, and report date. Each brief stores the evidence snapshot fingerprint, actor role, model metadata, provider status, structured output, and generation timestamp in the append-only audit chain.
+
+The AI prompt requires JSON output and explicitly prohibits invented counts, names, dates, or events. Before the provider call, deterministic checks identify missing daily reports, reports awaiting review, unresolved and escalated issues, overdue jobs, low-stock items, and low attendance. If the DeepSeek provider is unavailable, returns empty content, or returns invalid JSON, White Bird falls back to a deterministic evidence-only brief rather than fabricating a recommendation or blocking the dashboard.
+
+`DEEPSEEK_API_KEY` is a server-only deployment secret. `DEEPSEEK_API_BASE` defaults to `https://api.deepseek.com`, and `DEEPSEEK_MODEL` defaults to `deepseek-v4-pro`. The browser never receives the key. The engine is advisory and read-only: it cannot sign attendance, close issues, approve stock, submit reports, change assignments, or modify any operational record. Users must continue through the existing audited workflows to act on a recommendation.
+
+The official DeepSeek integration reference is [DeepSeek API Documentation](https://api-docs.deepseek.com/), including the documented OpenAI-compatible base URL, chat-completions request, and JSON Output response format. The implementation additionally validates the JSON shape inside White Bird before it is displayed or persisted.

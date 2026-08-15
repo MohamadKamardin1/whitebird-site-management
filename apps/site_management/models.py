@@ -2090,3 +2090,42 @@ class ReportDelivery(UserStampedModel):
 
     def __str__(self) -> str:
         return f"{self.report_type} {self.period_key} -> {self.recipient} ({self.status})"
+
+
+class AIOptimizationBrief(UserStampedModel):
+    """Auditable DeepSeek summary generated from an authorised evidence snapshot."""
+
+    class BriefType(models.TextChoices):
+        ON_DEMAND = "on_demand", "On demand"
+        DAILY = "daily", "Daily leadership brief"
+        WEEKLY = "weekly", "Friday weekly optimization brief"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    brief_type = models.CharField(max_length=16, choices=BriefType.choices, db_index=True)
+    report_date = models.DateField(db_index=True)
+    scope_key = models.CharField(max_length=160, db_index=True)
+    role = models.CharField(max_length=64, db_index=True)
+    evidence_fingerprint = models.CharField(max_length=64, db_index=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    output = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    provider = models.CharField(max_length=32, default="deepseek")
+    model = models.CharField(max_length=96, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    generated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "AI optimization brief"
+        verbose_name_plural = "AI optimization briefs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["brief_type", "report_date", "scope_key"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_brief_type_display()} {self.report_date} · {self.scope_key} · {self.status}"

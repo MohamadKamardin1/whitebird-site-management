@@ -21,6 +21,8 @@ env = environ.Env(
     TIME_ZONE=(str, "Africa/Dar_es_Salaam"),
     LANGUAGE_CODE=(str, "en-us"),
     AUTH_MECHANISM=(str, "session"),
+    DEEPSEEK_API_BASE=(str, "https://api.deepseek.com"),
+    DEEPSEEK_MODEL=(str, "deepseek-v4-pro"),
 )
 
 # --------------------------------------------------------------------------- #
@@ -220,6 +222,9 @@ API_DOCS_ENABLED = env.bool("API_DOCS_ENABLED", default=True)
 # --------------------------------------------------------------------------- #
 
 AUTH_MECHANISM = env("AUTH_MECHANISM")  # "session" | "jwt"
+DEEPSEEK_API_BASE = env("DEEPSEEK_API_BASE")
+DEEPSEEK_MODEL = env("DEEPSEEK_MODEL")
+DEEPSEEK_API_KEY = env.str("DEEPSEEK_API_KEY", default="")
 JWT_AUDIENCE = env.str("JWT_AUDIENCE", default="whitebird")
 JWT_ISSUER = env.str("JWT_ISSUER", default="whitebird")
 JWT_ACCESS_TOKEN_TTL = timedelta(seconds=env.int("JWT_ACCESS_TOKEN_TTL", default=900))

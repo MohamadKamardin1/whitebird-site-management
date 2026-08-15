@@ -24,6 +24,8 @@ from apps.site_management.tasks import (
     deliver_monthly_report,
     deliver_weekly_report,
     recompute_site_statistics,
+    generate_daily_ai_briefs,
+    generate_friday_ai_briefs,
 )
 
 TASK_NAME = "Recompute site statistics"
@@ -78,6 +80,8 @@ def register_default_beat_schedule(sender: Any, **kwargs: Any) -> None:
 
     report_schedules = [
         ("0", "1", "*", "*", "*", deliver_daily_report, "Deliver daily White Bird report"),
+        ("30", "1", "*", "*", "*", generate_daily_ai_briefs, "Generate daily White Bird AI leadership briefs"),
+        ("0", "2", "*", "*", "5", generate_friday_ai_briefs, "Generate Friday White Bird AI optimization briefs"),
         ("0", "2", "1", "*", "1", deliver_weekly_report, "Deliver weekly White Bird report"),
         ("0", "3", "1", "1", "*", deliver_monthly_report, "Deliver monthly White Bird report"),
     ]

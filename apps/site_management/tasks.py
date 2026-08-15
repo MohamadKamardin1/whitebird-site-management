@@ -105,3 +105,55 @@ def deliver_monthly_report(self: Any) -> str:
         return deliver_scheduled_report(ReportDelivery.ReportType.MONTHLY)
     except Exception as exc:  # noqa: BLE001 - Celery retry boundary
         raise self.retry(exc=exc) from exc
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=600)  # type: ignore[untyped-decorator]
+def generate_daily_ai_briefs(self: Any) -> str:
+    """Generate one scoped daily AI brief per active leadership user."""
+    from .ai_optimization import LEADERSHIP_ROLES, _scope_key, generate_optimization_brief
+    from .models import AIOptimizationBrief
+
+    day = timezone.localdate()
+    created = 0
+    try:
+        for user in User.objects.filter(is_active=True, role__in=LEADERSHIP_ROLES).iterator():
+            scope_key = _scope_key(user)
+            if AIOptimizationBrief.objects.filter(
+                brief_type=AIOptimizationBrief.BriefType.DAILY,
+                report_date=day,
+                scope_key=scope_key,
+                role=user.role,
+            ).exists():
+                continue
+            generate_optimization_brief(user=user, day=day, brief_type=AIOptimizationBrief.BriefType.DAILY)
+            created += 1
+        return f"Generated {created} daily AI brief(s) for {day.isoformat()}"
+    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+        raise self.retry(exc=exc) from exc
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=900)  # type: ignore[untyped-decorator]
+def generate_friday_ai_briefs(self: Any) -> str:
+    """Generate one complete Monday-Friday AI optimization brief per leader."""
+    from .ai_optimization import LEADERSHIP_ROLES, _scope_key, generate_optimization_brief
+    from .models import AIOptimizationBrief
+
+    day = timezone.localdate()
+    if day.weekday() != 4:
+        return f"Skipped Friday AI brief generation on {day.isoformat()}"
+    created = 0
+    try:
+        for user in User.objects.filter(is_active=True, role__in=LEADERSHIP_ROLES).iterator():
+            scope_key = _scope_key(user)
+            if AIOptimizationBrief.objects.filter(
+                brief_type=AIOptimizationBrief.BriefType.WEEKLY,
+                report_date=day,
+                scope_key=scope_key,
+                role=user.role,
+            ).exists():
+                continue
+            generate_optimization_brief(user=user, day=day, brief_type=AIOptimizationBrief.BriefType.WEEKLY)
+            created += 1
+        return f"Generated {created} Friday AI brief(s) for {day.isoformat()}"
+    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+        raise self.retry(exc=exc) from exc
