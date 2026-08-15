@@ -1620,6 +1620,14 @@ class InspectionResult(PrivateFileModel):
 
     inspection = models.ForeignKey(Inspection, on_delete=models.CASCADE, related_name="results")
     template_item = models.ForeignKey(InspectionTemplateItem, on_delete=models.CASCADE, related_name="results")
+    responsible_cleaner = models.ForeignKey(
+        Cleaner,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responsible_inspection_results",
+        help_text="Cleaner accountable for an incomplete or failed operational area item.",
+    )
     value_text = models.TextField(blank=True, default="")
     value_number = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     value_boolean = models.BooleanField(null=True, blank=True)

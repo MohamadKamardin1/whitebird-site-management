@@ -535,6 +535,7 @@ class AttendanceRecordOut(Schema):
     shift_name: str | None = None
     attendance_date: date
     status: str
+    attendance_outcome: str
     check_in_time: time | None = None
     check_out_time: time | None = None
     notes: str
@@ -881,6 +882,8 @@ class InspectionResultOut(Schema):
     id: int
     inspection_id: int
     template_item_id: int
+    responsible_cleaner_id: int | None = None
+    responsible_cleaner_name: str | None = None
     item_label: str
     item_type: str
     required: bool
@@ -894,6 +897,7 @@ class InspectionResultOut(Schema):
 
 class InspectionResultCreateIn(Schema):
     template_item_id: int
+    responsible_cleaner_id: int | None = None
     value_text: str = ""
     value_number: Decimal | None = Field(default=None, ge=0, le=100)
     value_boolean: bool | None = None
@@ -902,6 +906,7 @@ class InspectionResultCreateIn(Schema):
 
 
 class InspectionResultUpdateIn(Schema):
+    responsible_cleaner_id: int | None = None
     value_text: str | None = None
     value_number: Decimal | None = Field(default=None, ge=0, le=100)
     value_boolean: bool | None = None

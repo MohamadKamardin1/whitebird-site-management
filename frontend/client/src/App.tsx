@@ -10,6 +10,7 @@ import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ResourceWorkspace from "@/pages/ResourceWorkspace";
 import AttendancePage from "@/pages/AttendancePage";
+import CleanlinessPage from "@/pages/CleanlinessPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
@@ -31,6 +32,7 @@ function Router() {
     <Route path="/people/cleaners"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "People operations", title: "A cleaner registry built for responsible review.", description: "Search and review authorised cleaner records, document states, and onboarding readiness without exposing sensitive data outside policy.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>
+    <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Quality assurance", title: "Inspection evidence, ready for review.", description: "Start from current inspection work, templates, results, and the evidence-led workflow required to move an inspection through review.", endpoint: "/inspections", action: "inspection", filterLabel: "inspections" }} /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Operations queue", title: "Issues and jobs that keep ownership visible.", description: "Search current operational risk, raise a well-defined issue, and move authorised jobs through assignment, evidence, verification, and closure.", endpoint: "/issues", action: "issue", filterLabel: "issues and jobs" }} /></ProtectedPage></Route>
     <Route path="/stores"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Stores & stock", title: "Supply signals before they become delays.", description: "Monitor your authorised stores, stock items, movements, requests, and low-stock conditions from an audit-ready workspace.", endpoint: "/stores", action: "stock_request", filterLabel: "stores and stock" }} /></ProtectedPage></Route>

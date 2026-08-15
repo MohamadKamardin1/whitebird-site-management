@@ -601,3 +601,18 @@ def test_attendance_admin_readonly_and_delete_guard(admin_user) -> None:
     assert "status" in locked_fields
     assert admin.has_delete_permission(None, draft) is True
     assert admin.has_delete_permission(None, locked) is False
+
+
+@pytest.mark.django_db
+def test_attendance_outcome_distinguishes_sign_in_sign_out_and_absence(site, admin_user) -> None:
+    from apps.site_management.api import _attendance_outcome
+
+    cleaner = _active_cleaner()
+    _assign(site, cleaner, actor=admin_user)
+    absent = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 1), status=AttendanceStatus.ABSENT)
+    signed_in = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 2), status=AttendanceStatus.PRESENT, check_in_time=time(8, 0))
+    complete = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 3), status=AttendanceStatus.PRESENT, check_in_time=time(8, 0), check_out_time=time(17, 0))
+
+    assert _attendance_outcome(absent) == "absent"
+    assert _attendance_outcome(signed_in) == "half_present"
+    assert _attendance_outcome(complete) == "present"

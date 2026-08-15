@@ -1887,6 +1887,15 @@ def _attendance_write(user: User, site_id: int) -> None:
         raise PermissionDenied("You cannot manage attendance for this site.")
 
 
+def _attendance_outcome(r: AttendanceRecord) -> str:
+    """Derive the operational attendance outcome from the shift lifecycle."""
+    if r.status == AttendanceStatus.ABSENT or r.check_in_time is None:
+        return "absent"
+    if r.check_out_time is None:
+        return "half_present"
+    return "present"
+
+
 def _attendance_out(r: AttendanceRecord) -> AttendanceRecordOut:
     return AttendanceRecordOut(
         id=r.pk,
@@ -1898,6 +1907,7 @@ def _attendance_out(r: AttendanceRecord) -> AttendanceRecordOut:
         shift_name=r.shift.shift_name if r.shift else None,
         attendance_date=r.attendance_date,
         status=r.status,
+        attendance_outcome=_attendance_outcome(r),
         check_in_time=r.check_in_time,
         check_out_time=r.check_out_time,
         notes=r.notes,
@@ -2844,6 +2854,8 @@ def _result_out(r: InspectionResult) -> InspectionResultOut:
         id=r.pk,
         inspection_id=r.inspection_id,
         template_item_id=r.template_item_id,
+        responsible_cleaner_id=r.responsible_cleaner_id,
+        responsible_cleaner_name=r.responsible_cleaner.full_name if r.responsible_cleaner else None,
         item_label=r.template_item.item_label,
         item_type=r.template_item.item_type,
         required=r.template_item.required,
@@ -3140,10 +3152,14 @@ def inspection_result_create(
     ).first()
     if template_item is None:
         raise Http404("Template item not found.")
+    responsible_cleaner = Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
+    if responsible_cleaner and not CleanerSiteAssignment.objects.filter(cleaner=responsible_cleaner, site_id=inspection.site_id, status="active").exists():
+        raise PermissionDenied("Responsible cleaner must have an active assignment at this site.")
     result = add_inspection_result(
         inspection=inspection,
         template_item=template_item,
         actor=request.auth,
+        responsible_cleaner=responsible_cleaner,
         value_text=payload.value_text,
         value_number=payload.value_number,
         value_boolean=payload.value_boolean,
@@ -3166,9 +3182,11 @@ def inspection_result_update(
     result = InspectionResult.objects.filter(pk=result_id, inspection_id=inspection_id).first()
     if result is None:
         raise Http404("Inspection result not found.")
+    responsible_cleaner = Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
     updated = update_inspection_result(
         result=result,
         actor=request.auth,
+        responsible_cleaner=responsible_cleaner,
         value_text=payload.value_text,
         value_number=payload.value_number,
         value_boolean=payload.value_boolean,

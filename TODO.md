@@ -33,3 +33,20 @@
 - [x] Validate the full integrated system, update documentation and environment templates, commit the changes, and push them to the configured GitHub branch.
 
 **Operational constraints:** backend authorization remains authoritative; client visibility is not a security boundary. No fabricated customer reviews, ratings, testimonials, or fallback operational data may be added.
+
+## Attendance Lifecycle and Cleanliness Management Upgrade
+
+- [ ] Replace the attendance present/absent-only controls with explicit sign-in and sign-out actions; preserve immutable timestamps and actor audit metadata.
+- [x] Derive attendance outcome from the shift lifecycle: Present when sign-in and valid sign-out are recorded, Half present when sign-in exists without sign-out at close/review time, and Absent when no sign-in exists.
+- [x] Keep attendance status visible but make the lifecycle actions primary: sign in, sign out, reopen/return when authorized, and submit for review.
+- [x] Add a daily site-cleanliness declaration for toilets, garden, reception, and configurable operational areas, with completion status, on-time status, responsible cleaner(s), notes, corrective action, and escalation reason.
+- [x] Scope daily cleanliness forms to the authenticated supervisor’s assigned site and prevent manual site-ID entry for scoped users.
+- [x] Add backend validation that a responsible cleaner belongs to the site and is active/assigned for the declared date.
+- [ ] Add management review states for daily cleanliness declarations: draft, submitted, returned, reviewed, escalated, and locked.
+- [ ] Surface cleanliness exceptions, missed deadlines, half-present cleaners, and unresolved corrective actions in supervisor, zone-supervisor, and administrator dashboards.
+- [ ] Include daily cleanliness and attendance lifecycle outcomes in daily, weekly, and monthly PDF reports and Resend delivery payloads.
+- [x] Add audit history for attendance actions, cleanliness declarations, changes, returns, escalations, and review decisions.
+- [ ] Add backend and frontend tests for lifecycle transitions, half-present derivation, scoped cleaner attribution, area validation, review permissions, escalation, reporting, and audit visibility.
+- [x] Validate the integrated workflows with realistic site-supervisor and management-review scenarios, update documentation, commit, and push the completed upgrade.
+
+**Operational constraint:** the backend remains the authorization source; client-side hiding is only a usability layer. No fabricated operational records or fallback cleanliness results may be introduced.

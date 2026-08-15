@@ -216,3 +216,12 @@ Celery Beat registration is idempotent and creates these exact UTC schedules:
 | Monthly | First day of month at 03:00 UTC | Previous calendar month |
 
 For local testing, keep `RESEND_API_KEY` empty and run the report-delivery tests; they verify PDF generation, failure recording, and idempotency without sending an external email. Never place the Resend key in Git or a committed `.env` file.
+
+
+## Attendance lifecycle and daily cleanliness operations
+
+Attendance is now operated as a shift lifecycle rather than a single Present/Absent toggle. A supervisor uses **Sign in** when a cleaner arrives, **Sign out** when the cleaner leaves, or **Absent** when no attendance occurred. The stored attendance status remains available for existing policy and reporting contracts, while the API exposes a derived `attendance_outcome`: `present` requires both times, `half_present` represents a sign-in without a sign-out, and `absent` represents no sign-in. The existing draft, submitted, returned, reviewed, and locked workflow remains authoritative, and attendance writes continue through the audited service layer.
+
+The `/cleanliness` workspace turns configured daily inspection templates into a site-supervisor declaration flow. Administrators can configure questions for toilets, gardens, reception, and other operational areas. A supervisor selects only an authenticated assigned site, starts the area declaration, answers **Done on time** or **Not done / exception**, records corrective notes, and selects an actively assigned responsible cleaner when an exception exists. Responsible-cleaner attribution is persisted on each inspection result, returned in API output, validated against active site assignment, and included in the inspection audit trail. Area declarations use the existing inspection draft/submission/review/return chain so management can review evidence rather than receive unstructured messages.
+
+The platform intentionally does not invent cleanliness results. If an administrator has not configured daily templates, the workspace explains that configuration is required. Escalation dashboards and inclusion of the new inspection-result attribution in scheduled PDF report summaries remain the next rollout layer; the underlying evidence and responsible-cleaner relationship are now available for that integration.

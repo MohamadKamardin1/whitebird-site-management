@@ -32,6 +32,7 @@ from .models import (
     InspectionWorkflowStatus,
     Site,
     SiteArea,
+    Cleaner,
     SiteShift,
 )
 from .policies import can_review_inspection, ensure
@@ -246,6 +247,7 @@ def add_inspection_result(
     value_boolean: bool | None = None,
     passed: bool | None = None,
     notes: str = "",
+    responsible_cleaner: Cleaner | None = None,
 ) -> InspectionResult:
     """Add an answer to a template item for an editable inspection."""
     with transaction.atomic():
@@ -258,6 +260,7 @@ def add_inspection_result(
             value_boolean=value_boolean,
             passed=passed,
             notes=notes,
+            responsible_cleaner=responsible_cleaner,
             uploaded_by=actor,
         )
         result.full_clean(exclude=["file"])
@@ -281,6 +284,7 @@ def update_inspection_result(
     value_boolean: bool | None = None,
     passed: bool | None = None,
     notes: str | None = None,
+    responsible_cleaner: Cleaner | None = None,
 ) -> InspectionResult:
     """Edit a result while the inspection is still editable."""
     with transaction.atomic():
@@ -296,6 +300,8 @@ def update_inspection_result(
             result.passed = passed
         if notes is not None:
             result.notes = notes
+        if responsible_cleaner is not None:
+            result.responsible_cleaner = responsible_cleaner
         result.full_clean(exclude=["file"])
         result.save()
         record_audit(
