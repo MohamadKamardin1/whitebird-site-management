@@ -112,4 +112,10 @@
 - [x] Constrain horizontal overflow at the application/page shell so only intentionally wide tables scroll horizontally.
 - [x] Ensure table wrappers retain accessible horizontal scrolling without forcing detail cards, forms, or the overall page to scroll sideways.
 - [x] Validate side-panel behavior at phone and desktop breakpoints with frontend type checks, production build, and responsive visual verification.
-- [ ] Document, commit, and push the responsive side-panel and table-scroll fix.
+- [x] Document, commit, and push the responsive side-panel and table-scroll fix.
+
+## Integration Secret Loading Troubleshooting
+
+- [x] Trace why `DEEPSEEK_API_KEY` and `VITE_MAPBOX_ACCESS_TOKEN` configured in project secrets are not taking effect in local or deployed runtime.
+- [x] Correct environment loading, restart/rebuild affected services, and verify both integrations without exposing secret values.
+- [ ] Document the final configuration and validation steps.

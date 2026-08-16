@@ -29,7 +29,10 @@ services:
       retries: 10
 
   web:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_MAPBOX_ACCESS_TOKEN: ${VITE_MAPBOX_ACCESS_TOKEN:-}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -50,7 +53,10 @@ services:
       - private_media:/app/private_media
 
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_MAPBOX_ACCESS_TOKEN: ${VITE_MAPBOX_ACCESS_TOKEN:-}
     restart: unless-stopped
     command: celery -A config worker --loglevel=info --concurrency=${CELERY_WORKERS:-2}
     env_file: .env
@@ -69,7 +75,10 @@ services:
       - private_media:/app/private_media
 
   beat:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_MAPBOX_ACCESS_TOKEN: ${VITE_MAPBOX_ACCESS_TOKEN:-}
     restart: unless-stopped
     command: celery -A config beat --loglevel=info
     env_file: .env
