@@ -122,8 +122,8 @@
 
 ## Administrator Panel, Report Preview, and Integration Settings Upgrade
 
-- [ ] Make the administrator mobile side panel internally scrollable with stable navigation grouping, spacing, and no content overlap between Account, Notifications, Exports archive, and scope information.
-- [ ] Replace raw report summary JSON blocks with a professional PDF-style preview that presents attendance, store, inspection, trainee, issue, comments, and audit information as readable sections and metrics.
-- [ ] Add administrator-only integration settings for DeepSeek and Mapbox with secure persistence, masked values, validation, audit history, and controlled runtime use across the platform.
-- [ ] Run schema/API/frontend tests and responsive verification without exposing secret values.
-- [ ] Document, commit, and push the completed administrator, reporting, and integration settings upgrade.
+- [x] Make the administrator mobile side panel internally scrollable with stable navigation grouping, spacing, and no content overlap between Account, Notifications, Exports archive, and scope information.
+- [x] Replace raw report summary JSON blocks with a professional PDF-style preview that presents attendance, store, inspection, trainee, issue, comments, and audit information as readable sections and metrics.
+- [x] Add administrator-only integration settings for DeepSeek and Mapbox with secure persistence, masked values, validation, audit history, and controlled runtime use across the platform.
+- [x] Run schema/API/frontend tests and responsive verification without exposing secret values.
+- [x] Document, commit, and push the completed administrator, reporting, and integration settings upgrade.
