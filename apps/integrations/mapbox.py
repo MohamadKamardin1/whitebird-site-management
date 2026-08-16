@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any, cast
 
+from constance import config as constance_config
 from django.conf import settings
 from django.core.cache import cache
 
@@ -26,8 +27,23 @@ PROVIDER = "Mapbox"
 CACHE_PREFIX = "wbz:geo"
 
 
+def _api_key() -> str:
+    return (
+        settings.MAPBOX_API_KEY
+        or settings.MAPBOX_PUBLIC_TOKEN
+        or str(getattr(constance_config, "MAPBOX_PUBLIC_TOKEN", "") or "")
+    )
+
+
 def enabled() -> bool:
-    return bool(settings.MAPBOX_ENABLED and settings.MAPBOX_API_KEY)
+    """The integration is reachable whenever a token is configured.
+
+    Resolves from ``MAPBOX_API_KEY`` / ``MAPBOX_PUBLIC_TOKEN`` in the
+    environment or the runtime Integration settings (constance
+    ``MAPBOX_PUBLIC_TOKEN``). A token present in any of those enables the
+    engine — no separate flag required.
+    """
+    return bool(_api_key())
 
 
 def _require_enabled() -> None:
@@ -46,7 +62,7 @@ def _query(params: dict[str, Any]) -> dict[str, Any]:
         method="GET",
         url=f"{settings.MAPBOX_GEOCODING_URL.rstrip('/')}/{params.pop('mode', 'mapbox.places')}.json",
         headers={"Content-Type": "application/json"},
-        params={**params, "access_token": settings.MAPBOX_API_KEY},
+        params={**params, "access_token": _api_key()},
         timeout=settings.MAPBOX_TIMEOUT_SECONDS,
         max_retries=settings.MAPBOX_MAX_RETRIES,
     )

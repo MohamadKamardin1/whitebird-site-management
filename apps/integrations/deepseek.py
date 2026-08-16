@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from constance import config as constance_config
 from django.conf import settings
 
 from .transport import ProviderError, request_json
@@ -26,8 +27,23 @@ from .transport import ProviderError, request_json
 PROVIDER = "DeepSeek"
 
 
+def _config(name: str, fallback: str) -> str:
+    """Resolve a value from settings/env first, then constance runtime config."""
+    return fallback or str(getattr(constance_config, name, "") or "")
+
+
+def _api_key() -> str:
+    return settings.DEEPSEEK_API_KEY or str(getattr(constance_config, "DEEPSEEK_API_KEY", "") or "")
+
+
 def enabled() -> bool:
-    return bool(settings.DEEPSEEK_ENABLED and settings.DEEPSEEK_API_KEY)
+    """The integration is reachable whenever an API key is configured.
+
+    Keys resolve from the environment (``DEEPSEEK_API_KEY``) or the runtime
+    Integration settings (constance ``DEEPSEEK_API_KEY``). A key present in
+    either place enables the engine — no separate flag required.
+    """
+    return bool(_api_key())
 
 
 def _require_enabled() -> None:
@@ -44,18 +60,20 @@ def complete_chat(
 ) -> str:
     """Return the assistant text for a chat conversation."""
     _require_enabled()
+    resolved_model = model or _config("DEEPSEEK_MODEL", settings.DEEPSEEK_MODEL)
+    resolved_base = _config("DEEPSEEK_API_BASE", settings.DEEPSEEK_BASE_URL)
     payload: dict[str, Any] = {
-        "model": model or settings.DEEPSEEK_MODEL,
+        "model": resolved_model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens or settings.DEEPSEEK_MAX_TOKENS,
     }
-    url = f"{settings.DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"
+    url = f"{resolved_base.rstrip('/')}/chat/completions"
     data = request_json(
         provider=PROVIDER,
         method="POST",
         url=url,
-        headers={"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
         json=payload,
         timeout=settings.DEEPSEEK_TIMEOUT_SECONDS,
         max_retries=settings.DEEPSEEK_MAX_RETRIES,

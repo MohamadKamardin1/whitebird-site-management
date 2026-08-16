@@ -256,7 +256,13 @@ def generate_weekly_site_report(*, site_id: int, friday: datetime.date, user: Us
         day = monday + datetime.timedelta(days=offset)
         snapshot = site_data_snapshot(site_id, day)
         existing = DailySiteReport.objects.filter(site_id=site_id, report_date=day).values("status").first()
-        days.append({"report_date": day.isoformat(), "status": (existing or {}).get("status", "not_generated"), "data": snapshot})
+        days.append(
+            {
+                "report_date": day.isoformat(),
+                "status": existing.get("status", "not_generated") if existing else "not_generated",
+                "data": snapshot,
+            }
+        )
     _audit(AuditLog.Action.UPDATE, site, user, f"Generated weekly site report {monday} to {friday}")
     return {
         "report_type": "weekly",

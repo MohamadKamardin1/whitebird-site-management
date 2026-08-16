@@ -19,8 +19,10 @@ from ninja import File, Form, Query, Router, UploadedFile
 from apps.accounts.models import RoleCode, User
 from apps.accounts.permissions import management_required, role_required, user_can_manage_site
 from apps.core.files import create_file_token
+from apps.core.models import AuditLog
 from apps.core.pagination import PageParams, Paginated, apply_ordering, paginate, paginated_response
 from apps.core.requests import AuthenticatedRequest
+from apps.core.services import model_data, record_audit
 
 from .ai_optimization import generate_optimization_brief, latest_brief
 from .assignment_policies import can_assign_cleaner, can_edit_assignment, can_view_assignment
@@ -355,9 +357,6 @@ from .selectors import (
     list_sites_queryset,
     unread_notification_count,
 )
-from apps.core.models import AuditLog
-from apps.core.services import model_data, record_audit
-
 from .services import (
     SiteDraft,
     archive_site,
@@ -759,10 +758,23 @@ def zone_detail(request: AuthenticatedRequest, zone_id: int) -> ZoneOut:
 @router.post("/zones", response=ZoneOut, summary="Create a zone")
 def zone_create(request: AuthenticatedRequest, payload: ZoneCreateIn) -> ZoneOut:
     _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
-    zone = Zone(name=payload.name, code=payload.code.upper(), description=payload.description, boundary=payload.boundary or {}, created_by=request.auth, updated_by=request.auth)
+    zone = Zone(
+        name=payload.name,
+        code=payload.code.upper(),
+        description=payload.description,
+        boundary=payload.boundary or {},
+        created_by=request.auth,
+        updated_by=request.auth,
+    )
     zone.full_clean()
     zone.save()
-    record_audit(action=AuditLog.Action.CREATE, actor=request.auth, entity=zone, summary=f"Created zone {zone.name}", after_data=model_data(zone))
+    record_audit(
+        action=AuditLog.Action.CREATE,
+        actor=request.auth,
+        entity=zone,
+        summary=f"Created zone {zone.name}",
+        after_data=model_data(zone),
+    )
     return _zone_out(zone)
 
 
@@ -782,7 +794,14 @@ def zone_update(request: AuthenticatedRequest, zone_id: int, payload: ZoneUpdate
     zone.updated_by = request.auth
     zone.full_clean()
     zone.save()
-    record_audit(action=AuditLog.Action.UPDATE, actor=request.auth, entity=zone, summary=f"Updated zone {zone.name}", before_data=before, after_data=model_data(zone))
+    record_audit(
+        action=AuditLog.Action.UPDATE,
+        actor=request.auth,
+        entity=zone,
+        summary=f"Updated zone {zone.name}",
+        before_data=before,
+        after_data=model_data(zone),
+    )
     return _zone_out(zone)
 
 
@@ -795,7 +814,13 @@ def zone_deactivate(request: AuthenticatedRequest, zone_id: int) -> MessageOut:
     zone.is_active = False
     zone.updated_by = request.auth
     zone.save(update_fields=["is_active", "updated_by", "updated_at"])
-    record_audit(action=AuditLog.Action.STATUS_CHANGE, actor=request.auth, entity=zone, summary=f"Deactivated zone {zone.name}", after_data=model_data(zone))
+    record_audit(
+        action=AuditLog.Action.STATUS_CHANGE,
+        actor=request.auth,
+        entity=zone,
+        summary=f"Deactivated zone {zone.name}",
+        after_data=model_data(zone),
+    )
     return MessageOut(detail="Zone deactivated; historical site assignments are preserved.")
 
 
@@ -1389,19 +1414,24 @@ def cleaner_list(
 @router.get("/hr/cleaners/template.xlsx", summary="Download the HR cleaner onboarding workbook template", tags=["HR"])
 def hr_cleaner_template(request: AuthenticatedRequest) -> HttpResponse:
     _cleaner_write(request.auth)
-    response = HttpResponse(build_cleaner_workbook_template(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response = HttpResponse(
+        build_cleaner_workbook_template(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
     response["Content-Disposition"] = 'attachment; filename="whitebird-cleaner-onboarding-template.xlsx"'
     return response
 
 
-@router.post("/hr/cleaners/import/preview", response=dict, summary="Preview a validated HR cleaner workbook", tags=["HR"])
-def hr_cleaner_import_preview(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:
+@router.post(
+    "/hr/cleaners/import/preview", response=dict, summary="Preview a validated HR cleaner workbook", tags=["HR"]
+)
+def hr_cleaner_import_preview(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:  # type: ignore[type-arg]
     _cleaner_write(request.auth)
     return preview_cleaner_workbook(workbook)
 
 
 @router.post("/hr/cleaners/import", response=dict, summary="Import a validated HR cleaner workbook", tags=["HR"])
-def hr_cleaner_import(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:
+def hr_cleaner_import(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:  # type: ignore[type-arg]
     _cleaner_write(request.auth)
     return import_cleaner_workbook(uploaded_file=workbook, actor=request.auth)
 
@@ -2173,7 +2203,10 @@ def _trainee_manage(user: User, site_id: int) -> None:
 
 
 def _trainee_decide(user: User) -> None:
-    if not (user.is_system_admin or user.role in {RoleCode.HR, RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
+    if not (
+        user.is_system_admin
+        or user.role in {RoleCode.HR, RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}
+    ):
         raise PermissionDenied("Only HR or senior management can make final trainee decisions.")
 
 
@@ -3223,8 +3256,15 @@ def inspection_result_create(
     ).first()
     if template_item is None:
         raise Http404("Template item not found.")
-    responsible_cleaner = Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
-    if responsible_cleaner and not CleanerSiteAssignment.objects.filter(cleaner=responsible_cleaner, site_id=inspection.site_id, status="active").exists():
+    responsible_cleaner = (
+        Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
+    )
+    if (
+        responsible_cleaner
+        and not CleanerSiteAssignment.objects.filter(
+            cleaner=responsible_cleaner, site_id=inspection.site_id, status="active"
+        ).exists()
+    ):
         raise PermissionDenied("Responsible cleaner must have an active assignment at this site.")
     result = add_inspection_result(
         inspection=inspection,
@@ -3253,7 +3293,9 @@ def inspection_result_update(
     result = InspectionResult.objects.filter(pk=result_id, inspection_id=inspection_id).first()
     if result is None:
         raise Http404("Inspection result not found.")
-    responsible_cleaner = Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
+    responsible_cleaner = (
+        Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
+    )
     updated = update_inspection_result(
         result=result,
         actor=request.auth,
@@ -4011,7 +4053,9 @@ def site_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, r
     response=dict,
     summary="Generate the Friday Monday-to-Friday site report",
 )
-def site_weekly_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, report_date: date) -> dict[str, object]:
+def site_weekly_report_generate_endpoint(
+    request: AuthenticatedRequest, site_id: int, report_date: date
+) -> dict[str, object]:
     site = _load_site_or_404(site_id)
     _issues_manage(request.auth, site.pk)
     return generate_weekly_site_report(site_id=site.pk, friday=report_date, user=request.auth)
@@ -4403,12 +4447,27 @@ def _integration_secret_value(name: str) -> str:
     return str(getattr(settings, name, "") or "").strip()
 
 
+def _mapbox_token() -> str:
+    """Resolve the Mapbox token from constance or any supported env var.
+
+    Order: admin Integration settings (constance ``MAPBOX_PUBLIC_TOKEN``) →
+    env ``MAPBOX_PUBLIC_TOKEN`` → env ``MAPBOX_API_KEY``. This keeps the admin
+    estate map and the ``/geo/*`` engine in sync no matter which variable the
+    operator configured.
+    """
+    for source in ("MAPBOX_PUBLIC_TOKEN", "MAPBOX_API_KEY", "MAPBOX_ACCESS_TOKEN"):
+        value = _integration_secret_value(source)
+        if value:
+            return value
+    return ""
+
+
 @router.get("/integrations/settings", response=IntegrationSettingsOut, summary="Read integration settings")
 def integration_settings_read(request: AuthenticatedRequest) -> IntegrationSettingsOut:
     if not request.auth.is_management_role:
         raise PermissionDenied("Management role required.")
     deepseek_key = _integration_secret_value("DEEPSEEK_API_KEY")
-    mapbox_token = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    mapbox_token = _mapbox_token()
     return IntegrationSettingsOut(
         deepseek_configured=bool(deepseek_key),
         deepseek_key_suffix=deepseek_key[-4:] if deepseek_key else "",
@@ -4424,7 +4483,7 @@ def integration_settings_update(
     if not request.auth.is_system_admin:
         raise PermissionDenied("System admin role required.")
     before_deepseek = _integration_secret_value("DEEPSEEK_API_KEY")
-    before_mapbox = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    before_mapbox = _mapbox_token()
     if payload.deepseek_api_key is not None:
         value = payload.deepseek_api_key.strip()
         if value and not value.startswith("sk-"):
@@ -4436,7 +4495,7 @@ def integration_settings_update(
             raise ValidationError("Mapbox tokens must start with pk. or sk.")
         config.MAPBOX_PUBLIC_TOKEN = value
     after_deepseek = _integration_secret_value("DEEPSEEK_API_KEY")
-    after_mapbox = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    after_mapbox = _mapbox_token()
     record_audit(
         action=AuditLog.Action.UPDATE,
         actor=request.auth,

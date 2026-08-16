@@ -609,9 +609,24 @@ def test_attendance_outcome_distinguishes_sign_in_sign_out_and_absence(site, adm
 
     cleaner = _active_cleaner()
     _assign(site, cleaner, actor=admin_user)
-    absent = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 1), status=AttendanceStatus.ABSENT)
-    signed_in = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 2), status=AttendanceStatus.PRESENT, check_in_time=time(8, 0))
-    complete = AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=date(2026, 5, 3), status=AttendanceStatus.PRESENT, check_in_time=time(8, 0), check_out_time=time(17, 0))
+    absent = AttendanceRecordFactory(
+        cleaner=cleaner, site=site, attendance_date=date(2026, 5, 1), status=AttendanceStatus.ABSENT
+    )
+    signed_in = AttendanceRecordFactory(
+        cleaner=cleaner,
+        site=site,
+        attendance_date=date(2026, 5, 2),
+        status=AttendanceStatus.PRESENT,
+        check_in_time=time(8, 0),
+    )
+    complete = AttendanceRecordFactory(
+        cleaner=cleaner,
+        site=site,
+        attendance_date=date(2026, 5, 3),
+        status=AttendanceStatus.PRESENT,
+        check_in_time=time(8, 0),
+        check_out_time=time(17, 0),
+    )
 
     assert _attendance_outcome(absent) == "absent"
     assert _attendance_outcome(signed_in) == "half_present"

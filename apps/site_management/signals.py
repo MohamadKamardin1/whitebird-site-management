@@ -23,9 +23,9 @@ from apps.site_management.tasks import (
     deliver_daily_report,
     deliver_monthly_report,
     deliver_weekly_report,
-    recompute_site_statistics,
     generate_daily_ai_briefs,
     generate_friday_ai_briefs,
+    recompute_site_statistics,
 )
 
 TASK_NAME = "Recompute site statistics"

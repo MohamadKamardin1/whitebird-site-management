@@ -1,7 +1,9 @@
+from typing import Any
+
 from django.db import migrations
 
 
-def seed_site_stores(apps, schema_editor):
+def seed_site_stores(apps: Any, schema_editor: Any) -> None:
     Site = apps.get_model("site_management", "Site")
     SiteStore = apps.get_model("site_management", "SiteStore")
     for site in Site.objects.all():
@@ -9,7 +11,7 @@ def seed_site_stores(apps, schema_editor):
             SiteStore.objects.create(site=site, store_name=f"{site.name} Store", location="")
 
 
-def noop(apps, schema_editor):
+def noop(apps: Any, schema_editor: Any) -> None:
     pass
 
 

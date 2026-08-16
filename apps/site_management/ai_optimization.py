@@ -5,6 +5,7 @@ selectors, asks DeepSeek for a structured management brief, validates the
 response, and persists the result for audit. It never mutates attendance,
 issues, stock, inspections, assignments, or reports.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +26,6 @@ from apps.core.services import model_data, record_audit
 from .dashboard_selectors import dashboard_kpis
 from .models import AIOptimizationBrief
 from .reporting_services import site_data_snapshot
-from .reporting_selectors import missing_site_reports
 from .scoping import visible_sites
 
 logger = logging.getLogger(__name__)
@@ -64,16 +64,50 @@ def _integrity_checks(*, user: User, day: date, kpis: dict[str, Any], site_count
     checks: list[dict[str, Any]] = []
     missing = int(kpis.get("missing_site_reports", 0) or 0)
     if missing:
-        checks.append({"code": "missing_daily_reports", "severity": "high", "count": missing, "message": f"{missing} visible site(s) have no submitted report for {day.isoformat()}."})
-    for key, label, severity in (("pending_reports", "reports awaiting review", "medium"), ("open_issues", "open issues", "medium"), ("escalated_issues", "escalated issues", "high"), ("overdue_jobs", "overdue jobs", "high"), ("low_stock_items", "low-stock items", "medium")):
+        checks.append(
+            {
+                "code": "missing_daily_reports",
+                "severity": "high",
+                "count": missing,
+                "message": f"{missing} visible site(s) have no submitted report for {day.isoformat()}.",
+            }
+        )
+    for key, label, severity in (
+        ("pending_reports", "reports awaiting review", "medium"),
+        ("open_issues", "open issues", "medium"),
+        ("escalated_issues", "escalated issues", "high"),
+        ("overdue_jobs", "overdue jobs", "high"),
+        ("low_stock_items", "low-stock items", "medium"),
+    ):
         count = int(kpis.get(key, 0) or 0)
         if count:
-            checks.append({"code": key, "severity": severity, "count": count, "message": f"{count} {label} are visible in the authorised scope."})
+            checks.append(
+                {
+                    "code": key,
+                    "severity": severity,
+                    "count": count,
+                    "message": f"{count} {label} are visible in the authorised scope.",
+                }
+            )
     attendance_rate = float(kpis.get("attendance_rate", 0) or 0)
     if site_count and attendance_rate < 90:
-        checks.append({"code": "attendance_rate_below_standard", "severity": "high", "count": attendance_rate, "message": f"Attendance rate is {attendance_rate}% for the selected date."})
+        checks.append(
+            {
+                "code": "attendance_rate_below_standard",
+                "severity": "high",
+                "count": attendance_rate,
+                "message": f"Attendance rate is {attendance_rate}% for the selected date.",
+            }
+        )
     if not checks:
-        checks.append({"code": "no_integrity_exceptions", "severity": "info", "count": 0, "message": "No deterministic reporting-quality exception was detected in the current scope."})
+        checks.append(
+            {
+                "code": "no_integrity_exceptions",
+                "severity": "info",
+                "count": 0,
+                "message": "No deterministic reporting-quality exception was detected in the current scope.",
+            }
+        )
     return checks
 
 
@@ -86,7 +120,9 @@ def build_evidence_pack(*, user: User, day: date, weekly: bool = False) -> dict[
     days = [day - timedelta(days=offset) for offset in range(4, -1, -1)] if weekly else [day]
     snapshots: dict[str, dict[str, Any]] = {}
     for report_day in days:
-        snapshots[report_day.isoformat()] = {str(site_id): site_data_snapshot(site_id, report_day) for site_id in site_ids}
+        snapshots[report_day.isoformat()] = {
+            str(site_id): site_data_snapshot(site_id, report_day) for site_id in site_ids
+        }
     return {
         "as_of": day.isoformat(),
         "period": "monday_to_friday" if weekly else "daily",
@@ -138,8 +174,14 @@ def _validate_output(value: Any, evidence: dict[str, Any]) -> dict[str, Any]:
     output["headline"] = str(output.get("headline") or "White Bird operational optimization brief")[:240]
     output["executive_summary"] = str(output.get("executive_summary") or "No executive summary was returned.")[:3000]
     output["priorities"] = output.get("priorities") if isinstance(output.get("priorities"), list) else []
-    output["data_quality"] = output.get("data_quality") if isinstance(output.get("data_quality"), list) else evidence.get("integrity_checks", [])
-    output["reporting_optimizations"] = output.get("reporting_optimizations") if isinstance(output.get("reporting_optimizations"), list) else []
+    output["data_quality"] = (
+        output.get("data_quality")
+        if isinstance(output.get("data_quality"), list)
+        else evidence.get("integrity_checks", [])
+    )
+    output["reporting_optimizations"] = (
+        output.get("reporting_optimizations") if isinstance(output.get("reporting_optimizations"), list) else []
+    )
     output["confidence"] = str(output.get("confidence") or "review_required")
     output["disclaimer"] = "Advisory only. AI recommendations never change White Bird records automatically."
     return output
@@ -149,11 +191,22 @@ def _deepseek_summary(evidence: dict[str, Any], *, weekly: bool) -> tuple[dict[s
     api_key = _deepseek_api_key()
     if not api_key:
         return _fallback_output(evidence, "DEEPSEEK_API_KEY is not configured."), "fallback"
-    base_url = str(getattr(settings, "DEEPSEEK_API_BASE", "https://api.deepseek.com") or "https://api.deepseek.com").rstrip("/")
+    base_url = str(
+        getattr(settings, "DEEPSEEK_API_BASE", "https://api.deepseek.com") or "https://api.deepseek.com"
+    ).rstrip("/")
     schema_example = {
         "headline": "short operational headline",
         "executive_summary": "evidence-backed summary",
-        "priorities": [{"priority": "high|medium|low", "title": "", "evidence": "", "recommended_action": "", "owner_role": "", "due_within_days": 1}],
+        "priorities": [
+            {
+                "priority": "high|medium|low",
+                "title": "",
+                "evidence": "",
+                "recommended_action": "",
+                "owner_role": "",
+                "due_within_days": 1,
+            }
+        ],
         "data_quality": [{"code": "", "severity": "", "count": 0, "message": ""}],
         "reporting_optimizations": ["specific improvement"],
         "confidence": "high|medium|low|review_required",
@@ -169,7 +222,13 @@ def _deepseek_summary(evidence: dict[str, Any], *, weekly: bool) -> tuple[dict[s
         response = requests.post(
             f"{base_url}/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": _model_name(), "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}, "max_tokens": 1800, "stream": False},
+            json={
+                "model": _model_name(),
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "max_tokens": 1800,
+                "stream": False,
+            },
             timeout=45,
         )
         response.raise_for_status()
@@ -183,7 +242,9 @@ def _deepseek_summary(evidence: dict[str, Any], *, weekly: bool) -> tuple[dict[s
         return _fallback_output(evidence, "DeepSeek was unavailable or returned invalid structured output."), "fallback"
 
 
-def generate_optimization_brief(*, user: User, day: date, brief_type: str = AIOptimizationBrief.BriefType.ON_DEMAND) -> AIOptimizationBrief:
+def generate_optimization_brief(
+    *, user: User, day: date, brief_type: str = AIOptimizationBrief.BriefType.ON_DEMAND
+) -> AIOptimizationBrief:
     weekly = brief_type == AIOptimizationBrief.BriefType.WEEKLY
     evidence = build_evidence_pack(user=user, day=day, weekly=weekly)
     fingerprint = _fingerprint(evidence)
@@ -205,9 +266,17 @@ def generate_optimization_brief(*, user: User, day: date, brief_type: str = AIOp
     brief.provider = provider_status
     brief.generated_at = timezone.now()
     brief.save(update_fields=["output", "status", "provider", "generated_at", "updated_at"])
-    record_audit(action=AuditLog.Action.UPDATE, actor=user, entity=brief, summary=f"Generated {brief.get_brief_type_display()} for {brief.scope_key}", after_data=model_data(brief))
+    record_audit(
+        action=AuditLog.Action.UPDATE,
+        actor=user,
+        entity=brief,
+        summary=f"Generated {brief.get_brief_type_display()} for {brief.scope_key}",
+        after_data=model_data(brief),
+    )
     return brief
 
 
 def latest_brief(*, user: User) -> AIOptimizationBrief | None:
-    return AIOptimizationBrief.objects.filter(scope_key=_scope_key(user), role=user.role, status=AIOptimizationBrief.Status.COMPLETED).first()
+    return AIOptimizationBrief.objects.filter(
+        scope_key=_scope_key(user), role=user.role, status=AIOptimizationBrief.Status.COMPLETED
+    ).first()

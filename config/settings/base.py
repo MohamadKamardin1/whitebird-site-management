@@ -193,7 +193,10 @@ CONSTANCE_CONFIG = {
     "EXPORT_MAX_ROWS": (100000, "Maximum rows a single export may return."),
     "ENABLE_DOMAIN_EVENTS": (False, "Emit domain events to the event bus."),
     "ENABLE_NOTIFICATIONS": (True, "Deliver in-platform notifications."),
-    "DEEPSEEK_API_KEY": ("", "Server-only DeepSeek API key. Never expose this value in API responses or frontend code."),
+    "DEEPSEEK_API_KEY": (
+        "",
+        "Server-only DeepSeek API key. Never expose this value in API responses or frontend code.",
+    ),
     "MAPBOX_PUBLIC_TOKEN": ("", "Public Mapbox token used by the authenticated GIS workspace."),
 }
 
@@ -219,6 +222,8 @@ DEEPSEEK_MAX_RETRIES = env.int("DEEPSEEK_MAX_RETRIES", default=2)
 
 MAPBOX_ENABLED = env.bool("MAPBOX_ENABLED", default=False)
 MAPBOX_API_KEY = env.str("MAPBOX_API_KEY", default="")
+# Public Mapbox token used by the frontend GIS workspace and the geo engine.
+MAPBOX_PUBLIC_TOKEN = env.str("MAPBOX_PUBLIC_TOKEN", default="")
 MAPBOX_GEOCODING_URL = env.str("MAPBOX_GEOCODING_URL", default="https://api.mapbox.com/geocoding/v5/mapbox.places")
 MAPBOX_TIMEOUT_SECONDS = env.int("MAPBOX_TIMEOUT_SECONDS", default=10)
 MAPBOX_MAX_RETRIES = env.int("MAPBOX_MAX_RETRIES", default=2)
@@ -245,8 +250,8 @@ API_DOCS_ENABLED = env.bool("API_DOCS_ENABLED", default=True)
 # --------------------------------------------------------------------------- #
 
 AUTH_MECHANISM = env("AUTH_MECHANISM")  # "session" | "jwt"
-DEEPSEEK_API_BASE = env("DEEPSEEK_API_BASE")
-DEEPSEEK_MODEL = env("DEEPSEEK_MODEL")
+DEEPSEEK_API_BASE = env("DEEPSEEK_API_BASE", default="https://api.deepseek.com")
+DEEPSEEK_MODEL = env("DEEPSEEK_MODEL", default="deepseek-v4-pro")
 DEEPSEEK_API_KEY = env.str("DEEPSEEK_API_KEY", default="")
 JWT_AUDIENCE = env.str("JWT_AUDIENCE", default="whitebird")
 JWT_ISSUER = env.str("JWT_ISSUER", default="whitebird")

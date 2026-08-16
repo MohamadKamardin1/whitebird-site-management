@@ -12,7 +12,11 @@ def test_new_site_receives_default_cleanliness_surveys_and_store(admin_user, sit
     )
     assert SiteArea.objects.filter(site=site, is_active=True).count() == 4
     assert InspectionTemplate.objects.filter(site=site, frequency="daily", is_active=True).count() == 4
-    assert InspectionTemplate.objects.filter(site=site, template_name__contains="Daily Cleanliness Survey").first().items.count() == 5
+    daily_template = InspectionTemplate.objects.filter(
+        site=site, template_name__contains="Daily Cleanliness Survey"
+    ).first()
+    assert daily_template is not None
+    assert daily_template.items.count() == 5
     assert SiteStore.objects.filter(site=site, is_active=True).count() == 1
 
 
@@ -33,11 +37,14 @@ def test_admin_zone_boundary_crud_is_audited_and_non_admin_cannot_write(admin_cl
     )
     assert updated.status_code == 200
     assert updated.json()["boundary"] == boundary
-    assert manager_client.patch(
-        f"/api/site-management/v1/zones/{zone_id}",
-        data={"description": "Not allowed"},
-        content_type="application/json",
-    ).status_code == 403
+    assert (
+        manager_client.patch(
+            f"/api/site-management/v1/zones/{zone_id}",
+            data={"description": "Not allowed"},
+            content_type="application/json",
+        ).status_code
+        == 403
+    )
     deactivated = admin_client.delete(f"/api/site-management/v1/zones/{zone_id}")
     assert deactivated.status_code == 200
     assert Zone.objects.all_with_deleted().get(pk=zone_id).is_active is False

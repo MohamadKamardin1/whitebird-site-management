@@ -5,15 +5,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('site_management', '0015_stockrequestitem_quantity_left_and_more'),
+        ("site_management", "0015_stockrequestitem_quantity_left_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='inspectionresult',
-            name='responsible_cleaner',
-            field=models.ForeignKey(blank=True, help_text='Cleaner accountable for an incomplete or failed operational area item.', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='responsible_inspection_results', to='site_management.cleaner'),
+            model_name="inspectionresult",
+            name="responsible_cleaner",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Cleaner accountable for an incomplete or failed operational area item.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="responsible_inspection_results",
+                to="site_management.cleaner",
+            ),
         ),
     ]

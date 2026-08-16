@@ -34,8 +34,8 @@ from apps.accounts.services import (
 )
 from apps.accounts.tokens import access_token_lifetime_seconds
 from apps.core.models import AuditLog
-from apps.core.services import record_audit
 from apps.core.requests import AuthenticatedRequest
+from apps.core.services import record_audit
 
 router = Router(auth=TokenAuth())
 

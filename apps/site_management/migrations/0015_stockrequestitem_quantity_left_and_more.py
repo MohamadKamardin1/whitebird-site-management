@@ -4,19 +4,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('site_management', '0014_reportdelivery'),
+        ("site_management", "0014_reportdelivery"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='stockrequestitem',
-            name='quantity_left',
+            model_name="stockrequestitem",
+            name="quantity_left",
             field=models.DecimalField(decimal_places=2, default=0, max_digits=10),
         ),
         migrations.AddConstraint(
-            model_name='stockrequestitem',
-            constraint=models.CheckConstraint(condition=models.Q(('quantity_left__gte', 0)), name='ck_stockrequestitem_left_nonneg'),
+            model_name="stockrequestitem",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("quantity_left__gte", 0)), name="ck_stockrequestitem_left_nonneg"
+            ),
         ),
     ]

@@ -211,7 +211,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_management_role(self) -> bool:
         """True for admins, workforce/inventory managers, and supervisors."""
-        return self.is_system_admin or self.role in {RoleCode.HR, RoleCode.STORE_MANAGER} or self.role in SUPERVISOR_ROLES
+        return (
+            self.is_system_admin or self.role in {RoleCode.HR, RoleCode.STORE_MANAGER} or self.role in SUPERVISOR_ROLES
+        )
 
     @property
     def is_admin(self) -> bool:

@@ -5,24 +5,33 @@ Provider engines for **DeepSeek** (LLM) and **Mapbox** (geocoding), living in
 use-cases sit in `apps/integrations/services.py`, asynchronous work in
 `apps/integrations/tasks.py`, and the HTTP surface in `apps/integrations/api.py`.
 
+## Key reachability
+
+- A key in **either** place makes the integration reachable (no flag required):
+  - the environment (`DEEPSEEK_API_KEY`; Mapbox: `MAPBOX_API_KEY` or
+    `MAPBOX_PUBLIC_TOKEN`), **or**
+  - the admin **Integration settings** page (constance: `DEEPSEEK_API_KEY`,
+    `MAPBOX_PUBLIC_TOKEN`).
+- The legacy `DEEPSEEK_ENABLED` / `MAPBOX_ENABLED` flags are advisory only — a
+  configured key always enables the engine.
+
 ## Key safety
 
-- Keys are read from the environment only (settings, never the DB/constance,
-  never committed).
+- Keys are never committed; they come from env or constance (admin only).
 - Keys are sent only in request headers/query params; they are **never** logged,
   included in exception messages, or returned in API payloads.
 - Provider errors are normalised to the standard error envelope
   (`{"error": {code, message, trace_id, fields}}`) with status `502`, or `503`
-  when the integration is not configured.
+  when no key is configured anywhere.
 
 ## DeepSeek engine
 
 Wraps the DeepSeek chat-completions API.
 
 - `deepseek.enabled()` / `complete_chat(messages, ...)` / `summarize(text, ...)`.
-- Config: `DEEPSEEK_ENABLED`, `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`,
-  `DEEPSEEK_MODEL`, `DEEPSEEK_TIMEOUT_SECONDS`, `DEEPSEEK_MAX_TOKENS`,
-  `DEEPSEEK_MAX_RETRIES`.
+- Config: `DEEPSEEK_API_KEY` (env or constance), `DEEPSEEK_BASE_URL` /
+  `DEEPSEEK_API_BASE`, `DEEPSEEK_MODEL`, `DEEPSEEK_TIMEOUT_SECONDS`,
+  `DEEPSEEK_MAX_TOKENS`, `DEEPSEEK_MAX_RETRIES`.
 - Bounded retries with backoff; malformed responses raise `ProviderError`.
 - Use-case: `summarize_site_report(report)` — an executive bullet summary of a
   daily site report; gracefully returns `None` when disabled.
@@ -39,8 +48,9 @@ retries transient failures).
 Wraps Mapbox forward/reverse geocoding with result caching.
 
 - `mapbox.enabled()` / `geocode(query)` / `reverse_geocode(lng, lat)`.
-- Config: `MAPBOX_ENABLED`, `MAPBOX_API_KEY`, `MAPBOX_GEOCODING_URL`,
-  `MAPBOX_TIMEOUT_SECONDS`, `MAPBOX_MAX_RETRIES`, `MAPBOX_GEOCODE_CACHE_TTL`.
+- Config: `MAPBOX_API_KEY` / `MAPBOX_PUBLIC_TOKEN` (env or constance),
+  `MAPBOX_GEOCODING_URL`, `MAPBOX_TIMEOUT_SECONDS`, `MAPBOX_MAX_RETRIES`,
+  `MAPBOX_GEOCODE_CACHE_TTL`.
 - Forward/reverse lookups are cached under a namespaced key
   (`wbz:geo:...`) so repeat calls never hit the network.
 - Use-case: `geocode_site(site)` — geocodes a site's name/city/region/country and

@@ -4,6 +4,7 @@ from datetime import date
 
 import pytest
 from django.core.cache import cache
+from django.test import override_settings
 
 from apps.site_management.factories import CleanerFactory, ZoneFactory
 from apps.site_management.inspection_selectors import inspection_summary
@@ -200,3 +201,20 @@ def test_seed_volume_command() -> None:
         run_tag="perftest",
     )
     assert Site.objects.filter(name__startswith="[perftest]").count() == 2
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=True)
+def test_benchmark_command_runs(site, admin_user) -> None:
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    from apps.site_management.factories import SiteStoreFactory
+
+    SiteStoreFactory(site=site)
+    out = StringIO()
+    call_command("benchmark", "--threshold-ms", "9999999", stdout=out)
+    text = out.getvalue()
+    assert "kpi_overview" in text
+    assert "attendance_daily_sheet" in text

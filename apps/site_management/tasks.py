@@ -79,7 +79,7 @@ def deliver_daily_report(self: Any) -> str:
             ReportDelivery.ReportType.DAILY,
             as_of=timezone.localdate() - timedelta(days=1),
         )
-    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+    except Exception as exc:
         raise self.retry(exc=exc) from exc
 
 
@@ -91,7 +91,7 @@ def deliver_weekly_report(self: Any) -> str:
 
     try:
         return deliver_scheduled_report(ReportDelivery.ReportType.WEEKLY)
-    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+    except Exception as exc:
         raise self.retry(exc=exc) from exc
 
 
@@ -103,7 +103,7 @@ def deliver_monthly_report(self: Any) -> str:
 
     try:
         return deliver_scheduled_report(ReportDelivery.ReportType.MONTHLY)
-    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+    except Exception as exc:
         raise self.retry(exc=exc) from exc
 
 
@@ -128,7 +128,7 @@ def generate_daily_ai_briefs(self: Any) -> str:
             generate_optimization_brief(user=user, day=day, brief_type=AIOptimizationBrief.BriefType.DAILY)
             created += 1
         return f"Generated {created} daily AI brief(s) for {day.isoformat()}"
-    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+    except Exception as exc:
         raise self.retry(exc=exc) from exc
 
 
@@ -155,5 +155,5 @@ def generate_friday_ai_briefs(self: Any) -> str:
             generate_optimization_brief(user=user, day=day, brief_type=AIOptimizationBrief.BriefType.WEEKLY)
             created += 1
         return f"Generated {created} Friday AI brief(s) for {day.isoformat()}"
-    except Exception as exc:  # noqa: BLE001 - Celery retry boundary
+    except Exception as exc:
         raise self.retry(exc=exc) from exc

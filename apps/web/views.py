@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
@@ -53,7 +55,7 @@ def landing(request: HttpRequest) -> HttpResponseRedirect:
     return redirect("admin:index")
 
 
-def react_app(request: HttpRequest) -> HttpResponse:
+def react_app(request: HttpRequest) -> Any:
     """Serve the production React entry point produced by the in-repository Vite build."""
     index = settings.STATIC_ROOT / "frontend" / "index.html"
     if not index.exists():

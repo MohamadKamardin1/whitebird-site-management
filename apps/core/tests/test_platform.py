@@ -233,3 +233,12 @@ def test_send_in_app_notifications_task(admin_user, site_supervisor_user) -> Non
     assert created == 2
     assert admin_user.notifications.filter(verb="job_assigned").count() == 1
     assert site_supervisor_user.notifications.filter(verb="job_assigned").count() == 1
+
+
+@pytest.mark.django_db
+def test_brand_context_processor(admin_user) -> None:
+    from apps.core.context_processors import brand
+
+    ctx = brand(type("R", (), {}))
+    assert ctx["brand"]["name"]
+    assert ctx["brand"]["primary_color"].startswith("#")

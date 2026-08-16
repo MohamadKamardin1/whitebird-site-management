@@ -336,9 +336,12 @@ def test_shift_api_permissions(site, admin_user, admin_client, viewer_client, si
     SiteSupervisorAssignmentFactory(site=site, user=site_supervisor_user)
     supervisor_client = _authed(site_supervisor_user)
     evening = dict(payload, shift_name="Evening")
-    assert supervisor_client.post(
-        f"/api/site-management/v1/sites/{site.pk}/shifts", data=evening, content_type="application/json"
-    ).status_code == 403
+    assert (
+        supervisor_client.post(
+            f"/api/site-management/v1/sites/{site.pk}/shifts", data=evening, content_type="application/json"
+        ).status_code
+        == 403
+    )
 
 
 @pytest.mark.django_db

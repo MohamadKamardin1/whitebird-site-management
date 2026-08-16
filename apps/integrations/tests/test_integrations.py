@@ -92,10 +92,11 @@ def test_deepseek_complete_chat_and_summarize(monkeypatch) -> None:
     monkeypatch.setattr(deepseek, "request_json", fake_request_json)
     assert deepseek.summarize("long text to summarise") == "The summary."
     assert captured["auth"] == "Bearer ds-test"
-    assert "deepseek-chat" in captured["body"]["model"]
+    assert captured["body"]["model"] == "deepseek-v4-pro"
 
 
 @override_settings(DEEPSEEK_ENABLED=False)
+@pytest.mark.django_db
 def test_deepseek_disabled_raises() -> None:
     with pytest.raises(ProviderError):
         deepseek.summarize("text")
@@ -146,6 +147,7 @@ def test_mapbox_geocode_no_results(monkeypatch) -> None:
 
 
 @override_settings(MAPBOX_ENABLED=False)
+@pytest.mark.django_db
 def test_mapbox_disabled_raises() -> None:
     with pytest.raises(ProviderError):
         mapbox.geocode("Nungwi")
@@ -308,3 +310,101 @@ def test_tasks_missing_object_returns_none() -> None:
 
     assert summarize_site_report(report_id=999999) is None
     assert geocode_site(site_id=999999) is None
+
+
+# --------------------------------------------------------------------------- #
+# Key reachability — env and constance (admin Integration settings)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.django_db
+def test_deepseek_enabled_with_env_key_only() -> None:
+    with override_settings(DEEPSEEK_ENABLED=False, DEEPSEEK_API_KEY="env-key"):
+        assert deepseek.enabled() is True
+
+
+@pytest.mark.django_db
+def test_deepseek_enabled_with_constance_key_only() -> None:
+    with override_settings(DEEPSEEK_ENABLED=False, DEEPSEEK_API_KEY=""):
+        from constance.test import override_config
+
+        with override_config(DEEPSEEK_API_KEY="constance-key"):
+            assert deepseek.enabled() is True
+
+
+@pytest.mark.django_db
+def test_deepseek_disabled_when_no_key_anywhere() -> None:
+    with override_settings(DEEPSEEK_ENABLED=True, DEEPSEEK_API_KEY=""):
+        from constance.test import override_config
+
+        with override_config(DEEPSEEK_API_KEY=""):
+            assert deepseek.enabled() is False
+
+
+@pytest.mark.django_db
+def test_mapbox_enabled_from_public_token() -> None:
+    with override_settings(MAPBOX_ENABLED=False, MAPBOX_API_KEY="", MAPBOX_PUBLIC_TOKEN="pk.token"):
+        assert mapbox.enabled() is True
+
+
+@pytest.mark.django_db
+def test_mapbox_enabled_from_constance_public_token() -> None:
+    with override_settings(MAPBOX_ENABLED=False, MAPBOX_API_KEY="", MAPBOX_PUBLIC_TOKEN=""):
+        from constance.test import override_config
+
+        with override_config(MAPBOX_PUBLIC_TOKEN="pk.constance"):
+            assert mapbox.enabled() is True
+            assert mapbox._api_key() == "pk.constance"
+
+
+@pytest.mark.django_db
+def test_mapbox_disabled_when_no_token() -> None:
+    with override_settings(MAPBOX_ENABLED=True, MAPBOX_API_KEY="", MAPBOX_PUBLIC_TOKEN=""):
+        from constance.test import override_config
+
+        with override_config(MAPBOX_PUBLIC_TOKEN=""):
+            assert mapbox.enabled() is False
+
+
+@override_settings(DEEPSEEK_ENABLED=True, DEEPSEEK_API_KEY="x")
+def test_summarize_site_report_gracefully_returns_none_on_error(monkeypatch, site) -> None:
+    from apps.integrations.services import summarize_site_report
+    from apps.integrations.transport import ProviderError
+    from apps.site_management.reporting_services import generate_site_report
+
+    def boom(text, instruction=""):
+        raise ProviderError("DeepSeek", "boom")
+
+    monkeypatch.setattr(deepseek, "summarize", boom)
+    report = generate_site_report(site_id=site.pk, day=datetime.date.today(), user=UserFactory())
+    assert summarize_site_report(report) is None
+
+
+@override_settings(MAPBOX_ENABLED=False)
+def test_geocode_site_disabled_returns_none(site) -> None:
+    from apps.integrations.services import geocode_site
+
+    assert geocode_site(site) is None
+
+
+@override_settings(MAPBOX_API_KEY="pk.env_mapbox", MAPBOX_PUBLIC_TOKEN="", DEEPSEEK_API_KEY="sk-env")
+@pytest.mark.django_db
+def test_integration_settings_endpoint_reads_env_token(admin_user) -> None:
+    from apps.site_management.api import _mapbox_token
+
+    assert _mapbox_token() == "pk.env_mapbox"
+    client = _authed(admin_user)
+    response = client.get("/api/site-management/v1/integrations/settings")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mapbox_public_token"] == "pk.env_mapbox"
+    assert body["deepseek_configured"] is True
+    assert body["deepseek_key_suffix"] == "-env"
+
+
+@override_settings(MAPBOX_API_KEY="", MAPBOX_PUBLIC_TOKEN="pk.pub", DEEPSEEK_API_KEY="")
+@pytest.mark.django_db
+def test_integration_settings_prefers_public_token(admin_user) -> None:
+    from apps.site_management.api import _mapbox_token
+
+    assert _mapbox_token() == "pk.pub"

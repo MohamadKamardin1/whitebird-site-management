@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from apps.core.models import AuditLog
 from apps.core.services import model_data, record_audit
 
 from .models import InspectionFrequency, InspectionItemType, InspectionTemplate, Site, SiteArea
-
 
 DEFAULT_CLEANLINESS_AREAS = (
     ("Toilet facilities", "TOILETS"),
@@ -17,15 +18,35 @@ DEFAULT_CLEANLINESS_AREAS = (
 
 
 CLEANLINESS_ITEMS = (
-    ("Area cleaned to the agreed schedule", InspectionItemType.YES_NO, "Was the area completed within the required service window?"),
-    ("High-touch surfaces cleaned", InspectionItemType.YES_NO, "Check doors, handles, switches, rails, and other high-touch surfaces."),
-    ("Waste removed and bins reset", InspectionItemType.YES_NO, "Confirm waste has been removed and bins are clean and correctly lined."),
-    ("Consumables and hygiene supplies available", InspectionItemType.YES_NO, "Check soap, tissue, paper products, and other configured consumables."),
-    ("Exception details and corrective action", InspectionItemType.TEXT, "If any item failed, record who is responsible, what was done, and the next review time."),
+    (
+        "Area cleaned to the agreed schedule",
+        InspectionItemType.YES_NO,
+        "Was the area completed within the required service window?",
+    ),
+    (
+        "High-touch surfaces cleaned",
+        InspectionItemType.YES_NO,
+        "Check doors, handles, switches, rails, and other high-touch surfaces.",
+    ),
+    (
+        "Waste removed and bins reset",
+        InspectionItemType.YES_NO,
+        "Confirm waste has been removed and bins are clean and correctly lined.",
+    ),
+    (
+        "Consumables and hygiene supplies available",
+        InspectionItemType.YES_NO,
+        "Check soap, tissue, paper products, and other configured consumables.",
+    ),
+    (
+        "Exception details and corrective action",
+        InspectionItemType.TEXT,
+        "If any item failed, record who is responsible, what was done, and the next review time.",
+    ),
 )
 
 
-def provision_site_cleanliness_setup(*, site: Site, actor) -> int:
+def provision_site_cleanliness_setup(*, site: Site, actor: Any) -> int:
     """Create default operational areas when absent and then provision surveys."""
     if not site.areas.filter(is_active=True).exists():
         for area_name, area_code in DEFAULT_CLEANLINESS_AREAS:
@@ -47,7 +68,7 @@ def provision_site_cleanliness_setup(*, site: Site, actor) -> int:
     return provision_site_cleanliness_templates(site=site, actor=actor)
 
 
-def provision_site_cleanliness_templates(*, site: Site, actor) -> int:
+def provision_site_cleanliness_templates(*, site: Site, actor: Any) -> int:
     """Create missing daily cleanliness checklists for active site areas.
 
     Existing templates are never overwritten. The function is idempotent and can

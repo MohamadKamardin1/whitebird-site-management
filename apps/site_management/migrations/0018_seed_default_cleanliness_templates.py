@@ -1,5 +1,6 @@
-from django.db import migrations
+from typing import Any
 
+from django.db import migrations
 
 AREAS = (
     ("Toilet facilities", "TOILETS"),
@@ -11,13 +12,25 @@ AREAS = (
 ITEMS = (
     ("Area cleaned to the agreed schedule", "yes_no", "Was the area completed within the required service window?"),
     ("High-touch surfaces cleaned", "yes_no", "Check doors, handles, switches, rails, and other high-touch surfaces."),
-    ("Waste removed and bins reset", "yes_no", "Confirm waste has been removed and bins are clean and correctly lined."),
-    ("Consumables and hygiene supplies available", "yes_no", "Check soap, tissue, paper products, and other configured consumables."),
-    ("Exception details and corrective action", "text", "If any item failed, record who is responsible, what was done, and the next review time."),
+    (
+        "Waste removed and bins reset",
+        "yes_no",
+        "Confirm waste has been removed and bins are clean and correctly lined.",
+    ),
+    (
+        "Consumables and hygiene supplies available",
+        "yes_no",
+        "Check soap, tissue, paper products, and other configured consumables.",
+    ),
+    (
+        "Exception details and corrective action",
+        "text",
+        "If any item failed, record who is responsible, what was done, and the next review time.",
+    ),
 )
 
 
-def seed_cleanliness_templates(apps, schema_editor):
+def seed_cleanliness_templates(apps: Any, schema_editor: Any) -> None:
     Site = apps.get_model("site_management", "Site")
     SiteArea = apps.get_model("site_management", "SiteArea")
     InspectionTemplate = apps.get_model("site_management", "InspectionTemplate")
@@ -61,7 +74,7 @@ def seed_cleanliness_templates(apps, schema_editor):
                 )
 
 
-def noop(apps, schema_editor):
+def noop(apps: Any, schema_editor: Any) -> None:
     pass
 
 

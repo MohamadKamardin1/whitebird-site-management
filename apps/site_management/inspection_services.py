@@ -23,6 +23,7 @@ from apps.core.models import AuditLog
 from apps.core.services import model_data, publish_domain_event, record_audit
 
 from .models import (
+    Cleaner,
     Inspection,
     InspectionItemType,
     InspectionOverallStatus,
@@ -32,7 +33,6 @@ from .models import (
     InspectionWorkflowStatus,
     Site,
     SiteArea,
-    Cleaner,
     SiteShift,
 )
 from .policies import can_review_inspection, ensure
