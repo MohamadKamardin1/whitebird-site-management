@@ -19,6 +19,7 @@ import { FieldInspectionsPage, ReportsPage, SiteIssuesPage, StockRequestsPage } 
 import RoleWorkspacesPage from "@/pages/RoleWorkspacesPage";
 import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
+import IntegrationSettingsPage from "@/pages/IntegrationSettingsPage";
 import TraineeManagementPage from "@/pages/TraineeManagementPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -36,6 +37,7 @@ function Router() {
     <Route path="/"><ProtectedPage><DashboardPage /></ProtectedPage></Route>
     <Route path="/admin"><ProtectedPage><RoleWorkspacesPage mode="admin" /></ProtectedPage></Route>
     <Route path="/admin/estate"><ProtectedPage><AdminEstatePage /></ProtectedPage></Route>
+    <Route path="/admin/integrations"><ProtectedPage><IntegrationSettingsPage /></ProtectedPage></Route>
     <Route path="/admin/users"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Platform governance", title: "Users and roles with accountable access.", description: "System administrators create, revoke, and review platform roles without entering daily site execution work.", endpoint: "/auth/users", filterLabel: "users", disableUsers: true }} /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
     <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>

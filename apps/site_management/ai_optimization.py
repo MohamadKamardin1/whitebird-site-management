@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import requests
+from constance import config
 from django.conf import settings
 from django.utils import timezone
 
@@ -41,7 +42,11 @@ LEADERSHIP_ROLES = frozenset(
 
 
 def _model_name() -> str:
-    return str(getattr(settings, "DEEPSEEK_MODEL", "deepseek-v4-pro"))
+    return str(getattr(config, "DEEPSEEK_MODEL", "") or getattr(settings, "DEEPSEEK_MODEL", "deepseek-v4-pro"))
+
+
+def _deepseek_api_key() -> str:
+    return str(getattr(config, "DEEPSEEK_API_KEY", "") or getattr(settings, "DEEPSEEK_API_KEY", "") or "").strip()
 
 
 def _scope_key(user: User) -> str:
@@ -141,7 +146,7 @@ def _validate_output(value: Any, evidence: dict[str, Any]) -> dict[str, Any]:
 
 
 def _deepseek_summary(evidence: dict[str, Any], *, weekly: bool) -> tuple[dict[str, Any], str]:
-    api_key = str(getattr(settings, "DEEPSEEK_API_KEY", "") or "").strip()
+    api_key = _deepseek_api_key()
     if not api_key:
         return _fallback_output(evidence, "DEEPSEEK_API_KEY is not configured."), "fallback"
     base_url = str(getattr(settings, "DEEPSEEK_API_BASE", "https://api.deepseek.com") or "https://api.deepseek.com").rstrip("/")

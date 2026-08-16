@@ -8,6 +8,7 @@ export const primaryNavigation: NavEntry[] = [
   { href: "/admin", label: "Administration", icon: Settings2, roles: ["system_admin"] },
   { href: "/admin/users", label: "Users & roles", icon: UserCog, roles: ["system_admin"] },
   { href: "/admin/estate", label: "Sites, zones & GIS", icon: Building2, roles: ["system_admin"] },
+  { href: "/admin/integrations", label: "Integration settings", icon: Settings2, roles: ["system_admin"] },
   { href: "/sites", label: "Sites & zones", icon: Building2, roles: ["general_supervisor", "assistant_general_supervisor", "zone_supervisor", "management_viewer"] },
   { href: "/hr/onboarding", label: "HR onboarding", icon: UserRoundPlus, roles: ["hr"] },
   { href: "/hr/people", label: "People registry", icon: UsersRound, roles: ["hr", "system_admin", "general_supervisor"] },
@@ -24,8 +25,8 @@ export const primaryNavigation: NavEntry[] = [
 
 export const secondaryNavigation: NavEntry[] = [
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/settings/profile", label: "Account", icon: Gauge },
-  { href: "/reports", label: "Exports archive", icon: Archive },
+  { href: "/settings/profile", label: "Account & security", icon: Gauge },
+  { href: "/reports", label: "Report archive", icon: Archive },
 ];
 
 export const roleLabels: Record<string, string> = {

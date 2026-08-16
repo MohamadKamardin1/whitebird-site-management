@@ -1235,3 +1235,15 @@ class ThemeOut(Schema):
     brand_background_color: str
     logo_url: str | None = None
     version: str = "1.0.0"
+
+
+class IntegrationSettingsOut(Schema):
+    deepseek_configured: bool
+    deepseek_key_suffix: str = ""
+    mapbox_public_token: str = ""
+    updated_at: datetime | None = None
+
+
+class IntegrationSettingsIn(Schema):
+    deepseek_api_key: str | None = None
+    mapbox_public_token: str | None = None

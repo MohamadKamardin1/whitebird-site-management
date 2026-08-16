@@ -192,6 +192,8 @@ CONSTANCE_CONFIG = {
     "EXPORT_MAX_ROWS": (100000, "Maximum rows a single export may return."),
     "ENABLE_DOMAIN_EVENTS": (False, "Emit domain events to the event bus."),
     "ENABLE_NOTIFICATIONS": (True, "Deliver in-platform notifications."),
+    "DEEPSEEK_API_KEY": ("", "Server-only DeepSeek API key. Never expose this value in API responses or frontend code."),
+    "MAPBOX_PUBLIC_TOKEN": ("", "Public Mapbox token used by the authenticated GIS workspace."),
 }
 
 # --------------------------------------------------------------------------- #

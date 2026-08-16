@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from constance import config
 from django.conf import settings
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from django.http import Http404, HttpResponse, StreamingHttpResponse
 from ninja import File, Form, Query, Router, UploadedFile
@@ -266,6 +266,8 @@ from .schemas import (
     InspectionTemplateStatusIn,
     InspectionTemplateUpdateIn,
     InspectionUpdateIn,
+    IntegrationSettingsIn,
+    IntegrationSettingsOut,
     IssueCreateIn,
     IssueEscalateIn,
     IssueOut,
@@ -4386,6 +4388,66 @@ def notification_read(request: AuthenticatedRequest, notification_id: int) -> Me
 def notification_read_all(request: AuthenticatedRequest) -> MessageOut:
     updated = mark_all_notifications_read(user=request.auth)
     return MessageOut(detail=f"{updated} notification(s) marked as read.")
+
+
+# --------------------------------------------------------------------------- #
+# Administrator integration settings
+# --------------------------------------------------------------------------- #
+
+
+def _integration_secret_value(name: str) -> str:
+    """Return the database-managed value, falling back to the deployment env."""
+    configured = str(getattr(config, name, "") or "").strip()
+    if configured:
+        return configured
+    return str(getattr(settings, name, "") or "").strip()
+
+
+@router.get("/integrations/settings", response=IntegrationSettingsOut, summary="Read integration settings")
+def integration_settings_read(request: AuthenticatedRequest) -> IntegrationSettingsOut:
+    if not request.auth.is_management_role:
+        raise PermissionDenied("Management role required.")
+    deepseek_key = _integration_secret_value("DEEPSEEK_API_KEY")
+    mapbox_token = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    return IntegrationSettingsOut(
+        deepseek_configured=bool(deepseek_key),
+        deepseek_key_suffix=deepseek_key[-4:] if deepseek_key else "",
+        mapbox_public_token=mapbox_token,
+    )
+
+
+@router.patch("/integrations/settings", response=IntegrationSettingsOut, summary="Update integration settings")
+def integration_settings_update(
+    request: AuthenticatedRequest,
+    payload: IntegrationSettingsIn,
+) -> IntegrationSettingsOut:
+    if not request.auth.is_system_admin:
+        raise PermissionDenied("System admin role required.")
+    before_deepseek = _integration_secret_value("DEEPSEEK_API_KEY")
+    before_mapbox = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    if payload.deepseek_api_key is not None:
+        value = payload.deepseek_api_key.strip()
+        if value and not value.startswith("sk-"):
+            raise ValidationError("DeepSeek API keys must start with sk-.")
+        config.DEEPSEEK_API_KEY = value
+    if payload.mapbox_public_token is not None:
+        value = payload.mapbox_public_token.strip()
+        if value and not value.startswith(("pk.", "sk.")):
+            raise ValidationError("Mapbox tokens must start with pk. or sk.")
+        config.MAPBOX_PUBLIC_TOKEN = value
+    after_deepseek = _integration_secret_value("DEEPSEEK_API_KEY")
+    after_mapbox = _integration_secret_value("MAPBOX_PUBLIC_TOKEN")
+    record_audit(
+        action=AuditLog.Action.UPDATE,
+        actor=request.auth,
+        model_name="constance.config",
+        object_id="integration-settings",
+        object_repr="Administrator integration settings",
+        before_data={"deepseek_configured": bool(before_deepseek), "mapbox_configured": bool(before_mapbox)},
+        after_data={"deepseek_configured": bool(after_deepseek), "mapbox_configured": bool(after_mapbox)},
+        summary="Updated administrator integration settings without recording secret values.",
+    )
+    return integration_settings_read(request)
 
 
 @router.get("/exports/attendance.csv", summary="Stream attendance CSV export", tags=["Exports"])
