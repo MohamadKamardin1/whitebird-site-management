@@ -18,6 +18,7 @@ django-celery-beat==2.9.0
 # API
 django-ninja==1.6.2
 django-cors-headers==4.9.0
+requests==2.32.5
 
 # Static assets & storage
 whitenoise[brotli]==6.12.0
