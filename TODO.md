@@ -105,3 +105,11 @@
 - [x] Persist functional zone boundaries and site coordinates, provide a GIS workspace with Mapbox boundary drawing/editing and site markers, and keep boundary/site changes audited and administrator-controlled.
 - [x] Add regression coverage for PDF rendering/content, store isolation, low-stock requests, AI widget order, user disable-only behavior, pagination, cleanliness template readiness, site/zone CRUD, site-zone assignment, and GIS configuration.
 - [x] Update documentation, environment templates, migration instructions, run the full quality suite, commit, and push the release.
+
+## Responsive Side Panels and Table Scrolling
+
+- [x] Make shared individual-record side panels expand to the available mobile viewport width with safe padding, readable headers, and no horizontal page overflow.
+- [x] Constrain horizontal overflow at the application/page shell so only intentionally wide tables scroll horizontally.
+- [x] Ensure table wrappers retain accessible horizontal scrolling without forcing detail cards, forms, or the overall page to scroll sideways.
+- [x] Validate side-panel behavior at phone and desktop breakpoints with frontend type checks, production build, and responsive visual verification.
+- [ ] Document, commit, and push the responsive side-panel and table-scroll fix.
