@@ -30,6 +30,8 @@ class RoleCode(models.TextChoices):
     """
 
     SYSTEM_ADMIN = "system_admin", "System Admin"
+    HR = "hr", "Human Resources"
+    STORE_MANAGER = "store_manager", "Store Manager"
     SITE_SUPERVISOR = "site_supervisor", "Site Supervisor"
     ZONE_SUPERVISOR = "zone_supervisor", "Zone Supervisor"
     ASSISTANT_GENERAL_SUPERVISOR = "assistant_general_supervisor", "Assistant General Supervisor"
@@ -133,6 +135,10 @@ class User(AbstractBaseUser, PermissionsMixin):
             ("approve_trainee", "Can approve trainees"),
             ("manage_site_configuration", "Can manage site configuration"),
             ("manage_cleaners", "Can register and onboard cleaners"),
+            ("import_cleaners", "Can import cleaners from a validated workbook"),
+            ("manage_cleaner_assignments", "Can assign cleaners and trainees to sites and shifts"),
+            ("manage_trainee_lifecycle", "Can evaluate and qualify trainees"),
+            ("manage_store_inventory", "Can manage stock catalogs, counts, requests, and fulfillment"),
             ("view_sensitive_cleaner_documents", "Can view sensitive cleaner documents"),
             ("export_site_management_data", "Can export site management data"),
         ]
@@ -170,6 +176,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.role == RoleCode.SYSTEM_ADMIN or self.is_superuser
 
     @property
+    def is_hr(self) -> bool:
+        return self.role == RoleCode.HR
+
+    @property
+    def is_store_manager(self) -> bool:
+        return self.role == RoleCode.STORE_MANAGER
+
+    @property
     def is_site_supervisor(self) -> bool:
         return self.role == RoleCode.SITE_SUPERVISOR
 
@@ -196,8 +210,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_management_role(self) -> bool:
-        """True for admins and supervisors; false for read-only viewers."""
-        return self.is_system_admin or self.role in SUPERVISOR_ROLES
+        """True for admins, workforce/inventory managers, and supervisors."""
+        return self.is_system_admin or self.role in {RoleCode.HR, RoleCode.STORE_MANAGER} or self.role in SUPERVISOR_ROLES
 
     @property
     def is_admin(self) -> bool:

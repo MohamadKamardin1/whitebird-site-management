@@ -76,3 +76,18 @@
 - [x] Add backend/frontend tests for role-scope isolation, payload integrity, DeepSeek failure handling, structured-output validation, audit logging, and role-specific UI behavior.
 - [x] Document the DeepSeek environment contract, security boundaries, model-use policy, operational limitations, validation results, release commit, and GitHub push.
 - [x] Deliver the selected hybrid model: on-demand AI optimization plus role-scoped scheduled daily leadership briefs and a Friday weekly optimization brief, with idempotent execution and durable delivery/audit status.
+
+## Role-Based Management Platform Redesign
+
+- [x] Add the HR role with explicit responsibility for cleaner and trainee lifecycle, onboarding, employee records, site assignments, shifts, qualification decisions, and HR audit.
+- [x] Add the Store Manager role with explicit responsibility for configured stock catalogs, site inventory visibility, stock requests, approvals/fulfillment, stock movements, and inventory audit.
+- [x] Separate System Administrator capabilities from site-management menus: administrators manage platform users, roles, sites, zones, site-zone relationships, site configuration, shifts, and permission governance.
+- [x] Define and enforce a capability matrix for HR, Store Manager, Site Manager/Supervisor, Zone Supervisor, Assistant General Supervisor, General Supervisor, and System Administrator.
+- [x] Add HR cleaner onboarding for single records and validated Excel bulk import, including downloadable template, reference sheets, dropdowns, field validation, import preview, row-level errors, duplicate handling, and audited results.
+- [x] Keep new cleaners in trainee status until an authorised HR qualification action transitions them to active cleaner status with qualification evidence and audit history.
+- [x] Add site-manager trainee management for assigned trainees, daily attendance, performance observations, corrective actions, progress milestones, and daily trainee reporting.
+- [x] Add HR-controlled cleaner/trainee site assignment and shift management with effective dates, site-scope validation, conflict checks, and audit history.
+- [x] Build Store Manager inventory workflows for configured items, stock counts, reorder signals, request review, fulfillment, and complete stock movement audit.
+- [x] Build dynamic role-specific side navigation and distinct dashboard compositions so each role sees only relevant responsibilities, metrics, alerts, and next actions.
+- [x] Add role-isolation, import-validation, trainee-transition, assignment, shift, inventory, navigation, dashboard, and audit regression tests.
+- [x] Document the role operating model, deployment migration, administrator setup sequence, Excel template usage, and release validation before commit and push.

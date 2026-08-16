@@ -28,8 +28,8 @@ def role_required(*roles: RoleCode) -> Callable[[User], bool]:
 
 
 def management_required(user: User) -> bool:
-    """True for system admins and any supervisor role (not viewers)."""
-    return user.is_system_admin or user.role in SUPERVISOR_ROLES
+    """True for system admins, HR, and operational supervisor roles."""
+    return user.is_system_admin or user.role == RoleCode.HR or user.role in SUPERVISOR_ROLES
 
 
 def user_can_manage_site(user: User, site_id: int | str) -> bool:
@@ -40,7 +40,7 @@ def user_can_manage_site(user: User, site_id: int | str) -> bool:
     and assistant general supervisors manage sites inside their scope.
     Management viewers never write.
     """
-    if user.is_system_admin or user.role == RoleCode.GENERAL_SUPERVISOR:
+    if user.is_system_admin or user.role in {RoleCode.HR, RoleCode.GENERAL_SUPERVISOR}:
         return True
     if user.is_management_viewer:
         return False

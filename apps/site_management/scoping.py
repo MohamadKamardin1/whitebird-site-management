@@ -25,6 +25,7 @@ ACTIVE = Q(is_active=True)
 def _sees_all_zones(user: User) -> bool:
     """True when the user's scope covers every zone."""
     if user.is_system_admin or user.role in {
+        RoleCode.HR,
         RoleCode.GENERAL_SUPERVISOR,
         RoleCode.MANAGEMENT_VIEWER,
     }:
@@ -54,6 +55,8 @@ def visible_zones(user: User) -> QuerySet[Zone]:
 
 def visible_sites(user: User) -> QuerySet[Site]:
     """Sites the user may read (active sites only)."""
+    if user.role in {RoleCode.HR, RoleCode.STORE_MANAGER}:
+        return Site.objects.all()
     if _sees_all_zones(user):
         return Site.objects.all()
     if user.role == RoleCode.SITE_SUPERVISOR:
@@ -64,6 +67,7 @@ def visible_sites(user: User) -> QuerySet[Site]:
 def supervised_sites(user: User) -> QuerySet[Site]:
     """Sites the user has management (write) capacity over."""
     if user.is_system_admin or user.role in {
+        RoleCode.HR,
         RoleCode.GENERAL_SUPERVISOR,
         RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
     }:

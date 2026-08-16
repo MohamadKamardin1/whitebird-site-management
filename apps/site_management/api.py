@@ -13,7 +13,7 @@ from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
-from django.http import Http404, StreamingHttpResponse
+from django.http import Http404, HttpResponse, StreamingHttpResponse
 from ninja import File, Form, Query, Router, UploadedFile
 
 from apps.accounts.models import RoleCode, User
@@ -96,6 +96,7 @@ from .export_services import (
     job_export_rows,
     report_export_rows,
 )
+from .hr_services import build_cleaner_workbook_template, import_cleaner_workbook, preview_cleaner_workbook
 from .inspection_selectors import (
     InspectionFilter,
     TemplateFilter,
@@ -1340,6 +1341,26 @@ def cleaner_list(
     return paginated_response(request, qs, page, page_size, results, count)
 
 
+@router.get("/hr/cleaners/template.xlsx", summary="Download the HR cleaner onboarding workbook template", tags=["HR"])
+def hr_cleaner_template(request: AuthenticatedRequest) -> HttpResponse:
+    _cleaner_write(request.auth)
+    response = HttpResponse(build_cleaner_workbook_template(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="whitebird-cleaner-onboarding-template.xlsx"'
+    return response
+
+
+@router.post("/hr/cleaners/import/preview", response=dict, summary="Preview a validated HR cleaner workbook", tags=["HR"])
+def hr_cleaner_import_preview(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:
+    _cleaner_write(request.auth)
+    return preview_cleaner_workbook(workbook)
+
+
+@router.post("/hr/cleaners/import", response=dict, summary="Import a validated HR cleaner workbook", tags=["HR"])
+def hr_cleaner_import(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:
+    _cleaner_write(request.auth)
+    return import_cleaner_workbook(uploaded_file=workbook, actor=request.auth)
+
+
 @router.post("/cleaners", response=CleanerOut, summary="Register a cleaner")
 def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> CleanerOut:
     _cleaner_write(request.auth)
@@ -2107,8 +2128,8 @@ def _trainee_manage(user: User, site_id: int) -> None:
 
 
 def _trainee_decide(user: User) -> None:
-    if not (user.is_system_admin or user.role in {RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
-        raise PermissionDenied("Only senior management can make final trainee decisions.")
+    if not (user.is_system_admin or user.role in {RoleCode.HR, RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}):
+        raise PermissionDenied("Only HR or senior management can make final trainee decisions.")
 
 
 def _trainee_out(p: TraineeProgram) -> TraineeProgramOut:
@@ -2350,16 +2371,18 @@ def trainee_drop(request: AuthenticatedRequest, program_id: int, payload: Traine
 
 
 def _store_read(user: User, store_id: int) -> None:
-    if not (management_required(user) or user.is_management_viewer):
+    if not (management_required(user) or user.is_store_manager or user.is_management_viewer):
         raise PermissionDenied("Store records require a management role.")
     if not user.is_system_admin and not site_in_user_scope(user, getattr(_load_store_or_404(store_id), "site_id", 0)):
         raise PermissionDenied("You do not have access to this store.")
 
 
 def _store_manage(user: User, store_id: int) -> None:
-    """Allow scoped management users to create and submit requests."""
+    """Allow site execution and Store Manager users to manage inventory workflows."""
     _store_read(user, store_id)
     store = _load_store_or_404(store_id)
+    if user.is_store_manager:
+        return
     if not user_can_manage_site(user, store.site_id):
         raise PermissionDenied("You do not have permission to manage this store.")
 
@@ -2375,6 +2398,7 @@ def _store_configure(user: User, store_id: int | None = None) -> None:
 def _store_review(user: User) -> None:
     if not (
         user.is_system_admin
+        or user.is_store_manager
         or user.role
         in {
             RoleCode.GENERAL_SUPERVISOR,
@@ -2382,7 +2406,7 @@ def _store_review(user: User) -> None:
             RoleCode.ZONE_SUPERVISOR,
         }
     ):
-        raise PermissionDenied("Only zone-level management can review stock requests.")
+        raise PermissionDenied("Only Store Manager or zone-level management can review stock requests.")
 
 
 def _load_store_or_404(store_id: int) -> SiteStore:

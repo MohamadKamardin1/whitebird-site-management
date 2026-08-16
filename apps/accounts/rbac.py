@@ -11,6 +11,8 @@ from .models import RoleCode
 #: Display name of the Django group that mirrors each platform role.
 ROLE_GROUP_NAMES: dict[RoleCode, str] = {
     RoleCode.SYSTEM_ADMIN: "System Admin",
+    RoleCode.HR: "Human Resources",
+    RoleCode.STORE_MANAGER: "Store Manager",
     RoleCode.GENERAL_SUPERVISOR: "General Supervisor",
     RoleCode.ASSISTANT_GENERAL_SUPERVISOR: "Assistant General Supervisor",
     RoleCode.ZONE_SUPERVISOR: "Zone Supervisor",
@@ -28,6 +30,10 @@ _CUSTOM_PERMISSIONS = [
     "approve_trainee",
     "manage_site_configuration",
     "manage_cleaners",
+    "import_cleaners",
+    "manage_cleaner_assignments",
+    "manage_trainee_lifecycle",
+    "manage_store_inventory",
     "view_sensitive_cleaner_documents",
     "export_site_management_data",
 ]
@@ -76,6 +82,16 @@ ROLE_PERMISSIONS: dict[RoleCode, set[tuple[str, str]]] = {
         _model_perms("accounts", ("view", "add", "change", "delete"))
         | _model_perms("site_management", ("view", "add", "change", "delete"))
         | _custom(*_CUSTOM_PERMISSIONS)
+    ),
+    RoleCode.HR: (
+        _model_perms("accounts", ("view",))
+        | {("site_management", f"{action}_{model}") for model in ("cleaner", "cleanerdocument", "cleanersiteassignment", "cleanershiftassignment", "traineeprogram", "traineeevaluation") for action in ("view", "add", "change")}
+        | _custom("manage_cleaners", "import_cleaners", "manage_cleaner_assignments", "manage_trainee_lifecycle", "view_sensitive_cleaner_documents", "export_site_management_data")
+    ),
+    RoleCode.STORE_MANAGER: (
+        _model_perms("site_management", ("view",))
+        | {("site_management", f"{action}_{model}") for model in ("sitestore", "storeitem", "stockmovement", "stockrequest", "stockrequestitem") for action in ("view", "add", "change")}
+        | _custom("manage_store_inventory", "export_site_management_data")
     ),
     RoleCode.GENERAL_SUPERVISOR: (
         _view_all()

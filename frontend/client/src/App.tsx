@@ -16,6 +16,8 @@ import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
 import MarketingPage from "@/pages/MarketingPage";
 import { FieldInspectionsPage, ReportsPage, SiteIssuesPage, StockRequestsPage } from "@/pages/OperationalWorkflowsPage";
+import RoleWorkspacesPage from "@/pages/RoleWorkspacesPage";
+import TraineeManagementPage from "@/pages/TraineeManagementPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -30,7 +32,14 @@ function Router() {
     <Route path="/marketing" component={MarketingPage} />
     <Route path="/login" component={LoginPage} />
     <Route path="/"><ProtectedPage><DashboardPage /></ProtectedPage></Route>
+    <Route path="/admin"><ProtectedPage><RoleWorkspacesPage mode="admin" /></ProtectedPage></Route>
+    <Route path="/admin/users"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Platform governance", title: "Users and roles with accountable access.", description: "System administrators create, revoke, and review platform roles without entering daily site execution work.", endpoint: "/users", filterLabel: "users" }} /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
+    <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>
+    <Route path="/hr/people"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR people registry", title: "Cleaner records, documents, and onboarding readiness.", description: "Review workforce records through the HR-controlled lifecycle.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
+    <Route path="/hr/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR workforce planning", title: "Assignments and shifts with effective dates.", description: "Maintain the official cleaner-to-site and cleaner-to-shift handover.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
+    <Route path="/store-control"><ProtectedPage><RoleWorkspacesPage mode="store" /></ProtectedPage></Route>
+    <Route path="/trainees"><ProtectedPage><TraineeManagementPage /></ProtectedPage></Route>
     <Route path="/people/cleaners"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "People operations", title: "A cleaner registry built for responsible review.", description: "Search and review authorised cleaner records, document states, and onboarding readiness without exposing sensitive data outside policy.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>

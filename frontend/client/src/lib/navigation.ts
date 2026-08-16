@@ -1,8 +1,41 @@
-/** Coastal Ledger navigation model: every entry maps to a real White Bird operational workspace. */
-import { Archive, Bell, Building2, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageSearch, ShieldCheck, UsersRound } from "lucide-react";
-export const primaryNavigation = [
-  { href: "/", label: "Today", icon: LayoutDashboard, roles: [] }, { href: "/sites", label: "Sites & zones", icon: Building2, roles: [] }, { href: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] }, { href: "/cleanliness", label: "Daily cleanliness", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] }, { href: "/people/cleaners", label: "People", icon: UsersRound, roles: [] }, { href: "/people/assignments", label: "Assignments", icon: ClipboardList, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] }, { href: "/inspections", label: "Inspections", icon: ShieldCheck, roles: [] }, { href: "/operations/issues", label: "Issues & jobs", icon: HardHat, roles: [] }, { href: "/stores", label: "Stores & stock", icon: PackageSearch, roles: [] }, { href: "/reports", label: "Reports", icon: FileBarChart2, roles: [] },
+/** White Bird role-aware navigation: UI visibility follows the capability matrix; API authorization remains authoritative. */
+import { Archive, Bell, Building2, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, ShieldCheck, UsersRound, UserRoundPlus, UserCog, GraduationCap } from "lucide-react";
+
+export type NavEntry = { href: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
+
+export const primaryNavigation: NavEntry[] = [
+  { href: "/", label: "Today", icon: LayoutDashboard },
+  { href: "/admin", label: "Administration", icon: Settings2, roles: ["system_admin"] },
+  { href: "/admin/users", label: "Users & roles", icon: UserCog, roles: ["system_admin"] },
+  { href: "/sites", label: "Sites & zones", icon: Building2, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "management_viewer"] },
+  { href: "/hr/onboarding", label: "HR onboarding", icon: UserRoundPlus, roles: ["hr"] },
+  { href: "/hr/people", label: "People registry", icon: UsersRound, roles: ["hr", "system_admin", "general_supervisor"] },
+  { href: "/hr/assignments", label: "Assignments & shifts", icon: ClipboardList, roles: ["hr", "system_admin"] },
+  { href: "/trainees", label: "Trainee management", icon: GraduationCap, roles: ["hr", "site_supervisor", "system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor"] },
+  { href: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/cleanliness", label: "Daily cleanliness", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/inspections", label: "Inspections", icon: ShieldCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/operations/issues", label: "Issues & jobs", icon: HardHat, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/store-control", label: "Store control", icon: PackageCheck, roles: ["store_manager", "system_admin", "general_supervisor"] },
+  { href: "/stores", label: "Stores & stock", icon: PackageSearch, roles: ["store_manager", "system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/reports", label: "Reports", icon: FileBarChart2, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor", "store_manager", "hr"] },
 ];
-export const secondaryNavigation = [{ href: "/notifications", label: "Notifications", icon: Bell }, { href: "/settings/profile", label: "Account", icon: Gauge }, { href: "/reports", label: "Exports archive", icon: Archive }];
-export const roleLabels: Record<string, string> = { system_admin: "System administrator", general_supervisor: "General supervisor", assistant_general_supervisor: "Assistant general supervisor", zone_supervisor: "Zone supervisor", site_supervisor: "Site supervisor", management_viewer: "Management viewer" };
-export function canSee(role: string | undefined, roles: string[]) { return roles.length === 0 || Boolean(role && roles.includes(role)); }
+
+export const secondaryNavigation: NavEntry[] = [
+  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/settings/profile", label: "Account", icon: Gauge },
+  { href: "/reports", label: "Exports archive", icon: Archive },
+];
+
+export const roleLabels: Record<string, string> = {
+  system_admin: "System administrator",
+  hr: "Human resources",
+  store_manager: "Store manager",
+  general_supervisor: "General supervisor",
+  assistant_general_supervisor: "Assistant general supervisor",
+  zone_supervisor: "Zone supervisor",
+  site_supervisor: "Site manager / supervisor",
+  management_viewer: "Management viewer",
+};
+
+export function canSee(role: string | undefined, roles: string[] = []) { return roles.length === 0 || Boolean(role && roles.includes(role)); }

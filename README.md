@@ -249,3 +249,28 @@ The AI prompt requires JSON output and explicitly prohibits invented counts, nam
 `DEEPSEEK_API_KEY` is a server-only deployment secret. `DEEPSEEK_API_BASE` defaults to `https://api.deepseek.com`, and `DEEPSEEK_MODEL` defaults to `deepseek-v4-pro`. The browser never receives the key. The engine is advisory and read-only: it cannot sign attendance, close issues, approve stock, submit reports, change assignments, or modify any operational record. Users must continue through the existing audited workflows to act on a recommendation.
 
 The official DeepSeek integration reference is [DeepSeek API Documentation](https://api-docs.deepseek.com/), including the documented OpenAI-compatible base URL, chat-completions request, and JSON Output response format. The implementation additionally validates the JSON shape inside White Bird before it is displayed or persisted.
+
+
+## Role-Based Management Platform
+
+White Bird now separates platform governance, workforce ownership, supply ownership, site execution, and leadership review into distinct role experiences. The role model is documented in [`docs/ROLE_OPERATING_MODEL.md`](docs/ROLE_OPERATING_MODEL.md) and enforced server-side through `RoleCode`, account permissions, scope selectors, and audited domain services.
+
+| Role | Primary workspace |
+|---|---|
+| System Administrator | Users and roles, sites, zones, site configuration, shifts, permission governance, audit, and system health. |
+| HR | Cleaner registry, single and workbook onboarding, identity evidence, site assignments, shifts, trainee qualification, and HR audit. |
+| Store Manager | Configured stores and items, low-stock signals, stock requests, fulfillment, movements, and inventory audit. |
+| Site Manager / Supervisor | Attendance, trainee daily management, cleanliness, inspections, issues/jobs, stock needs, and site reports. |
+| Zone and senior supervisors | Site/zone exceptions, reporting quality, escalations, handovers, and organization-level operational summaries. |
+
+### HR Excel onboarding
+
+HR can download `/api/site-management/v1/hr/cleaners/template.xlsx`. The workbook contains an instructions sheet, a validated `Cleaners` sheet, and a hidden reference sheet. Dropdowns are provided for identity type, gender, and assignment type; date validation and duplicate highlighting reduce entry errors. The server still revalidates every row, returns row-level errors in preview, and stops the commit if any row is invalid. A successful import is audited with the workbook hash and accepted/matched records. New cleaners remain trainees and must pass the existing final-evaluation and verified-identity gates before becoming active cleaners.
+
+### Trainee management
+
+Site managers use the trainee management workspace to record daily attendance, work quality, conduct, skill progress, observations, and corrective support. HR or authorized senior management owns the final pass/fail decision. Historical trainee programs and evaluations are retained for reporting and audit.
+
+### Navigation and dashboard behavior
+
+The side panel and dashboard action cards are role-specific. HR sees people, onboarding, assignments, shifts, and qualification work; Store Manager sees store control and supply reporting; System Administrator sees platform administration rather than daily site-management menus; site managers see execution work; and leadership sees their permitted reporting and exception scope. These are usability controls only: every backend endpoint continues to enforce the user’s role and data scope.
