@@ -15,6 +15,7 @@ from apps.accounts.api import router as accounts_router
 from apps.accounts.auth import TokenAuth
 from apps.core.api import router as core_router
 from apps.core.handlers import register_error_handlers
+from apps.integrations.api import router as integrations_router
 from apps.site_management.api import router as site_management_router
 
 _TAG_BY_SEGMENT = {
@@ -79,6 +80,7 @@ register_error_handlers(api)
 
 api.add_router("/auth", accounts_router)
 api.add_router("", site_management_router)
+api.add_router("", integrations_router)
 api.add_router("", core_router)
 
 _apply_domain_tags(accounts_router)

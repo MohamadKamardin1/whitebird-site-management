@@ -27,6 +27,7 @@ Module. Each prompt updates this file before its commit.
 | 18     | Role-based dashboards | **Prompt 18 completed** | see CHANGELOG |
 | 19     | Events, notifications, tasks, exports | **Prompt 19 completed** | see CHANGELOG |
 | 20     | Production hardening & final QA | **Prompt 20 completed - production ready** | v0.1.0 |
+| —      | DeepSeek + Mapbox integration engines | **completed** | see CHANGELOG |
 
 ## Prompt 20 — completed ✅ production ready
 

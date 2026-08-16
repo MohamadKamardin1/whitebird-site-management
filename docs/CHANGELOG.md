@@ -5,6 +5,30 @@ All notable changes to the White Bird Zanzibar — Site Management Module.
 The format follows [Keep a Changelog](https://keepachangelog.com/); versions
 map to build prompts.
 
+## [Integrations] — 2026-08-14 — DeepSeek + Mapbox engines
+
+### Added
+
+- **`apps.integrations`** app: provider engines for DeepSeek (LLM) and Mapbox
+  (geocoding) with a shared HTTP transport (bounded retries, timeouts, injectable
+  `httpx.MockTransport` for hermetic tests).
+- **DeepSeek engine**: `complete_chat` / `summarize`, configurable model/base URL/
+  timeouts, enabled-guard, masked errors; use-case `summarize_site_report(report)`;
+  Celery task `summarize_site_report`.
+- **Mapbox engine**: `geocode` / `reverse_geocode` with namespaced result caching
+  (`MAPBOX_GEOCODE_CACHE_TTL`); use-case `geocode_site(site)` persists coordinates;
+  Celery task `geocode_site`.
+- **API**: `POST /ai/summarize` (management only), `GET /geo/geocode`,
+  `GET /geo/reverse` (management or viewer); provider errors mapped to the
+  standard envelope (`502`, `503` when disabled).
+- **Key safety**: keys only from env, never logged/echoed; `ProviderError` handler
+  registered in the core error layer.
+- **Tests** (`apps/integrations/tests/test_integrations.py`): transport retries,
+  DeepSeek chat/summarize/disabled/error shapes, Mapbox geocode + caching +
+  reverse, services, API permissions/status codes, eager Celery tasks.
+- **Docs**: `docs/INTEGRATIONS.md`, env vars in `.env.example`, `httpx` added to
+  `requirements/base.txt`.
+
 ## [Prompt 20] — 2026-08-14 — production hardening & final QA
 
 ### Added

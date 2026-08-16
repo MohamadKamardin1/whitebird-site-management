@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.site_management",
+    "apps.integrations",
     "apps.web",
 ]
 
@@ -202,6 +203,26 @@ CONSTANCE_CONFIG = {
 
 API_V1_PREFIX = "api/site-management/v1"
 API_VERSION = env.str("API_VERSION", default="0.1.0")
+
+# --------------------------------------------------------------------------- #
+# External integrations: DeepSeek (LLM) and Mapbox (geocoding)
+# Keys come from the environment; the engines never log or echo them.
+# --------------------------------------------------------------------------- #
+
+DEEPSEEK_ENABLED = env.bool("DEEPSEEK_ENABLED", default=False)
+DEEPSEEK_API_KEY = env.str("DEEPSEEK_API_KEY", default="")
+DEEPSEEK_BASE_URL = env.str("DEEPSEEK_BASE_URL", default="https://api.deepseek.com")
+DEEPSEEK_MODEL = env.str("DEEPSEEK_MODEL", default="deepseek-chat")
+DEEPSEEK_TIMEOUT_SECONDS = env.int("DEEPSEEK_TIMEOUT_SECONDS", default=30)
+DEEPSEEK_MAX_TOKENS = env.int("DEEPSEEK_MAX_TOKENS", default=1024)
+DEEPSEEK_MAX_RETRIES = env.int("DEEPSEEK_MAX_RETRIES", default=2)
+
+MAPBOX_ENABLED = env.bool("MAPBOX_ENABLED", default=False)
+MAPBOX_API_KEY = env.str("MAPBOX_API_KEY", default="")
+MAPBOX_GEOCODING_URL = env.str("MAPBOX_GEOCODING_URL", default="https://api.mapbox.com/geocoding/v5/mapbox.places")
+MAPBOX_TIMEOUT_SECONDS = env.int("MAPBOX_TIMEOUT_SECONDS", default=10)
+MAPBOX_MAX_RETRIES = env.int("MAPBOX_MAX_RETRIES", default=2)
+MAPBOX_GEOCODE_CACHE_TTL = env.int("MAPBOX_GEOCODE_CACHE_TTL", default=86400)
 
 NINJA_PAGINATION_CLASS = "ninja.pagination.LimitOffsetPagination"
 NINJA_PAGINATION_PER_PAGE = env.int("API_PAGE_SIZE", default=25)

@@ -19,6 +19,8 @@ from django.http import Http404
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, AuthorizationError, Throttled, ValidationError
 
+from apps.integrations.transport import ProviderError
+
 from .context import current_request_id
 from .errors import DomainError
 
@@ -108,6 +110,14 @@ def register_error_handlers(api: NinjaAPI) -> None:
             request,
             error_payload("rate_limited", str(exc) or "Too many requests."),
             status=429,
+        )
+
+    @api.exception_handler(ProviderError)
+    def handle_provider_error(request: Any, exc: ProviderError) -> Any:
+        return api.create_response(
+            request,
+            error_payload(f"{exc.provider.lower()}_error", exc.message),
+            status=exc.status_code,
         )
 
     @api.exception_handler(ObjectDoesNotExist)
