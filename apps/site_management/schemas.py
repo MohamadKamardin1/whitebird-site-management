@@ -29,9 +29,25 @@ class ZoneOut(Schema):
     name: str
     code: str
     description: str = ""
+    boundary: dict[str, Any] = Field(default_factory=dict)
     is_active: bool = True
     site_count: int = 0
     created_at: datetime
+
+
+class ZoneCreateIn(Schema):
+    name: str = Field(min_length=2, max_length=160)
+    code: str = Field(min_length=2, max_length=12)
+    description: str = ""
+    boundary: dict[str, Any] = Field(default_factory=dict)
+
+
+class ZoneUpdateIn(Schema):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    code: str | None = Field(default=None, min_length=2, max_length=12)
+    description: str | None = None
+    boundary: dict[str, Any] | None = None
+    is_active: bool | None = None
 
 
 class SiteSummaryOut(Schema):

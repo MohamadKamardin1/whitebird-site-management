@@ -118,7 +118,7 @@ def test_flow1_full_operations_cycle(admin_user) -> None:
         actor=admin_user,
     )
     create_area(site=site, area_name="Lobby", area_code="LB", actor=admin_user)
-    area = site.areas.get()
+    area = site.areas.get(area_name="Lobby")
 
     # --- register cleaner + verify document ---
     cleaner = register_cleaner(

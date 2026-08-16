@@ -33,6 +33,8 @@ from apps.accounts.services import (
     set_password,
 )
 from apps.accounts.tokens import access_token_lifetime_seconds
+from apps.core.models import AuditLog
+from apps.core.services import record_audit
 from apps.core.requests import AuthenticatedRequest
 
 router = Router(auth=TokenAuth())
@@ -142,6 +144,11 @@ def revoke_token(request: AuthenticatedRequest, token_id: int) -> MessageOut:
 
 
 @router.get(
+    "/users",
+    response=list[StaffMemberOut],
+    summary="User directory (disable-only administration alias)",
+)
+@router.get(
     "/staff",
     response=list[StaffMemberOut],
     summary="Staff directory (system admins and supervisors)",
@@ -161,6 +168,7 @@ def staff_list(request: AuthenticatedRequest) -> list[StaffMemberOut]:
             full_name=user.full_name,
             role=RoleCode(user.role),
             assignment_count=user.assignment_count,  # type: ignore[attr-defined]
+            is_active=user.is_active,
         )
         for user in staff_directory()
     ]
@@ -184,3 +192,29 @@ def staff_create(request: AuthenticatedRequest, payload: StaffCreateIn) -> User:
         timezone=payload.timezone,
         actor=request.auth,
     )
+
+
+@router.post(
+    "/users/{user_id}/disable",
+    response=UserOut,
+    summary="Disable a user without deleting historical records",
+)
+def user_disable(request: AuthenticatedRequest, user_id: int) -> User:
+    if not request.auth.is_system_admin:
+        raise PermissionDenied("System admin role required.")
+    target = User.objects.filter(pk=user_id).first()
+    if target is None:
+        raise ValidationError("User not found.")
+    if target.pk == request.auth.pk:
+        raise ValidationError("The current administrator cannot disable their own account.")
+    if target.is_active:
+        target.is_active = False
+        target.save(update_fields=["is_active", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.STATUS_CHANGE,
+            actor=request.auth,
+            entity=target,
+            summary=f"Disabled user {target.email} without deleting historical records.",
+            after_data={"is_active": False, "role": target.role},
+        )
+    return target

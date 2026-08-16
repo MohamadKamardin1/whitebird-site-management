@@ -89,6 +89,7 @@ class Zone(UserStampedModel, ActivatableModel):
     name = models.CharField(max_length=160)
     code = models.CharField(max_length=12, unique=True, db_index=True)
     description = models.TextField(blank=True, default="")
+    boundary = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = "Zone"

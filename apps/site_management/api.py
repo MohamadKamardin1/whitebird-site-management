@@ -328,9 +328,11 @@ from .schemas import (
     TraineeProgramOut,
     TraineeProgramUpdateIn,
     TraineeSummaryOut,
+    ZoneCreateIn,
     ZoneOut,
     ZoneReportGenerateIn,
     ZoneSummaryReportOut,
+    ZoneUpdateIn,
 )
 from .scoping import site_in_user_scope, visible_sites, visible_zones
 from .selectors import (
@@ -351,6 +353,9 @@ from .selectors import (
     list_sites_queryset,
     unread_notification_count,
 )
+from apps.core.models import AuditLog
+from apps.core.services import model_data, record_audit
+
 from .services import (
     SiteDraft,
     archive_site,
@@ -442,10 +447,8 @@ def _read_access(user: User, site_id: int) -> None:
 
 
 def _write_access(user: User, site_id: int) -> None:
-    if user.is_system_admin:
-        return
-    if not user_can_manage_site(user, site_id):
-        raise PermissionDenied("You do not have permission to modify this site.")
+    if not user.is_system_admin:
+        raise PermissionDenied("Only a System Administrator can modify site configuration.")
 
 
 def _load_site_or_404(site_id: int) -> Site:
@@ -605,10 +608,6 @@ def site_create(request: AuthenticatedRequest, payload: SiteCreateIn) -> SiteDet
     _ensure_role(
         request.auth,
         RoleCode.SYSTEM_ADMIN,
-        RoleCode.GENERAL_SUPERVISOR,
-        RoleCode.ASSISTANT_GENERAL_SUPERVISOR,
-        RoleCode.ZONE_SUPERVISOR,
-        RoleCode.SITE_SUPERVISOR,
     )
     draft = SiteDraft(
         name=payload.name,
@@ -722,6 +721,7 @@ def _zone_out(zone: Zone) -> ZoneOut:
         name=zone.name,
         code=zone.code,
         description=zone.description,
+        boundary=zone.boundary or {},
         is_active=zone.is_active,
         site_count=zone.sites.filter(is_active=True).count(),
         created_at=zone.created_at,
@@ -752,6 +752,49 @@ def zone_detail(request: AuthenticatedRequest, zone_id: int) -> ZoneOut:
     if zone is None:
         raise Http404("Zone not found.")
     return _zone_out(zone)
+
+
+@router.post("/zones", response=ZoneOut, summary="Create a zone")
+def zone_create(request: AuthenticatedRequest, payload: ZoneCreateIn) -> ZoneOut:
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
+    zone = Zone(name=payload.name, code=payload.code.upper(), description=payload.description, boundary=payload.boundary or {}, created_by=request.auth, updated_by=request.auth)
+    zone.full_clean()
+    zone.save()
+    record_audit(action=AuditLog.Action.CREATE, actor=request.auth, entity=zone, summary=f"Created zone {zone.name}", after_data=model_data(zone))
+    return _zone_out(zone)
+
+
+@router.patch("/zones/{zone_id}", response=ZoneOut, summary="Update zone configuration")
+def zone_update(request: AuthenticatedRequest, zone_id: int, payload: ZoneUpdateIn) -> ZoneOut:
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
+    zone = Zone.objects.filter(pk=zone_id).first()
+    if zone is None:
+        raise Http404("Zone not found.")
+    before = model_data(zone)
+    for field in ("name", "description", "boundary", "is_active"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(zone, field, value)
+    if payload.code is not None:
+        zone.code = payload.code.upper()
+    zone.updated_by = request.auth
+    zone.full_clean()
+    zone.save()
+    record_audit(action=AuditLog.Action.UPDATE, actor=request.auth, entity=zone, summary=f"Updated zone {zone.name}", before_data=before, after_data=model_data(zone))
+    return _zone_out(zone)
+
+
+@router.delete("/zones/{zone_id}", response=MessageOut, summary="Deactivate a zone without deleting history")
+def zone_deactivate(request: AuthenticatedRequest, zone_id: int) -> MessageOut:
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
+    zone = Zone.objects.filter(pk=zone_id).first()
+    if zone is None:
+        raise Http404("Zone not found.")
+    zone.is_active = False
+    zone.updated_by = request.auth
+    zone.save(update_fields=["is_active", "updated_by", "updated_at"])
+    record_audit(action=AuditLog.Action.STATUS_CHANGE, actor=request.auth, entity=zone, summary=f"Deactivated zone {zone.name}", after_data=model_data(zone))
+    return MessageOut(detail="Zone deactivated; historical site assignments are preserved.")
 
 
 @router.get(

@@ -91,3 +91,17 @@
 - [x] Build dynamic role-specific side navigation and distinct dashboard compositions so each role sees only relevant responsibilities, metrics, alerts, and next actions.
 - [x] Add role-isolation, import-validation, trainee-transition, assignment, shift, inventory, navigation, dashboard, and audit regression tests.
 - [x] Document the role operating model, deployment migration, administrator setup sequence, Excel template usage, and release validation before commit and push.
+
+## Reporting, Stock, Administration, Pagination, and GIS Upgrade
+
+- [x] Replace report JSON preview with a professional White Bird PDF preview/download that includes reporter identity, role, site/zone scope, report type, reporting date/window, generation timestamp, review state, signatures/handover, KPIs, attendance, cleanliness, inspections, issues, stock, corrective actions, and audit metadata.
+- [x] Ensure every site has a distinct configured store and that Store Manager can manage per-store item types, units, reorder thresholds, and quantities without mixing site inventory.
+- [x] Make site stock collection interactive: supervisors select configured items for their assigned site, enter quantity remaining, requested quantity, urgency, and reason, with low-stock guidance and audited request state transitions.
+- [x] Move the White Bird AI Optimization Engine below the dashboard analytics/cards so users see live analytics before AI insights and recommendations.
+- [x] Fix the administrator user-management 404 by exposing the correct protected `/users` endpoint and preserving disable/revoke-only data-protection rules; user deletion must not be available.
+- [x] Add compact, reusable pagination with five-row support and clear page controls for long operational tables and risk lists.
+- [x] Provide ready-made daily cleanliness templates covering core Tanzanian site areas and ensure new sites receive usable checklist items without the empty-template dead end.
+- [x] Implement protected System Administrator site CRUD, zone CRUD, complete site-zone assignment management, and clear definitions without exposing daily site-operation write actions.
+- [x] Persist functional zone boundaries and site coordinates, provide a GIS workspace with Mapbox boundary drawing/editing and site markers, and keep boundary/site changes audited and administrator-controlled.
+- [x] Add regression coverage for PDF rendering/content, store isolation, low-stock requests, AI widget order, user disable-only behavior, pagination, cleanliness template readiness, site/zone CRUD, site-zone assignment, and GIS configuration.
+- [x] Update documentation, environment templates, migration instructions, run the full quality suite, commit, and push the release.

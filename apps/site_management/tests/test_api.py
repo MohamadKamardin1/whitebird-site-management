@@ -55,7 +55,7 @@ def test_site_list_filters(admin_client, site, site_status, site_type):
 def test_site_create_requires_privileged_role(staff_client, manager_client, admin_client):
     payload = {"name": "New Site"}
     assert _post(staff_client, "/api/site-management/v1/sites", payload).status_code == 403
-    assert _post(manager_client, "/api/site-management/v1/sites", payload).status_code == 200
+    assert _post(manager_client, "/api/site-management/v1/sites", payload).status_code == 403
     assert _post(admin_client, "/api/site-management/v1/sites", payload).status_code == 200
 
 

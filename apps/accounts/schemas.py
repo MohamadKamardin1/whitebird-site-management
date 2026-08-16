@@ -31,6 +31,7 @@ class StaffMemberOut(Schema):
     full_name: str
     role: RoleCode
     assignment_count: int
+    is_active: bool
 
 
 class StaffCreateIn(Schema):

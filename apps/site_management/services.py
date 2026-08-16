@@ -133,6 +133,13 @@ def create_site(*, draft: SiteDraft, actor: User) -> Site:
             summary=f"Created site {site.name}",
             after_data=model_data(site),
         )
+        from .cleanliness_templates import provision_site_cleanliness_setup
+
+        provision_site_cleanliness_setup(site=site, actor=actor)
+        from .store_services import create_store
+
+        if not site.stores.filter(is_active=True).exists():
+            create_store(site=site, store_name=f"{site.name} Store", actor=actor)
     return site
 
 

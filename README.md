@@ -274,3 +274,20 @@ Site managers use the trainee management workspace to record daily attendance, w
 ### Navigation and dashboard behavior
 
 The side panel and dashboard action cards are role-specific. HR sees people, onboarding, assignments, shifts, and qualification work; Store Manager sees store control and supply reporting; System Administrator sees platform administration rather than daily site-management menus; site managers see execution work; and leadership sees their permitted reporting and exception scope. These are usability controls only: every backend endpoint continues to enforce the user’s role and data scope.
+
+
+## Reporting, Store, Administration, and GIS Controls
+
+The report workspace now presents a structured White Bird report preview instead of raw JSON. The preview includes reporter identity and role, site or zone scope, report type, reporting date or Monday–Friday window, generation timestamp, review status, operational KPIs, attendance, cleanliness, inspections, issues, stock, corrective actions, and audit context. The browser print/save action produces a PDF-ready document while the server remains authoritative for report snapshots and review state.
+
+Every site receives an isolated default store when created, and an idempotent migration provisions one for existing sites that do not have one. Store Managers configure item catalogs, units, opening quantities, and reorder thresholds per store. Site supervisors select items from their assigned site store, update counts, and raise audited requests with quantity and reason when an item is low. Inventory does not cross site boundaries through the normal scoped APIs.
+
+The administrator workspace includes protected site and zone management. Sites can be created, edited, assigned to zones, mapped with coordinates, and soft-deactivated. Zones can be created, updated, assigned sites, deactivated without deleting history, and given GeoJSON boundary geometry. User management provides a disable-only action; account deletion is intentionally unavailable to protect attendance, HR, stock, report, and audit history.
+
+The GIS workspace uses the configured `VITE_MAPBOX_ACCESS_TOKEN` to show site markers and draw or edit administrator-controlled zone polygons. The token must be supplied to the frontend build environment and must not be committed to source control. Zone boundary changes are persisted through the authenticated API and recorded in the audit trail.
+
+New sites are provisioned with standard daily cleanliness survey areas for toilet facilities, garden and grounds, reception and entrance, and shared/public areas. Each area receives required checks for schedule completion, high-touch surfaces, waste removal, consumables, and exception/corrective-action notes. The seed migration is idempotent and does not replace existing configured templates.
+
+Long lists use compact five-row pagination with page-number controls, Previous/Next controls, and visible record counts. This applies to resource workspaces and is intended to keep risk and configuration review usable on smaller screens.
+
+Before deployment, apply migrations through the normal Django migration process, including `0018_seed_default_cleanliness_templates`, `0019_zone_boundary`, and `0020_seed_site_stores`. Set `VITE_MAPBOX_ACCESS_TOKEN` in the frontend build environment and keep the API-side disable-only user endpoint mounted through the accounts router.
