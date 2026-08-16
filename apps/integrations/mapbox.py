@@ -28,11 +28,17 @@ CACHE_PREFIX = "wbz:geo"
 
 
 def _api_key() -> str:
-    return (
-        settings.MAPBOX_API_KEY
-        or settings.MAPBOX_PUBLIC_TOKEN
-        or str(getattr(constance_config, "MAPBOX_PUBLIC_TOKEN", "") or "")
-    )
+    # Environment sources first; constance (DB) is only consulted when no env
+    # token is set, so an env key never triggers a database read.
+    for source in (
+        settings.MAPBOX_API_KEY,
+        settings.MAPBOX_PUBLIC_TOKEN,
+        settings.MAPBOX_ACCESS_TOKEN,
+        settings.VITE_MAPBOX_ACCESS_TOKEN,
+    ):
+        if source:
+            return str(source)
+    return str(getattr(constance_config, "MAPBOX_PUBLIC_TOKEN", "") or "")
 
 
 def enabled() -> bool:

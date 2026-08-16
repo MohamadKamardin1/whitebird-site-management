@@ -223,7 +223,10 @@ DEEPSEEK_MAX_RETRIES = env.int("DEEPSEEK_MAX_RETRIES", default=2)
 MAPBOX_ENABLED = env.bool("MAPBOX_ENABLED", default=False)
 MAPBOX_API_KEY = env.str("MAPBOX_API_KEY", default="")
 # Public Mapbox token used by the frontend GIS workspace and the geo engine.
+# Accepted under any of the common names so the operator's .env is honoured.
 MAPBOX_PUBLIC_TOKEN = env.str("MAPBOX_PUBLIC_TOKEN", default="")
+MAPBOX_ACCESS_TOKEN = env.str("MAPBOX_ACCESS_TOKEN", default="")
+VITE_MAPBOX_ACCESS_TOKEN = env.str("VITE_MAPBOX_ACCESS_TOKEN", default="")
 MAPBOX_GEOCODING_URL = env.str("MAPBOX_GEOCODING_URL", default="https://api.mapbox.com/geocoding/v5/mapbox.places")
 MAPBOX_TIMEOUT_SECONDS = env.int("MAPBOX_TIMEOUT_SECONDS", default=10)
 MAPBOX_MAX_RETRIES = env.int("MAPBOX_MAX_RETRIES", default=2)

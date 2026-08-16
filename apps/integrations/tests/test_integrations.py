@@ -26,6 +26,25 @@ def _clear_cache() -> Any:
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_integration_keys():
+    """Neutralise any real keys from the local .env so tests are hermetic.
+
+    Per-test ``@override_settings`` values still win for tests that need a
+    specific key; unlisted sources stay empty.
+    """
+    from django.test import override_settings as _ovr
+
+    with _ovr(
+        DEEPSEEK_API_KEY="",
+        MAPBOX_API_KEY="",
+        MAPBOX_PUBLIC_TOKEN="",
+        MAPBOX_ACCESS_TOKEN="",
+        VITE_MAPBOX_ACCESS_TOKEN="",
+    ):
+        yield
+
+
 def _authed(user: Any) -> Client:
     return Client(HTTP_AUTHORIZATION=f"Bearer {issue_api_token(user=user, name='test').key}")
 
@@ -179,7 +198,7 @@ def test_summarize_site_report(monkeypatch, site) -> None:
     assert summarize_site_report(report) == "Bullet summary"
 
 
-@override_settings(DEEPSEEK_ENABLED=False)
+@override_settings(DEEPSEEK_ENABLED=False, DEEPSEEK_API_KEY="")
 def test_summarize_site_report_disabled(monkeypatch, site) -> None:
     from apps.site_management.reporting_services import generate_site_report
 
@@ -216,7 +235,7 @@ def test_geocode_site_no_coordinates_raises(monkeypatch, site) -> None:
 # --------------------------------------------------------------------------- #
 
 
-@override_settings(DEEPSEEK_ENABLED=False)
+@override_settings(DEEPSEEK_ENABLED=False, DEEPSEEK_API_KEY="")
 def test_api_ai_summarize_disabled_503(admin_user) -> None:
     response = _authed(admin_user).post(
         "/api/site-management/v1/ai/summarize",
@@ -407,4 +426,24 @@ def test_integration_settings_endpoint_reads_env_token(admin_user) -> None:
 def test_integration_settings_prefers_public_token(admin_user) -> None:
     from apps.site_management.api import _mapbox_token
 
+    assert _mapbox_token() == "pk.pub"
+
+
+@override_settings(
+    MAPBOX_API_KEY="", MAPBOX_PUBLIC_TOKEN="", MAPBOX_ACCESS_TOKEN="", VITE_MAPBOX_ACCESS_TOKEN="pk.vite"
+)
+@pytest.mark.django_db
+def test_mapbox_token_resolves_from_vite_env_var(admin_user) -> None:
+    from apps.site_management.api import _mapbox_token
+
+    assert _mapbox_token() == "pk.vite"
+    assert mapbox.enabled() is True
+
+
+@override_settings(MAPBOX_API_KEY="pk.priority", MAPBOX_PUBLIC_TOKEN="pk.pub", VITE_MAPBOX_ACCESS_TOKEN="pk.vite")
+@pytest.mark.django_db
+def test_mapbox_token_precedence(admin_user) -> None:
+    from apps.site_management.api import _mapbox_token
+
+    # constance/DB is empty in tests, so env order: PUBLIC_TOKEN > API_KEY > VITE.
     assert _mapbox_token() == "pk.pub"

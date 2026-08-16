@@ -4455,7 +4455,12 @@ def _mapbox_token() -> str:
     estate map and the ``/geo/*`` engine in sync no matter which variable the
     operator configured.
     """
-    for source in ("MAPBOX_PUBLIC_TOKEN", "MAPBOX_API_KEY", "MAPBOX_ACCESS_TOKEN"):
+    for source in (
+        "MAPBOX_PUBLIC_TOKEN",
+        "MAPBOX_API_KEY",
+        "MAPBOX_ACCESS_TOKEN",
+        "VITE_MAPBOX_ACCESS_TOKEN",
+    ):
         value = _integration_secret_value(source)
         if value:
             return value
