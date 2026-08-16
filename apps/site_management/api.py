@@ -13,7 +13,7 @@ from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
-from django.http import Http404, HttpResponse, StreamingHttpResponse
+from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from ninja import File, Form, Query, Router, UploadedFile
 
 from apps.accounts.models import RoleCode, User
@@ -4467,24 +4467,34 @@ def _mapbox_token() -> str:
     return ""
 
 
+def _integration_settings_payload() -> dict[str, Any]:
+    deepseek_key = _integration_secret_value("DEEPSEEK_API_KEY")
+    return {
+        "deepseek_configured": bool(deepseek_key),
+        "deepseek_key_suffix": deepseek_key[-4:] if deepseek_key else "",
+        "mapbox_public_token": _mapbox_token(),
+    }
+
+
+def _integration_response(payload: dict[str, Any]) -> JsonResponse:
+    """Return settings JSON with cache disabled — this payload carries secrets."""
+    response = JsonResponse(payload)
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    return response
+
+
 @router.get("/integrations/settings", response=IntegrationSettingsOut, summary="Read integration settings")
-def integration_settings_read(request: AuthenticatedRequest) -> IntegrationSettingsOut:
+def integration_settings_read(request: AuthenticatedRequest) -> JsonResponse:
     if not request.auth.is_management_role:
         raise PermissionDenied("Management role required.")
-    deepseek_key = _integration_secret_value("DEEPSEEK_API_KEY")
-    mapbox_token = _mapbox_token()
-    return IntegrationSettingsOut(
-        deepseek_configured=bool(deepseek_key),
-        deepseek_key_suffix=deepseek_key[-4:] if deepseek_key else "",
-        mapbox_public_token=mapbox_token,
-    )
+    return _integration_response(_integration_settings_payload())
 
 
 @router.patch("/integrations/settings", response=IntegrationSettingsOut, summary="Update integration settings")
 def integration_settings_update(
     request: AuthenticatedRequest,
     payload: IntegrationSettingsIn,
-) -> IntegrationSettingsOut:
+) -> JsonResponse:
     if not request.auth.is_system_admin:
         raise PermissionDenied("System admin role required.")
     before_deepseek = _integration_secret_value("DEEPSEEK_API_KEY")
@@ -4511,7 +4521,7 @@ def integration_settings_update(
         after_data={"deepseek_configured": bool(after_deepseek), "mapbox_configured": bool(after_mapbox)},
         summary="Updated administrator integration settings without recording secret values.",
     )
-    return integration_settings_read(request)
+    return _integration_response(_integration_settings_payload())
 
 
 @router.get("/exports/attendance.csv", summary="Stream attendance CSV export", tags=["Exports"])

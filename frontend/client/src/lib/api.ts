@@ -67,7 +67,7 @@ class WhiteBirdApiClient {
     if (body instanceof FormData || body instanceof Blob || typeof body === "string") requestBody = body;
     else if (body !== undefined) { headers.set("Content-Type", "application/json"); requestBody = JSON.stringify(body); }
     let response: Response;
-    try { response = await fetch(this.endpoint(path), { ...rest, headers, body: requestBody, credentials: "include" }); }
+    try { response = await fetch(this.endpoint(path), { ...rest, headers, body: requestBody, credentials: "include", cache: "no-store" }); }
     catch { throw new ApiError({ status: 0, code: "network_error", message: "The operations service could not be reached. Check the API origin and your connection." }); }
     const traceId = response.headers.get("X-Request-ID") || undefined;
     const contentType = response.headers.get("content-type") || "";
