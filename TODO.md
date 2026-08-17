@@ -146,3 +146,11 @@
 - [x] Add a Kiswahili-first localization foundation with an English switcher in the header and persistent language preference.
 - [x] Translate the core dashboard navigation, site-supervisor cleanliness workflow, action labels, validation messages, and user-facing operational states into simple Tanzanian Kiswahili.
 - [x] Run full backend/frontend tests, responsive checks, and localization validation, then document, commit, and push the release.
+
+## Final Cleanliness Row and Complete Kiswahili Coverage
+
+- [x] Pull latest `sultan` code and trace the exact backend question labels and final-row save/submission failure.
+- [x] Translate every backend-provided checklist question and help text shown in the site-supervisor worksheet into simple Kiswahili.
+- [x] Fix final-row result persistence, local state reconciliation, answered-count calculation, and area submission validation.
+- [x] Add regression tests covering every row, especially the final row, and successful full-area submission.
+- [x] Run full backend/frontend validation, document, commit, and push the fix.

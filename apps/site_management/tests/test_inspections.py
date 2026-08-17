@@ -728,3 +728,37 @@ def test_result_create_is_idempotent_and_repeated_save_uses_real_server_id(admin
     assert updated.status_code == 200, updated.content
     assert updated.json()["id"] == server_result_id
     assert updated.json()["notes"] == "final save"
+
+
+@pytest.mark.django_db
+def test_full_required_checklist_including_final_item_can_be_submitted(admin_client, admin_user, site):
+    template = _template(admin_user, site=site)
+    area = SiteAreaFactory(site=site)
+    inspection = start_inspection(site=site, area=area, template=template, inspected_by=admin_user, actor=admin_user)
+    items = list(template.items.order_by("sequence", "pk"))
+    assert items
+
+    for item in items:
+        payload = {"template_item_id": item.pk, "passed": True, "notes": ""}
+        if item.item_type in {"score", "rating"}:
+            payload["value_number"] = 100
+        elif item.item_type in {"yes_no", "pass_fail"}:
+            payload["value_boolean"] = True
+        else:
+            payload["value_text"] = "completed"
+        response = admin_client.post(
+            f"/api/site-management/v1/inspections/{inspection.pk}/results",
+            data=payload,
+            content_type="application/json",
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["template_item_id"] == item.pk
+
+    detail = admin_client.get(f"/api/site-management/v1/inspections/{inspection.pk}")
+    assert detail.status_code == 200, detail.content
+    returned_item_ids = {result["template_item_id"] for result in detail.json()["results"]}
+    assert returned_item_ids == {item.pk for item in items}
+
+    submitted = admin_client.post(f"/api/site-management/v1/inspections/{inspection.pk}/submit", data={}, content_type="application/json")
+    assert submitted.status_code == 200, submitted.content
+    assert submitted.json()["status"] == "submitted"

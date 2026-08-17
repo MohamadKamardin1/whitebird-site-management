@@ -172,6 +172,7 @@ const translations: Record<string, string> = {
   "Rubbish bin has been washed and cleaned": "Pipa la taka limeoshwa na kusafishwa",
   "Desk has been arranged and cleaned": "Meza imepangwa na kusafishwa",
   "Floors, doors, and windows have been cleaned": "Sakafu, milango na madirisha vimesafishwa",
+  "Floors and doors have been cleaned": "Sakafu na milango vimesafishwa",
   "Tables have been arranged and curtains straightened": "Meza zimepangwa na mapazia yamenyooshwa",
   "Ceiling has been wiped and cobwebs removed": "Dari limefutwa na utando wa buibui umeondolewa",
   "Furniture has been arranged": "Samani zimepangwa",
@@ -210,6 +211,7 @@ const translations: Record<string, string> = {
   "Worker follows instructions and performs assigned work": "Mfanyakazi anafuata maelekezo na kufanya kazi aliyopewa",
 };
 
+const normalizedTranslations = Object.fromEntries(Object.entries(translations).map(([key, value]) => [key.trim().replace(/\s+/g, " "), value]));
 const STORAGE_KEY = "whitebird-language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -221,7 +223,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     setLanguageState(next);
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next);
   };
-  const value = useMemo<LanguageContextValue>(() => ({ language, setLanguage, toggleLanguage: () => setLanguage(language === "sw" ? "en" : "sw"), t: (english) => language === "sw" ? (translations[english] || english) : english }), [language]);
+  const value = useMemo<LanguageContextValue>(() => ({ language, setLanguage, toggleLanguage: () => setLanguage(language === "sw" ? "en" : "sw"), t: (english) => language === "sw" ? (translations[english] || normalizedTranslations[english.trim().replace(/\s+/g, " ")] || english) : english }), [language]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 

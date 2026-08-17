@@ -113,10 +113,27 @@ export default function CleanlinessPage() {
     updateDraft(id, { saving: true });
     try {
       const payload = { template_item_id: item.id, responsible_cleaner_id: draft.cleanerId ? Number(draft.cleanerId) : null, value_boolean: draft.passed === "yes", passed: draft.passed === "yes", notes: draft.notes };
-      const savedResult = inspectionResult
-        ? await api.put<Result>(`/inspections/${inspection.id}/results/${inspectionResult.id}`, payload)
-        : await api.post<Result>(`/inspections/${inspection.id}/results`, payload);
-      setInspections((current) => current.map((row) => row.id === inspection.id ? { ...row, results: inspectionResult ? row.results.map((result) => result.id === inspectionResult.id ? savedResult : result) : [...row.results, savedResult] } : row));
+      let savedResult: Result;
+      try {
+        savedResult = inspectionResult
+          ? await api.put<Result>(`/inspections/${inspection.id}/results/${inspectionResult.id}`, payload)
+          : await api.post<Result>(`/inspections/${inspection.id}/results`, payload);
+      } catch (caught) {
+        const readable = readableApiError(caught);
+        if (inspectionResult && readable.message.includes("not found")) {
+          savedResult = await api.post<Result>(`/inspections/${inspection.id}/results`, payload);
+        } else {
+          throw caught;
+        }
+      }
+      setInspections((current) => current.map((row) => {
+        if (row.id !== inspection.id) return row;
+        const existingIndex = row.results.findIndex((result) => result.template_item_id === savedResult.template_item_id);
+        const results = existingIndex >= 0
+          ? row.results.map((result, index) => index === existingIndex ? savedResult : result)
+          : [...row.results, savedResult];
+        return { ...row, results };
+      }));
       updateDraft(id, { saving: false, saved: true, error: undefined });
     } catch (caught) {
       const readable = readableApiError(caught);
@@ -131,9 +148,10 @@ export default function CleanlinessPage() {
   }
 
   async function submitInspection(inspection: Inspection, template: Template) {
-    const unanswered = template.items.filter((item) => !inspection.results.some((result) => result.template_item_id === item.id && result.passed !== null && result.passed !== undefined));
-    if (unanswered.length) { setMessage(`${template.area_name || "This area"} still has ${unanswered.length} unanswered question${unanswered.length === 1 ? "" : "s"}. Save every row before submitting.`); return; }
     try {
+      const freshInspection = await api.get<Inspection>(`/inspections/${inspection.id}`);
+      const unanswered = template.items.filter((item) => !freshInspection.results.some((result) => result.template_item_id === item.id && result.passed !== null && result.passed !== undefined));
+      if (unanswered.length) { setMessage(`${t(template.area_name || "This area")} ${t("still has unanswered questions. Save every row before submitting.")}`); return; }
       await api.post(`/inspections/${inspection.id}/submit`, {});
       setMessage(`${t(template.area_name || "Area")} ${t("declaration submitted for review.")}`);
       await loadSheet();
