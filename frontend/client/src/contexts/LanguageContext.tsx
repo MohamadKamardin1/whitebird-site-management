@@ -173,21 +173,21 @@ const translations: Record<string, string> = {
   "Live data appears when its dashboard endpoint is connected.": "Taarifa halisi zitaonekana huduma ya dashibodi ikiunganishwa.",
   "Charts respect both role permissions and the visible site scope supplied by White Bird.": "Michoro inaheshimu nafasi yako na maeneo yanayoonekana kwenye White Bird.",
   "Source data only · no fabricated results": "Taarifa halisi tu · hakuna matokeo ya kutengenezwa",
-  "Lobby": "Ukumbi",
-  "Rooms": "Vyumba",
-  "Pool Deck": "Eneo la bwawa",
-  "Toilet facilities": "Huduma za vyoo",
-  "Garden and grounds": "Bustani na mazingira ya nje",
-  "Reception and entrance": "Mapokezi na mlango wa kuingia",
-  "Shared and public areas": "Maeneo ya pamoja na ya umma",
-  "Daily Cleanliness Survey": "Uchunguzi wa Usafi wa Kila Siku",
-  "Daily Cleanliness Survey · Rooms": "Uchunguzi wa Usafi wa Kila Siku · Vyumba",
-  "Daily Cleanliness Survey · Pool Deck": "Uchunguzi wa Usafi wa Kila Siku · Eneo la bwawa",
-  "Daily Cleanliness Survey · Toilet facilities": "Uchunguzi wa Usafi wa Kila Siku · Huduma za vyoo",
-  "Daily Cleanliness Survey · Garden and grounds": "Uchunguzi wa Usafi wa Kila Siku · Bustani na mazingira ya nje",
-  "Daily Cleanliness Survey · Reception and entrance": "Uchunguzi wa Usafi wa Kila Siku · Mapokezi na mlango wa kuingia",
-  "Daily Cleanliness Survey · Shared and public areas": "Uchunguzi wa Usafi wa Kila Siku · Maeneo ya pamoja na ya umma",
-  "Daily Cleanliness Survey · Lobby": "Uchunguzi wa Usafi wa Kila Siku · Ukumbi",
+  "Lobby": "ENEO LA NDANI",
+  "Rooms": "ENEO LA NDANI",
+  "Pool Deck": "ENEO LA NJE",
+  "Toilet facilities": "VYOONI",
+  "Garden and grounds": "BUSTANI",
+  "Reception and entrance": "ENEO LA NDANI",
+  "Shared and public areas": "ENEO LA NJE",
+  "Daily Cleanliness Survey": "TAARIFA YA USAFI",
+  "Daily Cleanliness Survey · Rooms": "UHAKIKI WA USAFI · ENEO LA NDANI",
+  "Daily Cleanliness Survey · Pool Deck": "UHAKIKI WA USAFI · ENEO LA NJE",
+  "Daily Cleanliness Survey · Toilet facilities": "UHAKIKI WA USAFI · VYOONI",
+  "Daily Cleanliness Survey · Garden and grounds": "UHAKIKI WA USAFI · BUSTANI",
+  "Daily Cleanliness Survey · Reception and entrance": "UHAKIKI WA USAFI · ENEO LA NDANI",
+  "Daily Cleanliness Survey · Shared and public areas": "UHAKIKI WA USAFI · ENEO LA NJE",
+  "Daily Cleanliness Survey · Lobby": "UHAKIKI WA USAFI · ENEO LA NDANI",
   "Ready-made daily cleanliness survey for operational site review.": "Uchunguzi wa usafi wa kila siku uliotayarishwa kwa ukaguzi wa eneo la kazi.",
   "Area cleaned to the agreed schedule": "Eneo limesafishwa kwa ratiba iliyokubaliwa",
   "Was the area completed within the required service window?": "Je, eneo limekamilishwa ndani ya muda uliopangwa wa huduma?",
@@ -274,7 +274,15 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     setLanguageState(next);
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next);
   };
-  const value = useMemo<LanguageContextValue>(() => ({ language, setLanguage, toggleLanguage: () => setLanguage(language === "sw" ? "en" : "sw"), t: (english) => language === "sw" ? (translations[english] || normalizedTranslations[english.trim().replace(/\s+/g, " ")] || english) : english }), [language]);
+  const translate = (english: string) => {
+    if (language !== "sw") return english;
+    const normalized = english.trim().replace(/\s+/g, " ");
+    const direct = translations[english] || normalizedTranslations[normalized];
+    if (direct) return direct;
+    if (normalized.startsWith("Daily Cleanliness Survey · ")) return "TAARIFA YA USAFI · ENEO MAALUM";
+    return english;
+  };
+  const value = useMemo<LanguageContextValue>(() => ({ language, setLanguage, toggleLanguage: () => setLanguage(language === "sw" ? "en" : "sw"), t: translate }), [language]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 

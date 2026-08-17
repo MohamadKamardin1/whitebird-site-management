@@ -185,3 +185,10 @@
 - [x] Replace current worksheet Kiswahili paraphrases with the document’s exact wording for all mapped daily cleanliness areas and generic controls.
 - [x] Preserve the English switch and verify the document-aligned Kiswahili worksheet at phone and desktop widths.
 - [x] Run frontend checks, document, commit, and push the PDF-language alignment update.
+
+## Legacy Generic Area Title Correction
+
+- [x] Identify every legacy generic template title currently shown as Ukumbi, Eneo la bwawa, Vyumba, or another non-PDF area.
+- [x] Map relevant legacy generic areas to the PDF-approved headings ENEO LA NDANI, ENEO LA NJE, VYOONI, OFISINI, BUSTANI, STORE, or MAENDELEO YA WAFANYAKAZI.
+- [x] Present any genuinely site-specific legacy survey as a clearly labelled site survey without falsely presenting it as a report-PDF heading.
+- [x] Validate Kiswahili and English titles, document, commit, and push the correction.
