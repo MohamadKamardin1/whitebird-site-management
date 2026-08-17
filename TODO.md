@@ -229,3 +229,7 @@
 - [x] Apply the language switch accurately to all selected-day Daily Cleanliness labels and real area/template names.
 - [x] Reduce calendar and Daily Cleanliness selected-day section sizing with responsive compact spacing while preserving readable controls and table access.
 - [x] Validate, commit, and push the dashboard refinement.
+
+## Desktop Calendar Footprint Refinement
+
+- [x] Reduce the operational calendar’s desktop-only width, grid cell scale, and selected-day density without changing the approved mobile experience.
