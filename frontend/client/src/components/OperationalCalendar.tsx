@@ -6,11 +6,13 @@ import { api, asPaginated } from "@/lib/api";
 import { calendarDate, tanzaniaDate } from "@/lib/dates";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { preferredCleanlinessTemplates } from "@/lib/cleanlinessTemplates";
+import { aggregateDailyAttendance, type AttendanceSummaryRecord } from "@/lib/attendanceSummary";
 
 type Inspection = { id: number; template_id: number; status?: string; results?: Array<{ id: number }>; };
 type CleanlinessTemplate = { id: number; template_name: string; area_name?: string; description?: string; is_active?: boolean; };
 type DailyReport = { id: number; site_id: number; site_name?: string; status?: string; attendance_summary?: Record<string, unknown>; store_summary?: Record<string, unknown>; trainee_summary?: Record<string, unknown>; issues_summary?: Record<string, unknown>; challenges?: string[]; };
 type Issue = { id: number; title?: string; status?: string; priority?: string; created_at?: string; site_name?: string; };
+type Site = { id: number; };
 
 const monthTitle = (value: Date, language: string) => value.toLocaleDateString(language === "sw" ? "sw-TZ" : "en-GB", { month: "long", year: "numeric" });
 const count = (summary: Record<string, unknown> | undefined, key: string) => Number(summary?.[key] || 0);
@@ -25,6 +27,8 @@ export function OperationalCalendar() {
   const [templates, setTemplates] = useState<CleanlinessTemplate[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceSummaryRecord[]>([]);
+  const [hasLiveAttendance, setHasLiveAttendance] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -35,13 +39,20 @@ export function OperationalCalendar() {
       api.get("/inspection-templates?page_size=100&frequency=daily&is_active=true"),
       api.get(`/reports/site?page_size=100&report_date=${selectedDate}`),
       api.get("/issues?page_size=100"),
-    ]).then(([inspectionResult, templateResult, reportResult, issueResult]) => {
+      api.get("/sites?page_size=100"),
+    ]).then(async ([inspectionResult, templateResult, reportResult, issueResult, siteResult]) => {
+      if (!active) return;
+      const sites = siteResult.status === "fulfilled" ? asPaginated(siteResult.value).results as Site[] : [];
+      const dailySheets = await Promise.allSettled(sites.map((site) => api.get<AttendanceSummaryRecord[]>(`/attendance/daily?site_id=${site.id}&date=${selectedDate}`)));
       if (!active) return;
       setInspections(inspectionResult.status === "fulfilled" ? asPaginated(inspectionResult.value).results as Inspection[] : []);
       setTemplates(templateResult.status === "fulfilled" ? asPaginated(templateResult.value).results as CleanlinessTemplate[] : []);
       setReports(reportResult.status === "fulfilled" ? asPaginated(reportResult.value).results as DailyReport[] : []);
       const dailyIssues = issueResult.status === "fulfilled" ? asPaginated(issueResult.value).results as Issue[] : [];
       setIssues(dailyIssues.filter((issue) => String(issue.created_at || "").slice(0, 10) === selectedDate));
+      const readableSheets = dailySheets.filter((result): result is PromiseFulfilledResult<AttendanceSummaryRecord[]> => result.status === "fulfilled");
+      setAttendance(readableSheets.flatMap((result) => result.value));
+      setHasLiveAttendance(sites.length > 0 && readableSheets.length === sites.length);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [selectedDate]);
@@ -50,8 +61,9 @@ export function OperationalCalendar() {
   const dailyTemplates = useMemo(() => preferredCleanlinessTemplates(templates), [templates]);
   const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const selectedDisplay = calendarDate(selectedDate).toLocaleDateString(language === "sw" ? "sw-TZ" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const totalAttendance = reports.reduce((total, report) => total + count(report.attendance_summary, "total"), 0);
-  const totalPresent = reports.reduce((total, report) => total + count(report.attendance_summary, "present") + count(report.attendance_summary, "late"), 0);
+  const liveAttendance = useMemo(() => aggregateDailyAttendance(attendance), [attendance]);
+  const totalAttendance = hasLiveAttendance ? liveAttendance.total : reports.reduce((total, report) => total + count(report.attendance_summary, "total"), 0);
+  const totalPresent = hasLiveAttendance ? liveAttendance.present : reports.reduce((total, report) => total + count(report.attendance_summary, "present") + count(report.attendance_summary, "late"), 0);
   const totalTrainees = reports.reduce((total, report) => total + count(report.trainee_summary, "active_today"), 0);
   const totalLowStock = reports.reduce((total, report) => total + count(report.store_summary, "low_stock_items"), 0);
   const areaLabel = (template: CleanlinessTemplate) => { const name = template.area_name || template.template_name.replace("Daily Cleanliness Survey ·", "").trim(); return language === "en" ? englishAreaName(name) : t(name); };

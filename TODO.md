@@ -245,3 +245,9 @@
 - [x] Redesign the desktop calendar block as a full-width dashboard component aligned with the surrounding KPI cards rather than a narrow centered column.
 - [x] Preserve the compact touch-friendly mobile calendar and responsive selected-day information layout.
 - [x] Validate the redesigned component at desktop and mobile breakpoints, commit, and push.
+
+## Calendar Live Attendance Correction
+
+- [x] Replace generated-report-only attendance figures in the selected-day calendar with a live aggregate from the authorized daily attendance sheets.
+- [x] Preserve report data as a fallback only when live daily sheets cannot be read, with no fabricated counts.
+- [x] Add regression coverage and validate the live selected-day attendance calculation before commit and push.
