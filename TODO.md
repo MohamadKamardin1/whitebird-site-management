@@ -178,3 +178,10 @@
 - [x] Replace the dashboard AI brief with a polished operational calendar that highlights the current day and opens a selected-day survey table.
 - [x] Add calm, accessible Airbnb-inspired motion and responsive states to the calendar and selected-day survey experience.
 - [x] Run backend/frontend tests, selected-day survey validation, responsive checks, and commit/push the upgrade.
+
+## Exact Kiswahili from Site Supervisor Report PDF
+
+- [x] Re-read every page of the uploaded Site Supervisor cleanliness report and transcribe its exact direct Kiswahili questions, labels, response terms, and sign-off wording.
+- [x] Replace current worksheet Kiswahili paraphrases with the document’s exact wording for all mapped daily cleanliness areas and generic controls.
+- [x] Preserve the English switch and verify the document-aligned Kiswahili worksheet at phone and desktop widths.
+- [x] Run frontend checks, document, commit, and push the PDF-language alignment update.
