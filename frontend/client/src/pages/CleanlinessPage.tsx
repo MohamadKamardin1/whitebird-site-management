@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ApiErrorPanel, AttentionNotice, EmptyPanel, LoadingPanel, StatusBadge, WorkflowNotice, WorkspaceHeader, formatDateValue, formatDisplayValue } from "@/components/WorkspacePrimitives";
 import { api, asPaginated, readableApiError } from "@/lib/api";
+import { preferredCleanlinessTemplates } from "@/lib/cleanlinessTemplates";
 
 interface Site { id: number; name?: string; site_name?: string; }
 interface Cleaner { id: number; full_name?: string; first_name?: string; last_name?: string; status?: string; }
@@ -61,7 +62,7 @@ export default function CleanlinessPage() {
   useEffect(() => { void loadSites(); }, [loadSites]);
   useEffect(() => { if (siteId) void loadSheet(); }, [loadSheet, siteId]);
 
-  const activeTemplates = templates.filter((template) => template.is_active !== false);
+  const activeTemplates = preferredCleanlinessTemplates(templates);
   const inspectionFor = (template: Template) => inspections.find((inspection) => inspection.template_id === template.id);
   const key = (inspectionId: number, itemId: number) => `${inspectionId}:${itemId}`;
   const complete = (item: TemplateItem, result?: Result) => item.item_type === "text" ? Boolean(result?.value_text?.trim()) : result?.passed !== null && result?.passed !== undefined;

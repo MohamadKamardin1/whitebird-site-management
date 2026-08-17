@@ -192,3 +192,11 @@
 - [x] Map relevant legacy generic areas to the PDF-approved headings ENEO LA NDANI, ENEO LA NJE, VYOONI, OFISINI, BUSTANI, STORE, or MAENDELEO YA WAFANYAKAZI.
 - [x] Present any genuinely site-specific legacy survey as a clearly labelled site survey without falsely presenting it as a report-PDF heading.
 - [x] Validate Kiswahili and English titles, document, commit, and push the correction.
+
+## Remove Duplicate Legacy Surveys from PDF Worksheet
+
+- [x] Detect and hide legacy generic daily templates from the site-supervisor worksheet whenever official PDF-derived templates are configured for the site.
+- [x] Preserve legacy template records and history for audit purposes without presenting duplicate generic survey sections to supervisors.
+- [x] Translate all remaining PDF template descriptions and guidance strings into the report’s direct Kiswahili so no English helper text remains in SW mode.
+- [x] Add regression coverage for PDF-template preference, duplicate suppression, and complete Kiswahili rendering.
+- [x] Run full backend/frontend validation, document, commit, and push the correction.
