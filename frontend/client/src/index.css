@@ -86,4 +86,4 @@
 @media (prefers-reduced-motion: reduce) { .marketing-button, .marketing-dark-card, .marketing-capability { transition: none; } .marketing-hero-stage, .marketing-3d-panel, .marketing-map-slab, .marketing-role-card, .marketing-role-stamp { transform: none !important; } .marketing-hero-stage::before, .marketing-hero-glow { display: none; } }
 
 /* The month grid stays comfortably compact on desktop; mobile keeps the touch-friendly square cells. */
-@media (min-width: 1024px) { .dashboard-calendar button.aspect-square { aspect-ratio: auto; min-height: 0; height: 2.5rem; } }
+@media (min-width: 1024px) { .dashboard-calendar button.aspect-square { aspect-ratio: auto; min-height: 0; height: 2.75rem; } }

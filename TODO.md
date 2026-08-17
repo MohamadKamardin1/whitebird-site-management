@@ -239,3 +239,9 @@
 - [x] Replace the oversized desktop square month cells with a compact fixed-height calendar grid while preserving the approved mobile layout.
 - [x] Reduce desktop selected-day panel density and remove the excessive vertical footprint caused by the calendar section.
 - [x] Validate the corrected responsive layout, commit, and push.
+
+## Full-Width Responsive Calendar Redesign
+
+- [x] Redesign the desktop calendar block as a full-width dashboard component aligned with the surrounding KPI cards rather than a narrow centered column.
+- [x] Preserve the compact touch-friendly mobile calendar and responsive selected-day information layout.
+- [x] Validate the redesigned component at desktop and mobile breakpoints, commit, and push.
