@@ -1134,6 +1134,7 @@ class DailySiteReportOut(Schema):
     trainee_summary: dict[str, Any] = Field(default_factory=dict)
     issues_summary: dict[str, Any] = Field(default_factory=dict)
     general_comments: str = ""
+    challenges: list[str] = Field(default_factory=list)
     status: str
     snapshot: dict[str, Any] = Field(default_factory=dict)
     submitted_at: datetime | None = None
@@ -1143,6 +1144,10 @@ class DailySiteReportOut(Schema):
 
 class DailySiteReportUpdateIn(Schema):
     general_comments: str = ""
+
+
+class DailyReportChallengesIn(Schema):
+    challenges: list[str] = Field(default_factory=list, max_length=7)
 
 
 class ReportReturnIn(Schema):

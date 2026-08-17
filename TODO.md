@@ -200,3 +200,11 @@
 - [x] Translate all remaining PDF template descriptions and guidance strings into the report’s direct Kiswahili so no English helper text remains in SW mode.
 - [x] Add regression coverage for PDF-template preference, duplicate suppression, and complete Kiswahili rendering.
 - [x] Run full backend/frontend validation, document, commit, and push the correction.
+
+## PDF Official Heading and Daily Challenges Form
+
+- [x] Remove the redundant TAARIFA YA USAFI · ENEO MAALUM title from official PDF-derived Store and Staff sections, leaving one approved report heading only.
+- [x] Add the PDF’s MENGINEYO / CHANGAMOTO ZILIZOJITOKEZA form with seven expanding numbered entries to the daily site-supervisor workflow.
+- [x] Persist daily challenge entries with audit history and include them in the report data flow without overwriting prior daily evidence.
+- [x] Add role, persistence, heading, and responsive form regression tests.
+- [x] Run full validation, document, commit, and push the update.

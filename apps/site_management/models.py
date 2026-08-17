@@ -1933,6 +1933,7 @@ class DailySiteReport(UserStampedModel):
     trainee_summary = models.JSONField(default=dict, blank=True)
     issues_summary = models.JSONField(default=dict, blank=True)
     general_comments = models.TextField(blank=True, default="")
+    challenges = models.JSONField(default=list, blank=True)
     status = models.CharField(
         max_length=24, choices=SiteReportStatus.choices, default=SiteReportStatus.DRAFT, db_index=True
     )

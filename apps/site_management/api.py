@@ -248,6 +248,7 @@ from .schemas import (
     CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
+    DailyReportChallengesIn,
     DailySiteReportOut,
     DepartmentCreateIn,
     DepartmentOut,
@@ -3968,6 +3969,7 @@ def _site_report_out(r: DailySiteReport) -> DailySiteReportOut:
         trainee_summary=r.trainee_summary,
         issues_summary=r.issues_summary,
         general_comments=r.general_comments,
+        challenges=list(r.challenges or []),
         status=r.status,
         snapshot=r.snapshot,
         submitted_at=r.submitted_at,
@@ -4065,6 +4067,34 @@ def site_report_generate_endpoint(request: AuthenticatedRequest, site_id: int, r
     site = _load_site_or_404(site_id)
     _issues_manage(request.auth, site.pk)
     report = generate_site_report(site_id=site_id, day=report_date, user=request.auth)
+    return _site_report_out(report)
+
+
+@router.patch(
+    "/reports/site/{site_id}/{report_date}/challenges",
+    response=DailySiteReportOut,
+    summary="Save daily site report challenges",
+)
+def site_report_challenges_endpoint(
+    request: AuthenticatedRequest, site_id: int, report_date: date, payload: DailyReportChallengesIn
+) -> DailySiteReportOut:
+    """Persist the seven PDF challenge lines on an auditable draft report."""
+    site = _load_site_or_404(site_id)
+    _issues_manage(request.auth, site.pk)
+    challenges = [entry.strip() for entry in payload.challenges]
+    if len(challenges) > 7:
+        raise ValidationError("A daily worksheet accepts no more than seven challenge entries.")
+    report = generate_site_report(site_id=site_id, day=report_date, user=request.auth)
+    report.challenges = challenges
+    report.updated_by = request.auth
+    report.save(update_fields=["challenges", "updated_by", "updated_at"])
+    record_audit(
+        action=AuditLog.Action.UPDATE,
+        actor=request.auth,
+        entity=report,
+        summary=f"Saved daily report challenges for {report.report_date}",
+        after_data=model_data(report),
+    )
     return _site_report_out(report)
 
 

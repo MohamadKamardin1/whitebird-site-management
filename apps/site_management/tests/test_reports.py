@@ -11,7 +11,7 @@ from django.test import Client
 from apps.accounts.factories import UserFactory
 from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
-from apps.core.models import DomainEvent
+from apps.core.models import AuditLog, DomainEvent
 from apps.site_management.factories import (
     CleanerFactory,
     SiteAreaFactory,
@@ -376,6 +376,27 @@ def test_api_site_report_flow(site, admin_user, admin_client, zone_user, site_su
     assert status.status_code == 200
     missing = admin_client.get("/api/site-management/v1/reports/missing")
     assert missing.status_code == 200
+
+
+@pytest.mark.django_db(transaction=True)
+def test_api_daily_challenges_are_audited_and_snapshotted(site, site_supervisor_user) -> None:
+    SiteSupervisorAssignmentFactory(site=site, user=site_supervisor_user)
+    supervisor = _authed(site_supervisor_user)
+    day = date.today().isoformat()
+    challenges = ["Sabuni imeisha", "Sakafu ya ofisi inahitaji kusafishwa"]
+
+    saved = supervisor.patch(
+        f"/api/site-management/v1/reports/site/{site.pk}/{day}/challenges",
+        data={"challenges": challenges},
+        content_type="application/json",
+    )
+    assert saved.status_code == 200
+    assert saved.json()["challenges"] == challenges
+    assert AuditLog.objects.filter(summary__contains="Saved daily report challenges").exists()
+
+    submitted = supervisor.post(f"/api/site-management/v1/reports/site/{site.pk}/{day}/submit")
+    assert submitted.status_code == 200
+    assert submitted.json()["snapshot"]["challenges"] == challenges
 
 
 @pytest.mark.django_db

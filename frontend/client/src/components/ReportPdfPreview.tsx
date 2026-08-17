@@ -26,7 +26,8 @@ function SummaryCard({ label, summary, tone, fields }: { label: string; summary:
 }
 
 function DailyEvidence({ data }: { data: Value }) {
-  return <div className="grid gap-4 md:grid-cols-2">{summaryDefinitions.map((definition) => <SummaryCard key={definition.key} label={definition.label} summary={data[definition.key] || {}} tone={definition.tone} fields={definition.fields} />)}<section className="rounded-xl border border-[#E5DED3] bg-white p-4 md:col-span-2"><h4 className="font-semibold text-[#315156]">General comments</h4><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#596D67]">{String(data.general_comments || "No general comments recorded.")}</p></section></div>;
+  const challenges = Array.isArray(data.challenges) ? data.challenges.filter((entry) => String(entry).trim()) : [];
+  return <div className="grid gap-4 md:grid-cols-2">{summaryDefinitions.map((definition) => <SummaryCard key={definition.key} label={definition.label} summary={data[definition.key] || {}} tone={definition.tone} fields={definition.fields} />)}<section className="rounded-xl border border-[#E5DED3] bg-white p-4 md:col-span-2"><h4 className="font-semibold text-[#315156]">MENGINEYO / CHANGAMOTO ZILIZOJITOKEZA</h4>{challenges.length ? <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-[#596D67]">{challenges.map((entry, index) => <li key={`${index}-${entry}`}>{String(entry)}</li>)}</ol> : <p className="mt-2 text-sm leading-6 text-[#596D67]">Hakuna changamoto zilizorekodiwa.</p>}</section><section className="rounded-xl border border-[#E5DED3] bg-white p-4 md:col-span-2"><h4 className="font-semibold text-[#315156]">General comments</h4><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#596D67]">{String(data.general_comments || "No general comments recorded.")}</p></section></div>;
 }
 
 export default function ReportPdfPreview({ report, user, site, reportType, reportDate }: Props) {

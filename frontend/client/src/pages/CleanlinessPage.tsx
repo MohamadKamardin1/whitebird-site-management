@@ -17,6 +17,7 @@ interface Template { id: number; template_name: string; description?: string; ar
 interface Result { id: number; template_item_id: number; value_boolean?: boolean | null; value_text?: string; passed?: boolean | null; notes?: string; responsible_cleaner_id?: number | null; }
 interface Inspection { id: number; site_id: number; template_id: number; status: string; results: Result[]; }
 interface RowDraft { passed: "yes" | "no" | "pending"; notes: string; cleanerId: string; saving?: boolean; saved?: boolean; error?: string; }
+interface DailyReport { challenges?: string[]; }
 
 const dateToday = () => new Date().toISOString().slice(0, 10);
 const valueLabel = (value: { name?: string; site_name?: string; area_name?: string; full_name?: string; first_name?: string; last_name?: string }, fallback: string) => value.name || value.site_name || value.area_name || value.full_name || [value.first_name, value.last_name].filter(Boolean).join(" ") || fallback;
@@ -33,6 +34,8 @@ export default function CleanlinessPage() {
   const [loading, setLoading] = useState(true);
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [startingAll, setStartingAll] = useState(false);
+  const [challenges, setChallenges] = useState<string[]>(Array(7).fill(""));
+  const [savingChallenges, setSavingChallenges] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -47,14 +50,16 @@ export default function CleanlinessPage() {
     if (!siteId) return;
     setLoadingSheet(true); setError(null); setMessage(null);
     try {
-      const [templateResponse, inspectionResponse, cleanerResponse] = await Promise.all([
+      const [templateResponse, inspectionResponse, cleanerResponse, reportResponse] = await Promise.all([
         api.get(`/inspection-templates?page_size=100&frequency=daily&is_active=true&site_id=${siteId}`),
         api.get(`/inspections?page_size=100&site_id=${siteId}&date_from=${date}&date_to=${date}`),
         api.get("/cleaners?page_size=100"),
+        api.get<DailyReport>(`/reports/site/${siteId}/${date}`).catch(() => null),
       ]);
       setTemplates(asPaginated(templateResponse).results as unknown as Template[]);
       setInspections(asPaginated(inspectionResponse).results as unknown as Inspection[]);
       setCleaners(asPaginated(cleanerResponse).results as unknown as Cleaner[]);
+      setChallenges(Array.from({ length: 7 }, (_, index) => reportResponse?.challenges?.[index] || ""));
       setDrafts({});
     } catch (caught) { setError(caught); } finally { setLoadingSheet(false); }
   }, [date, siteId]);
@@ -110,6 +115,15 @@ export default function CleanlinessPage() {
       await api.post(`/inspections/${inspection.id}/submit`, {}); setMessage(`${t(template.area_name || "Area")} ${t("declaration submitted for review.")}`); await loadSheet();
     } catch (caught) { setError(caught); }
   };
+  const saveChallenges = async () => {
+    if (!siteId) return;
+    setSavingChallenges(true); setError(null);
+    try {
+      const report = await api.patch<DailyReport>(`/reports/site/${siteId}/${date}/challenges`, { challenges });
+      setChallenges(Array.from({ length: 7 }, (_, index) => report.challenges?.[index] || ""));
+      setMessage(t("Changamoto zimehifadhiwa."));
+    } catch (caught) { setError(caught); } finally { setSavingChallenges(false); }
+  };
 
   if (loading) return <LoadingPanel label={t("Loading assigned cleanliness scope")} />;
   return <AppShell><WorkspaceHeader eyebrow={t("Daily cleanliness declaration")} title={t("Daily cleanliness worksheet")} description="" actions={<Button className="bg-[#0F7667] text-white hover:bg-[#0B6155]" onClick={() => void loadSheet()} disabled={!siteId || loadingSheet}><ClipboardCheck size={16} /> {t("Refresh sheet")}</Button>} />
@@ -117,11 +131,12 @@ export default function CleanlinessPage() {
     <div className="mb-5 grid gap-3 rounded-2xl border border-[#DDD7CA] bg-[#FFFDF8] p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><p className="ledger-label text-[#0F7667]">{t("Daily worksheet progress")}</p><p className="mt-1 text-sm text-[#687874]">{answeredQuestions} / {totalQuestions} {t("questions answered")} · {completedAreas} / {activeTemplates.length} {t("areas submitted")}</p></div><Button onClick={() => void startAllAreas()} disabled={!siteId || startingAll} className="bg-[#173F43] text-white hover:bg-[#0D3034]">{startingAll ? <Loader2 className="animate-spin" size={16} /> : <PlayCircle size={16} />}{t("Open today's sheet")}</Button></div>
     <AttentionNotice><strong>{t("How to use this sheet:")}</strong> {t("Answer each row, save it, and submit the area when all rows are complete.")}</AttentionNotice>{error ? <div className="my-4"><ApiErrorPanel error={error} onRetry={() => void loadSheet()} /></div> : null}{message ? <div className="my-4"><WorkflowNotice>{message}</WorkflowNotice></div> : null}
     {loadingSheet ? <LoadingPanel label={t("Loading daily surveys")} /> : !activeTemplates.length ? <EmptyPanel title={t("No daily cleanliness templates configured")} description={t("Ask an administrator to configure daily templates.")} /> : <div className="mt-5 space-y-5">{activeTemplates.map((template) => {
-      const inspection = inspectionFor(template); const locked = Boolean(inspection && !["draft", "returned"].includes(inspection.status));
-      return <section key={template.id} className="min-w-0 overflow-hidden rounded-2xl border border-[#DDD7CA] bg-[#FFFDF8] shadow-[0_8px_22px_rgba(24,51,48,.035)]"><div className="flex flex-col gap-3 border-b border-[#E9E3D8] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5"><div><p className="ledger-label text-[#0F7667]">{t(template.area_name || "Operational area")}</p><h2 className="mt-1 font-serif text-2xl text-[#1F4145]">{t(template.template_name)}</h2><p className="mt-1 text-sm text-[#6B7974]">{t(template.description || "")}</p></div>{inspection ? <div className="flex items-center gap-2"><StatusBadge status={inspection.status} /><Button size="sm" disabled={locked} className="bg-[#173F43] text-white" onClick={() => void submitInspection(inspection, template)}><Send size={14} /> {t("Submit area")}</Button></div> : <Button size="sm" className="bg-[#0F7667] text-white" onClick={() => void startInspection(template)}><ClipboardCheck size={14} /> {t("Open area")}</Button>}</div>
+      const inspection = inspectionFor(template); const locked = Boolean(inspection && !["draft", "returned"].includes(inspection.status)); const officialPdfTemplate = Boolean(template.description?.startsWith("PDF-derived daily cleanliness worksheet for "));
+      return <section key={template.id} className="min-w-0 overflow-hidden rounded-2xl border border-[#DDD7CA] bg-[#FFFDF8] shadow-[0_8px_22px_rgba(24,51,48,.035)]"><div className="flex flex-col gap-3 border-b border-[#E9E3D8] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5"><div>{officialPdfTemplate ? null : <p className="ledger-label text-[#0F7667]">{t(template.area_name || "Operational area")}</p>}<h2 className={`${officialPdfTemplate ? "" : "mt-1 "}font-serif text-2xl text-[#1F4145]`}>{t(template.template_name)}</h2>{t(template.description || "") ? <p className="mt-1 text-sm text-[#6B7974]">{t(template.description || "")}</p> : null}</div>{inspection ? <div className="flex items-center gap-2"><StatusBadge status={inspection.status} /><Button size="sm" disabled={locked} className="bg-[#173F43] text-white" onClick={() => void submitInspection(inspection, template)}><Send size={14} /> {t("Submit area")}</Button></div> : <Button size="sm" className="bg-[#0F7667] text-white" onClick={() => void startInspection(template)}><ClipboardCheck size={14} /> {t("Open area")}</Button>}</div>
       {inspection ? <div className="overflow-x-auto"><table className="min-w-[940px] w-full border-collapse text-sm"><thead><tr className="bg-[#F3F0E8] text-left text-xs uppercase tracking-[.08em] text-[#71807A]"><th className="sticky left-0 z-10 w-[34%] border-b border-r border-[#E4DED2] bg-[#F3F0E8] px-4 py-3">{t("Question / check")}</th><th className="w-[13%] border-b border-r border-[#E4DED2] px-3 py-3 text-center">{t("Done on time")}</th><th className="w-[13%] border-b border-r border-[#E4DED2] px-3 py-3 text-center">{t("Exception")}</th><th className="w-[25%] border-b border-r border-[#E4DED2] px-3 py-3">{t("Evidence / responsible cleaner")}</th><th className="w-[15%] border-b border-[#E4DED2] px-3 py-3 text-center">{t("Save")}</th></tr></thead><tbody>{template.items.map((item, index) => {
         const result = inspection.results.find((row) => row.template_item_id === item.id); const draft = draftFor(inspection, item, result); const id = key(inspection.id, item.id); const textItem = item.item_type === "text";
         return <tr key={item.id} className={index % 2 ? "bg-[#FCFBF7]" : "bg-white"}><td className="sticky left-0 z-[1] border-b border-r border-[#E8E2D8] bg-inherit px-4 py-3 align-top"><div className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E5F0EC] text-xs font-bold text-[#0F7667]">{index + 1}</span><div><p className="font-medium leading-6 text-[#315156]">{t(item.item_label)}</p>{item.help_text && <p className="mt-1 text-xs leading-5 text-[#71807A]">{t(item.help_text)}</p>}</div></div></td>{textItem ? <td colSpan={2} className="border-b border-r border-[#E8E2D8] px-3 py-3 text-center text-xs font-bold text-[#71807A]">{t("Text answer")}</td> : <><td className="border-b border-r border-[#E8E2D8] p-3"><Button size="sm" disabled={locked} onClick={() => updateDraft(id, { passed: "yes" })} className={`w-full ${draft.passed === "yes" ? "bg-[#0F7667] text-white" : "bg-[#E5F0EC] text-[#0F7667]"}`}><CheckCircle2 size={14} /> {t("Yes")}</Button></td><td className="border-b border-r border-[#E8E2D8] p-3"><Button size="sm" disabled={locked} onClick={() => updateDraft(id, { passed: "no" })} className={`w-full ${draft.passed === "no" ? "bg-[#A13E26] text-white" : "bg-[#FBE4DD] text-[#A13E26]"}`}><AlertTriangle size={14} /> {t("No")}</Button></td></>}<td className="border-b border-r border-[#E8E2D8] p-3 align-top">{textItem ? <Textarea disabled={locked} value={draft.notes} onChange={(event) => updateDraft(id, { notes: event.target.value })} placeholder={t("Write your answer")} className="min-h-24 resize-y bg-white text-sm" /> : draft.passed === "no" ? <div className="grid gap-2"><Textarea disabled={locked} value={draft.notes} onChange={(event) => updateDraft(id, { notes: event.target.value })} placeholder={t("What happened and what must happen next?")} className="min-h-20 resize-y bg-white text-xs" /><select disabled={locked} value={draft.cleanerId} onChange={(event) => updateDraft(id, { cleanerId: event.target.value })} className="h-9 rounded-md border border-[#D8D1C4] bg-white px-2 text-xs"><option value="">{t("Select responsible cleaner")}</option>{cleaners.map((cleaner) => <option key={cleaner.id} value={cleaner.id}>{valueLabel(cleaner, `Cleaner ${cleaner.id}`)} · {formatDisplayValue(cleaner.status || "active")}</option>)}</select></div> : <span className="text-xs text-[#9BA6A1]">{t("No exception note required.")}</span>}</td><td className="border-b border-[#E8E2D8] p-3 align-top"><Button size="sm" variant="outline" disabled={locked || draft.saving} onClick={() => void saveItem(inspection, item)} className="w-full bg-white">{draft.saving ? <Loader2 className="animate-spin" size={14} /> : <ShieldCheck size={14} />}{draft.saved ? t("Saved") : t("Save")}</Button>{draft.error && <p className="mt-2 text-xs text-[#A13E26]">{draft.error}</p>}</td></tr>;
       })}</tbody></table></div> : <p className="p-5 text-sm text-[#687671]">{t("Open this area to load its daily questions into the worksheet.")}</p>}</section>;
-    })}</div>}</AppShell>;
+    })}</div>}
+    {siteId ? <section className="mt-5 rounded-2xl border border-[#DDD7CA] bg-[#FFFDF8] p-4 shadow-[0_8px_22px_rgba(24,51,48,.035)] sm:p-5"><p className="ledger-label text-[#0F7667]">{t("MENGINEYO / CHANGAMOTO ZILIZOJITOKEZA")}</p><h2 className="mt-1 font-serif text-2xl text-[#1F4145]">{t("Orodhesha changamoto zilizojitokeza")}</h2><p className="mt-2 text-sm text-[#6B7974]">{t("Hifadhiwa kwenye historia ya ripoti ya kila siku.")}</p><div className="mt-4 grid gap-3">{challenges.map((challenge, index) => <div key={index} className="grid gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:items-start"><Label className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E5F0EC] text-sm font-bold text-[#0F7667]">{index + 1}</Label><Textarea value={challenge} onChange={(event) => setChallenges((current) => current.map((entry, entryIndex) => entryIndex === index ? event.target.value : entry))} placeholder={`${t("Changamoto")} ${index + 1}`} className="min-h-20 resize-y bg-white text-sm" /></div>)}</div><div className="mt-4 flex justify-end"><Button disabled={savingChallenges} onClick={() => void saveChallenges()} className="bg-[#173F43] text-white hover:bg-[#0D3034]">{savingChallenges ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}{savingChallenges ? t("Inaokoa...") : t("Hifadhi changamoto")}</Button></div></section> : null}</AppShell>;
 }

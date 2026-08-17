@@ -255,7 +255,8 @@ def generate_weekly_site_report(*, site_id: int, friday: datetime.date, user: Us
     for offset in range(5):
         day = monday + datetime.timedelta(days=offset)
         snapshot = site_data_snapshot(site_id, day)
-        existing = DailySiteReport.objects.filter(site_id=site_id, report_date=day).values("status").first()
+        existing = DailySiteReport.objects.filter(site_id=site_id, report_date=day).values("status", "challenges").first()
+        snapshot["challenges"] = list(existing.get("challenges") or []) if existing else []
         days.append(
             {
                 "report_date": day.isoformat(),
@@ -286,6 +287,7 @@ def submit_site_report(*, report: DailySiteReport, user: User) -> DailySiteRepor
         report.inspection_summary = snapshot["inspections"]
         report.trainee_summary = snapshot["trainees"]
         report.issues_summary = snapshot["issues"]
+        snapshot["challenges"] = list(report.challenges or [])
         report.snapshot = snapshot
         report.status = SiteReportStatus.SUBMITTED
         report.submitted_at = timezone.now()

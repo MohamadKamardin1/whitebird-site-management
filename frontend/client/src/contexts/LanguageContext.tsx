@@ -29,14 +29,16 @@ const translations: Record<string, string> = {
   "Daily Cleanliness Survey · Outdoor areas / Eneo la nje": "UHAKIKI WA USAFI · ENEO LA NJE",
   "Daily Cleanliness Survey · Garden / Bustani": "UHAKIKI WA USAFI · BUSTANI",
   "Daily Cleanliness Survey · Store and equipment": "UHAKIKI WA USAFI · USIMAMIZI WA STORE NA VITENDEA KAZI",
+  "Daily Cleanliness Survey · Store and equipment / Usimamizi wa store": "UHAKIKI WA USAFI · USIMAMIZI WA STORE NA VITENDEA KAZI",
   "Daily Cleanliness Survey · Staff performance": "UHAKIKI WA USAFI · MAENDELEO YA WAFANYAKAZI",
-  "PDF-derived daily cleanliness worksheet for Toilets / Vyooni.": "UHAKIKI WA USAFI · VYOONI",
-  "PDF-derived daily cleanliness worksheet for Offices / Ofisini.": "UHAKIKI WA USAFI · OFISINI",
-  "PDF-derived daily cleanliness worksheet for Indoor areas / Eneo la ndani.": "UHAKIKI WA USAFI · ENEO LA NDANI",
-  "PDF-derived daily cleanliness worksheet for Outdoor areas / Eneo la nje.": "UHAKIKI WA USAFI · ENEO LA NJE",
-  "PDF-derived daily cleanliness worksheet for Garden / Bustani.": "UHAKIKI WA USAFI · BUSTANI",
-  "PDF-derived daily cleanliness worksheet for Store and equipment / Usimamizi wa store.": "UHAKIKI WA USAFI · USIMAMIZI WA STORE NA VITENDEA KAZI",
-  "PDF-derived daily cleanliness worksheet for Staff performance / Maendeleo ya wafanyakazi.": "UHAKIKI WA USAFI · MAENDELEO YA WAFANYAKAZI",
+  "Daily Cleanliness Survey · Staff performance / Maendeleo ya wafanyakazi": "UHAKIKI WA USAFI · MAENDELEO YA WAFANYAKAZI",
+  "PDF-derived daily cleanliness worksheet for Toilets / Vyooni.": "",
+  "PDF-derived daily cleanliness worksheet for Offices / Ofisini.": "",
+  "PDF-derived daily cleanliness worksheet for Indoor areas / Eneo la ndani.": "",
+  "PDF-derived daily cleanliness worksheet for Outdoor areas / Eneo la nje.": "",
+  "PDF-derived daily cleanliness worksheet for Garden / Bustani.": "",
+  "PDF-derived daily cleanliness worksheet for Store and equipment / Usimamizi wa store.": "",
+  "PDF-derived daily cleanliness worksheet for Staff performance / Maendeleo ya wafanyakazi.": "",
   "Answer the row and record an exception when the check is not complete.": "Jaza safu na andika tatizo kama halijakamilika.",
   "Stores & stock": "Stoo na vifaa",
   "Administration": "Usimamizi",
@@ -133,6 +135,13 @@ const translations: Record<string, string> = {
   "Loading today’s questions and assigned cleaners": "Tunapakia maswali ya leo na wasafi waliopangiwa",
   "Loading assigned cleanliness scope": "Tunapakia eneo lako la usafi",
   "Open this area to load its daily questions into the worksheet.": "Fungua eneo hili ili kupakia maswali yake ya leo.",
+  "MENGINEYO / CHANGAMOTO ZILIZOJITOKEZA": "MENGINEYO / CHANGAMOTO ZILIZOJITOKEZA",
+  "Orodhesha changamoto zilizojitokeza": "Orodhesha changamoto zilizojitokeza",
+  "Changamoto": "Changamoto",
+  "Hifadhi changamoto": "Hifadhi changamoto",
+  "Changamoto zimehifadhiwa.": "Changamoto zimehifadhiwa.",
+  "Hifadhiwa kwenye historia ya ripoti ya kila siku.": "Hifadhiwa kwenye historia ya ripoti ya kila siku.",
+  "Inaokoa...": "Inaokoa...",
   "English": "Kiingereza",
   "Kiswahili": "Kiswahili",
   "Language": "Lugha",
@@ -285,8 +294,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const translate = (english: string) => {
     if (language !== "sw") return english;
     const normalized = english.trim().replace(/\s+/g, " ");
-    const direct = translations[english] || normalizedTranslations[normalized];
-    if (direct) return direct;
+    const direct = translations[english] ?? normalizedTranslations[normalized];
+    if (direct !== undefined) return direct;
     if (normalized.startsWith("Daily Cleanliness Survey · ")) return "TAARIFA YA USAFI · ENEO MAALUM";
     return english;
   };

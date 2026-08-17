@@ -5,6 +5,7 @@ import pytest
 from django.urls import resolve
 
 from apps.site_management.factories import SiteFactory
+from apps.site_management.models import DailySiteReport
 from apps.site_management.reporting_services import generate_weekly_site_report
 from apps.web.views import react_app
 
@@ -36,6 +37,24 @@ def test_weekly_report_contains_monday_to_friday_snapshots(admin_user) -> None:
         "2026-08-14",
     ]
     assert all(row["data"]["site_id"] == site.pk for row in result["days"])
+
+
+@pytest.mark.django_db
+def test_weekly_report_keeps_saved_daily_challenges(admin_user) -> None:
+    site = SiteFactory()
+    friday = datetime.date(2026, 8, 14)
+    monday = friday - datetime.timedelta(days=4)
+    DailySiteReport.objects.create(
+        site=site,
+        report_date=monday,
+        created_by=admin_user,
+        updated_by=admin_user,
+        challenges=["Mfumo wa maji una tatizo"],
+    )
+
+    result = generate_weekly_site_report(site_id=site.pk, friday=friday, user=admin_user)
+
+    assert result["days"][0]["data"]["challenges"] == ["Mfumo wa maji una tatizo"]
 
 
 @pytest.mark.django_db
