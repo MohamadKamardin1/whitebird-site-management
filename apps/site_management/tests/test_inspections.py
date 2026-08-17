@@ -762,3 +762,43 @@ def test_full_required_checklist_including_final_item_can_be_submitted(admin_cli
     submitted = admin_client.post(f"/api/site-management/v1/inspections/{inspection.pk}/submit", data={}, content_type="application/json")
     assert submitted.status_code == 200, submitted.content
     assert submitted.json()["status"] == "submitted"
+
+
+@pytest.mark.django_db
+def test_generic_lobby_checklist_text_final_row_can_be_saved_and_submitted(admin_client, admin_user, site):
+    area = SiteAreaFactory(site=site, area_name="Lobby")
+    template = create_template(
+        template_name="Daily Cleanliness Survey · Lobby",
+        actor=admin_user,
+        site=site,
+        area=area,
+        items=[
+            {"item_label": "Area cleaned to the agreed schedule", "item_type": "yes_no", "required": True, "sequence": 1},
+            {"item_label": "High-touch surfaces cleaned", "item_type": "yes_no", "required": True, "sequence": 2},
+            {"item_label": "Waste removed and bins reset", "item_type": "yes_no", "required": True, "sequence": 3},
+            {"item_label": "Consumables and hygiene supplies available", "item_type": "yes_no", "required": True, "sequence": 4},
+            {"item_label": "Exception details and corrective action", "item_type": "text", "required": True, "sequence": 5},
+        ],
+    )
+    inspection = start_inspection(site=site, area=area, template=template, inspected_by=admin_user, actor=admin_user)
+    items = list(template.items.order_by("sequence", "pk"))
+
+    for item in items[:-1]:
+        response = admin_client.post(
+            f"/api/site-management/v1/inspections/{inspection.pk}/results",
+            data={"template_item_id": item.pk, "value_boolean": True, "passed": True},
+            content_type="application/json",
+        )
+        assert response.status_code == 200, response.content
+
+    final_response = admin_client.post(
+        f"/api/site-management/v1/inspections/{inspection.pk}/results",
+        data={"template_item_id": items[-1].pk, "value_text": "Hakuna tatizo; eneo limekamilika."},
+        content_type="application/json",
+    )
+    assert final_response.status_code == 200, final_response.content
+    assert final_response.json()["template_item_id"] == items[-1].pk
+
+    submitted = admin_client.post(f"/api/site-management/v1/inspections/{inspection.pk}/submit", data={}, content_type="application/json")
+    assert submitted.status_code == 200, submitted.content
+    assert submitted.json()["status"] == "submitted"

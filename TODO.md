@@ -154,3 +154,10 @@
 - [x] Fix final-row result persistence, local state reconciliation, answered-count calculation, and area submission validation.
 - [x] Add regression tests covering every row, especially the final row, and successful full-area submission.
 - [x] Run full backend/frontend validation, document, commit, and push the fix.
+
+## Generic Lobby Cleanliness Template Localization
+
+- [x] Translate the existing generic Lobby area, template title, description, five checklist questions, help text, and visible workflow statuses into simple Kiswahili.
+- [x] Verify that the generic template uses the same server-issued result reconciliation and fresh-submit validation as PDF-derived templates.
+- [x] Add regression coverage for the generic template’s final-row save and successful area submission.
+- [x] Run full backend/frontend validation, document, commit, and push the generic-template localization fix.
