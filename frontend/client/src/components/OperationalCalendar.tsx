@@ -49,7 +49,7 @@ export function OperationalCalendar() {
     return cells;
   }, [month]);
 
-  const weekday = language === "sw" ? ["Jtt", "Jnn", "Jtt", "Jtn", "Alh", "Iju", "Jmo"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const selectedDisplay = calendarDate(selectedDate).toLocaleDateString(language === "sw" ? "sw-TZ" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const totalAttendance = reports.reduce((total, report) => total + count(report.attendance_summary, "total"), 0);
   const totalPresent = reports.reduce((total, report) => total + count(report.attendance_summary, "present") + count(report.attendance_summary, "late"), 0);

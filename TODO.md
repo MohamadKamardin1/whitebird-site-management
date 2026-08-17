@@ -218,3 +218,7 @@
 - [x] Simplify the Raise a Site Issue workflow into a guided, beginner-friendly intake form with clear required fields and actionable feedback.
 - [x] Add a unit-of-measure field to configured stock requests, source it from the selected item, preserve it in API/report data, and test the complete request flow.
 - [x] Add focused calendar, permissions, spreadsheet UI, issue, and stock-unit regression tests; run full validation, commit, and push.
+
+## Calendar Weekday Header Language
+
+- [x] Use English weekday names only in the operational calendar header, regardless of the dashboard language setting.
