@@ -135,4 +135,4 @@
 - [x] Design a beginner-friendly Excel-like site-supervisor grid that loads the logged-in supervisor's assigned site and current date automatically.
 - [x] Implement guided daily answers, responsible-cleaner selection, comments/corrective action fields, validation, draft state, submit/lock behavior, and audit-safe persistence.
 - [x] Validate the site-supervisor workflow across phone, tablet, and desktop layouts with backend/frontend tests and report data integrity checks.
-- [ ] Document, commit, and push the site-supervisor cleanliness workflow before beginning the zone-supervisor workflow.
+- [x] Document, commit, and push the site-supervisor cleanliness workflow before beginning the zone-supervisor workflow.
