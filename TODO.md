@@ -208,3 +208,13 @@
 - [x] Persist daily challenge entries with audit history and include them in the report data flow without overwriting prior daily evidence.
 - [x] Add role, persistence, heading, and responsive form regression tests.
 - [x] Run full validation, document, commit, and push the update.
+
+## Calendar Accuracy and Simplified Supervisor Workflows
+
+- [x] Correct the operational calendar to use the Tanzania local date and accurately highlight the current day rather than the following day.
+- [x] Make the selected-day calendar panel fetch and display the complete authorized operational dataset for the chosen day in a full-width, readable layout.
+- [x] Convert attendance and trainee-management primary data-entry views into simple Excel-style responsive grids without page-level horizontal scrolling.
+- [x] Remove the obsolete inspection/Ukaguzi navigation and workflow entry points while preserving historic records and report evidence.
+- [x] Simplify the Raise a Site Issue workflow into a guided, beginner-friendly intake form with clear required fields and actionable feedback.
+- [x] Add a unit-of-measure field to configured stock requests, source it from the selected item, preserve it in API/report data, and test the complete request flow.
+- [x] Add focused calendar, permissions, spreadsheet UI, issue, and stock-unit regression tests; run full validation, commit, and push.

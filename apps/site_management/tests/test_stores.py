@@ -450,6 +450,7 @@ def test_api_store_flow(site, admin_user, admin_client) -> None:
         content_type="application/json",
     )
     assert req.status_code == 200
+    assert req.json()["items"][0]["unit"] == item.json()["unit"]
     req_id = req.json()["id"]
 
     submitted = admin_client.post(f"/api/site-management/v1/stores/{store_id}/requests/{req_id}/submit")
@@ -468,6 +469,7 @@ def test_api_store_flow(site, admin_user, admin_client) -> None:
 
     listed = admin_client.get(f"/api/site-management/v1/stores/{store_id}/requests")
     assert listed.json()["count"] == 1
+    assert listed.json()["results"][0]["items"][0]["unit"] == item.json()["unit"]
     movements = admin_client.get(f"/api/site-management/v1/stores/{store_id}/movements", {"movement_type": "issued"})
     assert movements.json()["count"] == 1
 

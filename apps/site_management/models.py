@@ -1424,6 +1424,7 @@ class StockRequestItem(TimeStampedModel):
     requested_quantity = models.DecimalField(max_digits=10, decimal_places=2)
     quantity_left = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     approved_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    unit = models.CharField(max_length=32, blank=True, default="")
     notes = models.TextField(blank=True, default="")
 
     class Meta:

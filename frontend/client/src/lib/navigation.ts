@@ -1,5 +1,5 @@
 /** White Bird role-aware navigation: UI visibility follows the capability matrix; API authorization remains authoritative. */
-import { Archive, Bell, Building2, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, ShieldCheck, UsersRound, UserRoundPlus, UserCog, GraduationCap } from "lucide-react";
+import { Archive, Bell, Building2, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, UsersRound, UserRoundPlus, UserCog, GraduationCap } from "lucide-react";
 
 export type NavEntry = { href: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
 
@@ -16,7 +16,6 @@ export const primaryNavigation: NavEntry[] = [
   { href: "/trainees", label: "Trainee management", icon: GraduationCap, roles: ["hr", "site_supervisor", "system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor"] },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
   { href: "/cleanliness", label: "Daily cleanliness", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
-  { href: "/inspections", label: "Inspections", icon: ShieldCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
   { href: "/operations/issues", label: "Issues & jobs", icon: HardHat, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
   { href: "/store-control", label: "Store control", icon: PackageCheck, roles: ["store_manager", "system_admin", "general_supervisor"] },
   { href: "/stores", label: "Stores & stock", icon: PackageSearch, roles: ["store_manager", "system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },

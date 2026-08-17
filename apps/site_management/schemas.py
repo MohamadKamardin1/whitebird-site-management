@@ -787,6 +787,7 @@ class StockRequestItemOut(Schema):
     requested_quantity: Decimal
     quantity_left: Decimal = Decimal("0")
     approved_quantity: Decimal | None = None
+    unit: str = ""
     notes: str = ""
 
 

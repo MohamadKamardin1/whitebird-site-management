@@ -2564,6 +2564,7 @@ def _request_out(r: StockRequest) -> StockRequestOut:
             requested_quantity=item.requested_quantity,
             quantity_left=item.quantity_left,
             approved_quantity=item.approved_quantity,
+            unit=item.unit or item.store_item.unit,
             notes=item.notes,
         )
         for item in r.items.all()

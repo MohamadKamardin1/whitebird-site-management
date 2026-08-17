@@ -15,7 +15,7 @@ import NotificationsPage from "@/pages/NotificationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
 import MarketingPage from "@/pages/MarketingPage";
-import { FieldInspectionsPage, ReportsPage, SiteIssuesPage, StockRequestsPage } from "@/pages/OperationalWorkflowsPage";
+import { ReportsPage, SiteIssuesPage, StockRequestsPage } from "@/pages/OperationalWorkflowsPage";
 import RoleWorkspacesPage from "@/pages/RoleWorkspacesPage";
 import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
@@ -49,7 +49,7 @@ function Router() {
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
-    <Route path="/inspections"><ProtectedPage><FieldInspectionsPage /></ProtectedPage></Route>
+    <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
     <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>
     <Route path="/reports"><ProtectedPage><ReportsPage /></ProtectedPage></Route>
