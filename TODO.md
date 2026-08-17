@@ -169,3 +169,12 @@
 - [x] Translate every existing generic daily template area, title, description, question, and help text into simple Kiswahili.
 - [x] Add regression tests for all generic template item types, final text-row saving, successful submission, and language coverage.
 - [x] Run full backend/frontend validation, document, commit, and push the correction.
+
+## Worksheet Refinement and Operational Calendar
+
+- [x] Replace every written-answer cleanliness response control with an expanding text field that supports comfortable multi-line entry.
+- [x] Remove the redundant paper-report instructional paragraph from the worksheet header.
+- [x] Complete Kiswahili and English translations for worksheet table headers, statuses, generic/PDF-derived template titles, areas, questions, and help text.
+- [x] Replace the dashboard AI brief with a polished operational calendar that highlights the current day and opens a selected-day survey table.
+- [x] Add calm, accessible Airbnb-inspired motion and responsive states to the calendar and selected-day survey experience.
+- [x] Run backend/frontend tests, selected-day survey validation, responsive checks, and commit/push the upgrade.
