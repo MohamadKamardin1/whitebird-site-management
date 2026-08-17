@@ -233,3 +233,9 @@
 ## Desktop Calendar Footprint Refinement
 
 - [x] Reduce the operational calendar’s desktop-only width, grid cell scale, and selected-day density without changing the approved mobile experience.
+
+## Desktop Calendar Height Correction
+
+- [x] Replace the oversized desktop square month cells with a compact fixed-height calendar grid while preserving the approved mobile layout.
+- [x] Reduce desktop selected-day panel density and remove the excessive vertical footprint caused by the calendar section.
+- [x] Validate the corrected responsive layout, commit, and push.
