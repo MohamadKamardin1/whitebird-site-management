@@ -127,3 +127,12 @@
 - [x] Add administrator-only integration settings for DeepSeek and Mapbox with secure persistence, masked values, validation, audit history, and controlled runtime use across the platform.
 - [x] Run schema/API/frontend tests and responsive verification without exposing secret values.
 - [x] Document, commit, and push the completed administrator, reporting, and integration settings upgrade.
+
+## Site Supervisor Daily Cleanliness Workflow from Report PDF
+
+- [x] Pull and verify the latest `sultan` branch before starting the cleanliness workflow implementation.
+- [x] Extract and map every daily cleanliness area, question, answer option, responsibility field, exception note, and sign-off requirement from the attached report PDF.
+- [x] Design a beginner-friendly Excel-like site-supervisor grid that loads the logged-in supervisor's assigned site and current date automatically.
+- [x] Implement guided daily answers, responsible-cleaner selection, comments/corrective action fields, validation, draft state, submit/lock behavior, and audit-safe persistence.
+- [x] Validate the site-supervisor workflow across phone, tablet, and desktop layouts with backend/frontend tests and report data integrity checks.
+- [ ] Document, commit, and push the site-supervisor cleanliness workflow before beginning the zone-supervisor workflow.

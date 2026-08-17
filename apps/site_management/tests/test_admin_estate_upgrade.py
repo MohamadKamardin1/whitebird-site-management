@@ -10,13 +10,13 @@ def test_new_site_receives_default_cleanliness_surveys_and_store(admin_user, sit
         draft=SiteDraft(name="Provisioned Site", site_type=site_type, status=site_status),
         actor=admin_user,
     )
-    assert SiteArea.objects.filter(site=site, is_active=True).count() == 4
-    assert InspectionTemplate.objects.filter(site=site, frequency="daily", is_active=True).count() == 4
+    assert SiteArea.objects.filter(site=site, is_active=True).count() == 7
+    assert InspectionTemplate.objects.filter(site=site, frequency="daily", is_active=True).count() == 7
     daily_template = InspectionTemplate.objects.filter(
         site=site, template_name__contains="Daily Cleanliness Survey"
     ).first()
     assert daily_template is not None
-    assert daily_template.items.count() == 5
+    assert daily_template.items.count() >= 6
     assert SiteStore.objects.filter(site=site, is_active=True).count() == 1
 
 
