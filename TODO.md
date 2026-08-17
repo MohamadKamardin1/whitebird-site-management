@@ -161,3 +161,11 @@
 - [x] Verify that the generic template uses the same server-issued result reconciliation and fresh-submit validation as PDF-derived templates.
 - [x] Add regression coverage for the generic template’s final-row save and successful area submission.
 - [x] Run full backend/frontend validation, document, commit, and push the generic-template localization fix.
+
+## Generic Template Completion and Kiswahili Coverage Correction
+
+- [x] Trace why required generic text answers are still classified as unanswered at area submission.
+- [x] Fix generic text-result completion checks in both the frontend pre-submit validator and backend submission service.
+- [x] Translate every existing generic daily template area, title, description, question, and help text into simple Kiswahili.
+- [x] Add regression tests for all generic template item types, final text-row saving, successful submission, and language coverage.
+- [x] Run full backend/frontend validation, document, commit, and push the correction.

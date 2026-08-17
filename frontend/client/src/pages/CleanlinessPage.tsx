@@ -151,7 +151,7 @@ export default function CleanlinessPage() {
   async function submitInspection(inspection: Inspection, template: Template) {
     try {
       const freshInspection = await api.get<Inspection>(`/inspections/${inspection.id}`);
-      const unanswered = template.items.filter((item) => !freshInspection.results.some((result) => result.template_item_id === item.id && result.passed !== null && result.passed !== undefined));
+      const unanswered = template.items.filter((item) => !freshInspection.results.some((result) => result.template_item_id === item.id && (item.item_type === "text" ? Boolean(result.value_text?.trim()) : result.passed !== null && result.passed !== undefined)));
       if (unanswered.length) { setMessage(`${t(template.area_name || "This area")} ${t("still has unanswered questions. Save every row before submitting.")}`); return; }
       await api.post(`/inspections/${inspection.id}/submit`, {});
       setMessage(`${t(template.area_name || "Area")} ${t("declaration submitted for review.")}`);
