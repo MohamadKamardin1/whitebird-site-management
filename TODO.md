@@ -222,3 +222,10 @@
 ## Calendar Weekday Header Language
 
 - [x] Use English weekday names only in the operational calendar header, regardless of the dashboard language setting.
+
+## Compact Calendar and Daily Cleanliness Dashboard Refinement
+
+- [x] Use the exact real daily-cleanliness module area names in the dashboard’s selected-day section rather than inspection fallback labels.
+- [x] Apply the language switch accurately to all selected-day Daily Cleanliness labels and real area/template names.
+- [x] Reduce calendar and Daily Cleanliness selected-day section sizing with responsive compact spacing while preserving readable controls and table access.
+- [x] Validate, commit, and push the dashboard refinement.

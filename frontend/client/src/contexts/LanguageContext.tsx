@@ -110,6 +110,8 @@ const translations: Record<string, string> = {
   "Next month": "Mwezi unaofuata",
   "Selected day": "Siku iliyochaguliwa",
   "No survey is open for this day": "Hakuna utafiti uliofunguliwa kwa siku hii",
+  "Not opened": "Haijafunguliwa",
+  "questions saved": "maswali yamehifadhiwa",
   "Choose another day or open a daily worksheet to begin.": "Chagua siku nyingine au fungua jedwali la kila siku kuanza.",
   "answers recorded": "majibu yamehifadhiwa",
   "Daily survey": "Utafiti wa kila siku",
