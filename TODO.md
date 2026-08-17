@@ -136,3 +136,13 @@
 - [x] Implement guided daily answers, responsible-cleaner selection, comments/corrective action fields, validation, draft state, submit/lock behavior, and audit-safe persistence.
 - [x] Validate the site-supervisor workflow across phone, tablet, and desktop layouts with backend/frontend tests and report data integrity checks.
 - [x] Document, commit, and push the site-supervisor cleanliness workflow before beginning the zone-supervisor workflow.
+
+## Inspection Save Reliability and Kiswahili-First Dashboard
+
+- [x] Pull latest `sultan` code and trace the 422 create-result and 404 fake-result-ID update failures end to end.
+- [x] Fix result identity handling so newly created results always use the server-issued ID and repeated saves update the real record only.
+- [x] Improve row save feedback so saved answers show a stable responsive saved state and validation errors are clear to beginners.
+- [x] Add full regression coverage for result creation, repeated updates, malformed payloads, permissions, and audit-safe persistence.
+- [x] Add a Kiswahili-first localization foundation with an English switcher in the header and persistent language preference.
+- [x] Translate the core dashboard navigation, site-supervisor cleanliness workflow, action labels, validation messages, and user-facing operational states into simple Tanzanian Kiswahili.
+- [x] Run full backend/frontend tests, responsive checks, and localization validation, then document, commit, and push the release.

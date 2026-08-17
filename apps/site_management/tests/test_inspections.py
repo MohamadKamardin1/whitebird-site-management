@@ -693,3 +693,38 @@ def test_api_template_and_result_updates(site, admin_user, admin_client) -> None
     )
     assert updated_result.status_code == 200
     assert updated_result.json()["value_text"] == "final"
+
+
+@pytest.mark.django_db
+def test_result_create_is_idempotent_and_repeated_save_uses_real_server_id(admin_client, admin_user, site):
+    template = _template(admin_user, site=site)
+    area = SiteAreaFactory(site=site)
+    inspection = start_inspection(site=site, area=area, template=template, inspected_by=admin_user, actor=admin_user)
+    item = template.items.first()
+    assert item is not None
+
+    first = admin_client.post(
+        f"/api/site-management/v1/inspections/{inspection.pk}/results",
+        data={"template_item_id": item.pk, "value_boolean": True, "passed": True, "notes": "first save"},
+        content_type="application/json",
+    )
+    assert first.status_code == 200, first.content
+    server_result_id = first.json()["id"]
+
+    repeated = admin_client.post(
+        f"/api/site-management/v1/inspections/{inspection.pk}/results",
+        data={"template_item_id": item.pk, "value_boolean": False, "passed": False, "notes": "corrected save"},
+        content_type="application/json",
+    )
+    assert repeated.status_code == 200, repeated.content
+    assert repeated.json()["id"] == server_result_id
+    assert repeated.json()["passed"] is False
+
+    updated = admin_client.put(
+        f"/api/site-management/v1/inspections/{inspection.pk}/results/{server_result_id}",
+        data={"value_boolean": True, "passed": True, "notes": "final save"},
+        content_type="application/json",
+    )
+    assert updated.status_code == 200, updated.content
+    assert updated.json()["id"] == server_result_id
+    assert updated.json()["notes"] == "final save"

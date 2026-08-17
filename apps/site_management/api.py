@@ -3266,6 +3266,19 @@ def inspection_result_create(
         ).exists()
     ):
         raise PermissionDenied("Responsible cleaner must have an active assignment at this site.")
+    existing = InspectionResult.objects.filter(inspection_id=inspection_id, template_item_id=template_item.id).first()
+    if existing is not None:
+        updated = update_inspection_result(
+            result=existing,
+            actor=request.auth,
+            responsible_cleaner=responsible_cleaner,
+            value_text=payload.value_text,
+            value_number=payload.value_number,
+            value_boolean=payload.value_boolean,
+            passed=payload.passed,
+            notes=payload.notes,
+        )
+        return _result_out(updated)
     result = add_inspection_result(
         inspection=inspection,
         template_item=template_item,
@@ -3296,6 +3309,13 @@ def inspection_result_update(
     responsible_cleaner = (
         Cleaner.objects.filter(pk=payload.responsible_cleaner_id).first() if payload.responsible_cleaner_id else None
     )
+    if (
+        responsible_cleaner
+        and not CleanerSiteAssignment.objects.filter(
+            cleaner=responsible_cleaner, site_id=inspection.site_id, status="active"
+        ).exists()
+    ):
+        raise PermissionDenied("Responsible cleaner must have an active assignment at this site.")
     updated = update_inspection_result(
         result=result,
         actor=request.auth,
