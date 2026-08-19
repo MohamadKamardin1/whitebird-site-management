@@ -85,6 +85,16 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     assert profile.pbz_account_number == "PBZ-NEW-456"
     assert AuditLog.objects.filter(summary__contains="Approved remuneration payment-contact update").exists()
 
+    admin = UserFactory(role=RoleCode.SYSTEM_ADMIN)
+    overview = _authed(admin).get(f"/api/site-management/v1/admin/remuneration/monthly?period={period.isoformat()}")
+    assert overview.status_code == 200, overview.content
+    overview_row = next(row for row in overview.json() if row["cleaner_id"] == cleaner.pk)
+    assert overview_row["previous_account"] == "PBZ-OLD-123"
+    assert overview_row["new_account"] == "PBZ-NEW-456"
+    assert overview_row["payment_saved_by"] == supervisor.full_name
+    assert overview_row["form_status"] == "reviewed"
+    assert _authed(supervisor).get(f"/api/site-management/v1/admin/remuneration/monthly?period={period.isoformat()}").status_code == 403
+
     with pytest.raises(ValidationError):
         prepare_monthly_remuneration(actor=supervisor, site=site, period=period, today=period.replace(day=14))
     assert MonthlyRemunerationReport.objects.filter(site=other_site).count() == 0

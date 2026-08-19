@@ -225,6 +225,7 @@ from .reporting_services import (
     submit_zone_summary,
 )
 from .remuneration_services import (
+    administrator_monthly_remuneration_rows,
     prepare_monthly_remuneration,
     remuneration_line_view,
     remuneration_window_is_open,
@@ -233,6 +234,7 @@ from .remuneration_services import (
     submit_monthly_remuneration,
 )
 from .schemas import (
+    AdminMonthlyRemunerationRowOut,
     AreaScheduleCreateIn,
     AreaScheduleUpdateIn,
     AssetCategoryOut,
@@ -1105,6 +1107,16 @@ def remuneration_review(
         report=_load_remuneration_report_or_404(report_id), actor=request.auth, action=payload.action, reason=payload.reason
     )
     return _remuneration_report_out(_load_remuneration_report_or_404(report.pk))
+
+
+@router.get("/admin/remuneration/monthly", response=list[AdminMonthlyRemunerationRowOut])
+def administrator_monthly_remuneration_overview(
+    request: AuthenticatedRequest, period: date
+) -> list[AdminMonthlyRemunerationRowOut]:
+    return [
+        AdminMonthlyRemunerationRowOut(**row)
+        for row in administrator_monthly_remuneration_rows(actor=request.auth, period=period)
+    ]
 
 
 # --------------------------------------------------------------------------- #

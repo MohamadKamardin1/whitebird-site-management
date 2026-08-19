@@ -654,10 +654,16 @@ class MonthlyRemunerationLine(TimeStampedModel):
     present_days = models.PositiveSmallIntegerField(default=0)
     absent_days = models.PositiveSmallIntegerField(default=0)
     start_work_date = models.DateField(null=True, blank=True)
+    previous_yas_zantel_phone = models.CharField(max_length=16, blank=True, default="")
+    previous_pbz_account_number = models.CharField(max_length=64, blank=True, default="")
     proposed_yas_zantel_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
     proposed_pbz_account_number = models.CharField(max_length=64, blank=True, default="")
     phone_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
     account_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
+    payment_saved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="saved_remuneration_payment_decisions"
+    )
+    payment_saved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Monthly remuneration line"

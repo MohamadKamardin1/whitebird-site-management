@@ -273,3 +273,11 @@
 - [x] Add payment-contact confirmation that uses the last approved Yas/Zantel phone and PBZ account when no replacement is entered, while allowing an audited proposed replacement without exposing unmasked prior values broadly.
 - [x] Add administrator/HR review of remuneration contact changes and immutable submitted monthly snapshots including authenticated attestation rather than a copied signature image.
 - [x] Add a beginner-friendly spreadsheet-style remuneration form, role isolation, window, attendance, new-cleaner, payment-change, review, audit, and responsive-grid regression tests; validate, commit, and push.
+
+## Bilingual Remuneration and Administrator Audit Overview
+
+- [x] Add complete Kiswahili and English translations for the Monthly Remuneration navigation, page title, instructions, workflow states, all spreadsheet columns, actions, payment guidance, and audit messages.
+- [x] Add a System Administrator monthly remuneration overview route and navigation entry with an Excel-style, all-site cleaner table filtered by month.
+- [x] Include site, cleaner name, worked/present days, absent days, new-worker start date, masked previous payment contacts, proposed replacement contacts, change states, form status, and saved/submitted/reviewed audit actors and times in the administrator view.
+- [x] Preserve strict payment-data protection: administrators may review necessary audit information; non-administrators remain limited to their existing scoped and masked view.
+- [x] Add localization and administrator-all-site remuneration regression tests; validate, commit, and push.

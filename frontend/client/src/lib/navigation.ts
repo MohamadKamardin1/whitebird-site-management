@@ -10,6 +10,7 @@ export const primaryNavigation: NavEntry[] = [
   { href: "/admin/estate", label: "Sites, zones & GIS", icon: Building2, roles: ["system_admin"] },
   { href: "/admin/supervisor-timetables", label: "Supervisor timetables", icon: CalendarDays, roles: ["system_admin"] },
   { href: "/admin/integrations", label: "Integration settings", icon: Settings2, roles: ["system_admin"] },
+  { href: "/admin/remuneration", label: "Monthly remuneration audit", icon: WalletCards, roles: ["system_admin"] },
   { href: "/sites", label: "Sites & zones", icon: Building2, roles: ["general_supervisor", "assistant_general_supervisor", "zone_supervisor", "management_viewer"] },
   { href: "/hr/onboarding", label: "HR onboarding", icon: UserRoundPlus, roles: ["hr"] },
   { href: "/hr/people", label: "People registry", icon: UsersRound, roles: ["hr", "system_admin", "general_supervisor"] },
