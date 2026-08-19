@@ -251,3 +251,16 @@
 - [x] Replace generated-report-only attendance figures in the selected-day calendar with a live aggregate from the authorized daily attendance sheets.
 - [x] Preserve report data as a fallback only when live daily sheets cannot be read, with no fabricated counts.
 - [x] Add regression coverage and validate the live selected-day attendance calculation before commit and push.
+
+## Zone Supervisor and Assistant General Supervisor Roster Workflow
+
+- [x] Preserve the exact roster/checklist labels, weekday headings, shift headings, off-day labels, and equipment-report headings from `WBCROSTERMASTERPLAN(1).pdf` in a documented source catalogue.
+- [x] Add administrator-managed, date-effective personal timetable records that assign a supervisor to authorized sites/zones, work days, morning/afternoon shifts, off-days, optional responsible relief person, and audit metadata.
+- [x] Add strict RBAC and data isolation so Zone Supervisors and Assistant General Supervisors only see their own timetable rows, assigned sites/zones, scheduled shifts, and permitted daily submissions.
+- [x] Add an administrator timetable-management workspace that creates, revises, cancels, and audits personal roster assignments without exposing a supervisor’s timetable to other supervisors.
+- [x] Add a Zone Supervisor calendar dashboard that shows only the logged-in supervisor’s own daily assignment, off-day, shift, relief context, and every site scheduled for that date.
+- [x] Add a systematic multi-site Zone Supervisor PDF-derived supervision table using the exact **SUPERVISION CHECKLIST** labels and requiring a scoped record for each assigned site/area.
+- [x] Add an Assistant General Supervisor dashboard with the exact **SITE SUPERVISION CHECKLIST** labels and only that supervisor’s assigned timetable sites/zones, works performed, and accountable submission history.
+- [x] Add the exact PDF equipment report headings and auditable site-equipment condition/movement workflow for the responsible scheduled supervisor role.
+- [x] Include immutable submission snapshots, actor/role/site/shift/date context, review states, and audit history for every supervisor checklist and equipment report.
+- [x] Add backend and frontend role-isolation, timetable, shift, off-day, multi-site submission, audit, PDF-label, and responsive-grid regression tests; validate, document, commit, and push.

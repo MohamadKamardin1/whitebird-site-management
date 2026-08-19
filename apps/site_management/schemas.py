@@ -98,6 +98,84 @@ class SiteSupervisorOut(Schema):
     is_active: bool = True
 
 
+class SupervisorTimetableEntryIn(Schema):
+    supervisor_id: int
+    zone_id: int
+    site_id: int
+    effective_from: date
+    effective_to: date | None = None
+    work_days: list[str] = Field(min_length=1)
+    off_days: list[str] = Field(default_factory=list)
+    shift_slot: str = Field(pattern="^(asubuhi|mchana)$")
+    relief_person_id: int | None = None
+    notes: str = ""
+
+
+class SupervisorTimetableEntryUpdateIn(Schema):
+    effective_from: date | None = None
+    effective_to: date | None = None
+    work_days: list[str] | None = None
+    off_days: list[str] | None = None
+    shift_slot: str | None = Field(default=None, pattern="^(asubuhi|mchana)$")
+    relief_person_id: int | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class SupervisorTimetableEntryOut(Schema):
+    id: int
+    supervisor_id: int
+    supervisor_name: str
+    supervisor_role: str
+    zone_id: int
+    zone_name: str
+    site_id: int
+    site_name: str
+    effective_from: date
+    effective_to: date | None = None
+    work_days: list[str]
+    off_days: list[str]
+    shift_slot: str
+    relief_person_id: int | None = None
+    relief_person_name: str = ""
+    notes: str = ""
+    is_active: bool
+
+
+class SupervisorChecklistSaveIn(Schema):
+    timetable_entry_id: int
+    work_date: date
+    checklist_kind: str = Field(pattern="^(site_zilizotembelewa|maeneo_yaliyokaguliwa|kazi_zilizofanyika|taarifa_za_vitendeakazi)$")
+    table_entries: list[dict[str, Any]] = Field(default_factory=list)
+    notes: str = ""
+
+
+class SupervisorChecklistReviewIn(Schema):
+    action: str = Field(pattern="^(reviewed|returned)$")
+    reason: str = ""
+
+
+class SupervisorChecklistOut(Schema):
+    id: int
+    timetable_entry_id: int
+    supervisor_id: int
+    supervisor_name: str
+    supervisor_role: str
+    site_id: int
+    site_name: str
+    zone_id: int
+    zone_name: str
+    work_date: date
+    shift_slot: str
+    checklist_kind: str
+    table_entries: list[dict[str, Any]]
+    notes: str = ""
+    status: str
+    submitted_at: datetime | None = None
+    return_reason: str = ""
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
 class SiteCreateIn(Schema):
     name: str = Field(min_length=1, max_length=160)
     zone_id: int | None = None

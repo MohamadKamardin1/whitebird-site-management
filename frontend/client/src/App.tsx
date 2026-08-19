@@ -21,6 +21,7 @@ import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
 import IntegrationSettingsPage from "@/pages/IntegrationSettingsPage";
 import TraineeManagementPage from "@/pages/TraineeManagementPage";
+import { SupervisorRosterPage, SupervisorTimetableAdminPage } from "@/pages/SupervisorRosterPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -39,6 +40,7 @@ function Router() {
     <Route path="/admin/estate"><ProtectedPage><AdminEstatePage /></ProtectedPage></Route>
     <Route path="/admin/integrations"><ProtectedPage><IntegrationSettingsPage /></ProtectedPage></Route>
     <Route path="/admin/users"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Platform governance", title: "Users and roles with accountable access.", description: "System administrators create, revoke, and review platform roles without entering daily site execution work.", endpoint: "/auth/users", filterLabel: "users", disableUsers: true }} /></ProtectedPage></Route>
+    <Route path="/admin/supervisor-timetables"><ProtectedPage><SupervisorTimetableAdminPage /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
     <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>
     <Route path="/hr/people"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR people registry", title: "Cleaner records, documents, and onboarding readiness.", description: "Review workforce records through the HR-controlled lifecycle.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
@@ -49,6 +51,7 @@ function Router() {
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
+    <Route path="/supervision/roster"><ProtectedPage><SupervisorRosterPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
     <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>

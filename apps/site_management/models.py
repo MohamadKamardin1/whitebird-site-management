@@ -439,6 +439,147 @@ class AssistantGeneralSupervisorAssignment(AssignmentMixin, UserStampedModel):
             raise ValidationError("A zone is required when all_zones is false.")
 
 
+class SupervisorShiftSlot(models.TextChoices):
+    """Exact shift labels used by the Zone Supervisor Weekly Schedule PDF."""
+
+    ASUBUHI = "asubuhi", "ASUBUHI"
+    MCHANA = "mchana", "MCHANA"
+
+
+class SupervisorChecklistKind(models.TextChoices):
+    """PDF-derived supervisor checklist table labels; never paraphrase these values."""
+
+    SITE_ZILIZO_TEMBELEWA = "site_zilizotembelewa", "SITE ZILIZO TEMBELEWA"
+    MAENEO_YALIYOKAGULIWA = "maeneo_yaliyokaguliwa", "MAENEO YALIYOKAGULIWA"
+    KAZI_ZILIZOFANYIKA = "kazi_zilizofanyika", "KAZI ZILIZOFANYIKA"
+    TAARIFA_ZA_VITENDEA_KAZI = "taarifa_za_vitendeakazi", "TAARIFA ZA VITENDEA KAZI"
+
+
+class SupervisorChecklistStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    REVIEWED = "reviewed", "Reviewed"
+    RETURNED = "returned", "Returned"
+
+
+class SupervisorTimetableEntry(UserStampedModel):
+    """An administrator-managed, personal repeating weekly roster entry.
+
+    The entry is intentionally scoped to one supervisor, one site, and one PDF
+    shift slot. It never grants access: the existing assignment hierarchy remains
+    authoritative and is checked again when a checklist is saved.
+    """
+
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="supervisor_timetable_entries"
+    )
+    zone = models.ForeignKey(Zone, on_delete=models.PROTECT, related_name="supervisor_timetable_entries")
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="supervisor_timetable_entries")
+    effective_from = models.DateField(db_index=True)
+    effective_to = models.DateField(null=True, blank=True, db_index=True)
+    work_days = models.JSONField(default=list, validators=[validate_effective_days])
+    off_days = models.JSONField(default=list, blank=True)
+    shift_slot = models.CharField(max_length=16, choices=SupervisorShiftSlot.choices)
+    relief_person = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supervisor_roster_relief_entries",
+    )
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Supervisor timetable entry"
+        verbose_name_plural = "Supervisor timetable entries"
+        ordering = ["supervisor__email", "effective_from", "site__name", "shift_slot"]
+        indexes = [
+            models.Index(fields=["supervisor", "is_active", "effective_from"]),
+            models.Index(fields=["site", "is_active", "effective_from"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.effective_to and self.effective_to < self.effective_from:
+            raise ValidationError("effective_to cannot be earlier than effective_from.")
+        if self.site_id and self.zone_id and self.site.zone_id != self.zone_id:
+            raise ValidationError("The timetable site must belong to its timetable zone.")
+        invalid_off_days = set(self.off_days or []) - {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+        if invalid_off_days:
+            raise ValidationError("off_days must use weekday codes mon through sun.")
+        if set(self.work_days or []) & set(self.off_days or []):
+            raise ValidationError("A timetable day cannot be both a work day and an off-day.")
+
+    def is_scheduled_for(self, work_date: date) -> bool:
+        return (
+            self.is_active
+            and self.effective_from <= work_date
+            and (self.effective_to is None or self.effective_to >= work_date)
+            and work_date.strftime("%a").lower() in self.work_days
+            and work_date.strftime("%a").lower() not in self.off_days
+        )
+
+
+class SupervisorChecklistSubmission(UserStampedModel):
+    """Immutable-on-submit source record for a PDF-derived supervision table."""
+
+    timetable_entry = models.ForeignKey(
+        SupervisorTimetableEntry, on_delete=models.PROTECT, related_name="checklist_submissions"
+    )
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="supervisor_checklist_submissions"
+    )
+    supervisor_role = models.CharField(max_length=64, db_index=True)
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="supervisor_checklist_submissions")
+    zone = models.ForeignKey(Zone, on_delete=models.PROTECT, related_name="supervisor_checklist_submissions")
+    work_date = models.DateField(db_index=True)
+    shift_slot = models.CharField(max_length=16, choices=SupervisorShiftSlot.choices)
+    checklist_kind = models.CharField(max_length=40, choices=SupervisorChecklistKind.choices)
+    table_entries = models.JSONField(default=list)
+    notes = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16, choices=SupervisorChecklistStatus.choices, default=SupervisorChecklistStatus.DRAFT, db_index=True
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_supervisor_checklists",
+    )
+    return_reason = models.TextField(blank=True, default="")
+    snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Supervisor checklist submission"
+        verbose_name_plural = "Supervisor checklist submissions"
+        ordering = ["-work_date", "site__name", "checklist_kind"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["timetable_entry", "work_date", "checklist_kind"],
+                name="uniq_supervisor_checklist_schedule_day_kind",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["supervisor", "work_date", "status"]),
+            models.Index(fields=["site", "work_date", "status"]),
+        ]
+
+    @property
+    def is_editable(self) -> bool:
+        return self.status in {SupervisorChecklistStatus.DRAFT, SupervisorChecklistStatus.RETURNED}
+
+    def clean(self) -> None:
+        super().clean()
+        if self.site_id and self.zone_id and self.site.zone_id != self.zone_id:
+            raise ValidationError("The checklist site must belong to its checklist zone.")
+        if self.timetable_entry_id and self.timetable_entry.supervisor_id != self.supervisor_id:
+            raise ValidationError("The checklist supervisor must match the timetable entry.")
+
+
 class Notification(TimeStampedModel):
     """In-platform notification targeted at a user.
 

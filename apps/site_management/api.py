@@ -191,6 +191,8 @@ from .models import (
     WorkMode,
     Zone,
     ZoneSummaryReport,
+    SupervisorChecklistSubmission,
+    SupervisorTimetableEntry,
 )
 from .policies import can_export_data
 from .reporting_selectors import (
@@ -310,6 +312,12 @@ from .schemas import (
     SiteUpdateIn,
     StatusRef,
     StatusUpdateIn,
+    SupervisorChecklistOut,
+    SupervisorChecklistReviewIn,
+    SupervisorChecklistSaveIn,
+    SupervisorTimetableEntryIn,
+    SupervisorTimetableEntryOut,
+    SupervisorTimetableEntryUpdateIn,
     StockMovementCreateIn,
     StockMovementOut,
     StockRequestCreateIn,
@@ -408,6 +416,14 @@ from .store_services import (
     review_stock_request,
     submit_stock_request,
     update_store_item,
+)
+from .supervisor_roster_services import (
+    create_timetable_entry,
+    deactivate_timetable_entry,
+    save_supervisor_checklist,
+    review_supervisor_checklist,
+    submit_supervisor_checklist,
+    update_timetable_entry,
 )
 from .trainee_selectors import (
     TraineeFilter,
@@ -846,6 +862,154 @@ def site_supervisors(request: AuthenticatedRequest, site_id: int) -> list[SiteSu
         )
         for assignment in qs.order_by("-is_primary", "assigned_from")
     ]
+
+
+def _timetable_entry_out(entry: SupervisorTimetableEntry) -> SupervisorTimetableEntryOut:
+    return SupervisorTimetableEntryOut(
+        id=entry.pk,
+        supervisor_id=entry.supervisor_id,
+        supervisor_name=entry.supervisor.full_name,
+        supervisor_role=entry.supervisor.role,
+        zone_id=entry.zone_id,
+        zone_name=entry.zone.name,
+        site_id=entry.site_id,
+        site_name=entry.site.name,
+        effective_from=entry.effective_from,
+        effective_to=entry.effective_to,
+        work_days=list(entry.work_days),
+        off_days=list(entry.off_days),
+        shift_slot=entry.shift_slot,
+        relief_person_id=entry.relief_person_id,
+        relief_person_name=entry.relief_person.full_name if entry.relief_person else "",
+        notes=entry.notes,
+        is_active=entry.is_active,
+    )
+
+
+def _supervisor_checklist_out(submission: SupervisorChecklistSubmission) -> SupervisorChecklistOut:
+    return SupervisorChecklistOut(
+        id=submission.pk,
+        timetable_entry_id=submission.timetable_entry_id,
+        supervisor_id=submission.supervisor_id,
+        supervisor_name=submission.supervisor.full_name,
+        supervisor_role=submission.supervisor_role,
+        site_id=submission.site_id,
+        site_name=submission.site.name,
+        zone_id=submission.zone_id,
+        zone_name=submission.zone.name,
+        work_date=submission.work_date,
+        shift_slot=submission.shift_slot,
+        checklist_kind=submission.checklist_kind,
+        table_entries=list(submission.table_entries),
+        notes=submission.notes,
+        status=submission.status,
+        submitted_at=submission.submitted_at,
+        return_reason=submission.return_reason,
+        snapshot=dict(submission.snapshot),
+    )
+
+
+def _timetable_admin(user: User) -> None:
+    if not user.is_system_admin:
+        raise PermissionDenied("Only a system administrator can manage personal supervisor timetables.")
+
+
+@router.get("/admin/supervisor-timetables", response=list[SupervisorTimetableEntryOut])
+def supervisor_timetable_admin_list(request: AuthenticatedRequest) -> list[SupervisorTimetableEntryOut]:
+    _timetable_admin(request.auth)
+    entries = SupervisorTimetableEntry.objects.select_related("supervisor", "zone", "site", "relief_person").all()
+    return [_timetable_entry_out(entry) for entry in entries]
+
+
+@router.post("/admin/supervisor-timetables", response=SupervisorTimetableEntryOut)
+def supervisor_timetable_create(request: AuthenticatedRequest, payload: SupervisorTimetableEntryIn) -> SupervisorTimetableEntryOut:
+    _timetable_admin(request.auth)
+    supervisor = User.objects.filter(pk=payload.supervisor_id, is_active=True).first()
+    zone = Zone.objects.filter(pk=payload.zone_id, is_active=True).first()
+    site = Site.objects.filter(pk=payload.site_id, is_active=True).first()
+    relief = User.objects.filter(pk=payload.relief_person_id, is_active=True).first() if payload.relief_person_id else None
+    if supervisor is None or zone is None or site is None:
+        raise Http404("Supervisor, zone, or site not found.")
+    if payload.relief_person_id and relief is None:
+        raise Http404("Relief person not found.")
+    entry = create_timetable_entry(
+        actor=request.auth, supervisor=supervisor, zone=zone, site=site,
+        effective_from=payload.effective_from, effective_to=payload.effective_to,
+        work_days=payload.work_days, off_days=payload.off_days, shift_slot=payload.shift_slot,
+        relief_person=relief, notes=payload.notes, is_active=True,
+    )
+    return _timetable_entry_out(entry)
+
+
+@router.patch("/admin/supervisor-timetables/{entry_id}", response=SupervisorTimetableEntryOut)
+def supervisor_timetable_update(
+    request: AuthenticatedRequest, entry_id: int, payload: SupervisorTimetableEntryUpdateIn
+) -> SupervisorTimetableEntryOut:
+    _timetable_admin(request.auth)
+    entry = SupervisorTimetableEntry.objects.select_related("supervisor", "zone", "site", "relief_person").filter(pk=entry_id).first()
+    if entry is None:
+        raise Http404("Timetable entry not found.")
+    values = payload.model_dump(exclude_unset=True)
+    if "relief_person_id" in values:
+        relief_id = values.pop("relief_person_id")
+        values["relief_person"] = User.objects.filter(pk=relief_id, is_active=True).first() if relief_id else None
+        if relief_id and values["relief_person"] is None:
+            raise Http404("Relief person not found.")
+    updated = deactivate_timetable_entry(entry=entry, actor=request.auth) if values == {"is_active": False} else update_timetable_entry(entry=entry, actor=request.auth, **values)
+    return _timetable_entry_out(updated)
+
+
+@router.get("/supervisor/timetable", response=list[SupervisorTimetableEntryOut])
+def supervisor_timetable_for_day(request: AuthenticatedRequest, work_date: date) -> list[SupervisorTimetableEntryOut]:
+    if request.auth.role not in {RoleCode.ZONE_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}:
+        raise PermissionDenied("This personal timetable is limited to Zone and Assistant General Supervisors.")
+    entries = SupervisorTimetableEntry.objects.filter(
+        supervisor=request.auth, is_active=True, effective_from__lte=work_date,
+    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=work_date)).select_related("supervisor", "zone", "site", "relief_person")
+    return [_timetable_entry_out(entry) for entry in entries if entry.is_scheduled_for(work_date)]
+
+
+@router.get("/supervisor/checklists", response=list[SupervisorChecklistOut])
+def supervisor_checklist_list(request: AuthenticatedRequest, work_date: date) -> list[SupervisorChecklistOut]:
+    if request.auth.role not in {RoleCode.ZONE_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}:
+        raise PermissionDenied("This checklist is limited to Zone and Assistant General Supervisors.")
+    submissions = SupervisorChecklistSubmission.objects.filter(supervisor=request.auth, work_date=work_date).select_related(
+        "timetable_entry", "supervisor", "site", "zone"
+    )
+    return [_supervisor_checklist_out(submission) for submission in submissions]
+
+
+@router.post("/supervisor/checklists", response=SupervisorChecklistOut)
+def supervisor_checklist_save(request: AuthenticatedRequest, payload: SupervisorChecklistSaveIn) -> SupervisorChecklistOut:
+    entry = SupervisorTimetableEntry.objects.select_related("supervisor", "site", "zone").filter(pk=payload.timetable_entry_id).first()
+    if entry is None:
+        raise Http404("Timetable entry not found.")
+    submission = save_supervisor_checklist(
+        actor=request.auth, timetable_entry=entry, work_date=payload.work_date,
+        checklist_kind=payload.checklist_kind, table_entries=payload.table_entries, notes=payload.notes,
+    )
+    return _supervisor_checklist_out(submission)
+
+
+@router.post("/supervisor/checklists/{submission_id}/submit", response=SupervisorChecklistOut)
+def supervisor_checklist_submit(request: AuthenticatedRequest, submission_id: int) -> SupervisorChecklistOut:
+    submission = SupervisorChecklistSubmission.objects.select_related("timetable_entry", "supervisor", "site", "zone").filter(pk=submission_id).first()
+    if submission is None:
+        raise Http404("Supervisor checklist not found.")
+    return _supervisor_checklist_out(submit_supervisor_checklist(submission=submission, actor=request.auth))
+
+
+@router.post("/supervisor/checklists/{submission_id}/review", response=SupervisorChecklistOut)
+def supervisor_checklist_review(
+    request: AuthenticatedRequest, submission_id: int, payload: SupervisorChecklistReviewIn
+) -> SupervisorChecklistOut:
+    submission = SupervisorChecklistSubmission.objects.select_related("timetable_entry", "supervisor", "site", "zone").filter(pk=submission_id).first()
+    if submission is None:
+        raise Http404("Supervisor checklist not found.")
+    reviewed = review_supervisor_checklist(
+        submission=submission, actor=request.auth, action=payload.action, reason=payload.reason
+    )
+    return _supervisor_checklist_out(reviewed)
 
 
 # --------------------------------------------------------------------------- #
