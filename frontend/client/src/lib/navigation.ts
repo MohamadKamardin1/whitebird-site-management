@@ -1,5 +1,5 @@
 /** White Bird role-aware navigation: UI visibility follows the capability matrix; API authorization remains authoritative. */
-import { Archive, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, UsersRound, UserRoundPlus, UserCog, GraduationCap } from "lucide-react";
+import { Archive, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, UsersRound, UserRoundPlus, UserCog, GraduationCap, WalletCards } from "lucide-react";
 
 export type NavEntry = { href: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
 
@@ -16,6 +16,7 @@ export const primaryNavigation: NavEntry[] = [
   { href: "/hr/assignments", label: "Assignments & shifts", icon: ClipboardList, roles: ["hr", "system_admin"] },
   { href: "/trainees", label: "Trainee management", icon: GraduationCap, roles: ["hr", "site_supervisor", "system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor"] },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
+  { href: "/remuneration", label: "Monthly remuneration", icon: WalletCards, roles: ["site_supervisor", "hr", "system_admin"] },
   { href: "/cleanliness", label: "Daily cleanliness", icon: ClipboardCheck, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },
   { href: "/supervision/roster", label: "My supervision timetable", icon: ClipboardList, roles: ["assistant_general_supervisor", "zone_supervisor"] },
   { href: "/operations/issues", label: "Issues & jobs", icon: HardHat, roles: ["system_admin", "general_supervisor", "assistant_general_supervisor", "zone_supervisor", "site_supervisor"] },

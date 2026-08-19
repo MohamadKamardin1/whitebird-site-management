@@ -172,6 +172,8 @@ from .models import (
     InspectionTemplateItem,
     Issue,
     Job,
+    MonthlyRemunerationLine,
+    MonthlyRemunerationReport,
     Notification,
     OperationalRole,
     Site,
@@ -221,6 +223,14 @@ from .reporting_services import (
     submit_general_management_report,
     submit_site_report,
     submit_zone_summary,
+)
+from .remuneration_services import (
+    prepare_monthly_remuneration,
+    remuneration_line_view,
+    remuneration_window_is_open,
+    review_monthly_remuneration,
+    save_payment_contact_decision,
+    submit_monthly_remuneration,
 )
 from .schemas import (
     AreaScheduleCreateIn,
@@ -287,6 +297,7 @@ from .schemas import (
     JobSummaryOut,
     JobUpdateIn,
     MessageOut,
+    MonthlyRemunerationReportOut,
     MissingSiteReportOut,
     NotificationOut,
     OperationalRoleCreateIn,
@@ -294,6 +305,9 @@ from .schemas import (
     OperationalRoleUpdateIn,
     ReportingStatusOut,
     ReportReturnIn,
+    RemunerationPaymentDecisionIn,
+    RemunerationPrepareIn,
+    RemunerationReviewIn,
     ScheduleRowOut,
     ShiftAssignIn,
     SiteAreaCreateIn,
@@ -1010,6 +1024,87 @@ def supervisor_checklist_review(
         submission=submission, actor=request.auth, action=payload.action, reason=payload.reason
     )
     return _supervisor_checklist_out(reviewed)
+
+
+def _remuneration_report_out(report: MonthlyRemunerationReport) -> MonthlyRemunerationReportOut:
+    lines = report.lines.select_related("cleaner").all()
+    return MonthlyRemunerationReportOut(
+        id=report.pk,
+        site_id=report.site_id,
+        site_name=report.site.name,
+        period=report.period,
+        prepared_by_id=report.prepared_by_id,
+        prepared_by_name=report.prepared_by.full_name,
+        status=report.status,
+        submitted_at=report.submitted_at,
+        return_reason=report.return_reason,
+        window_open=remuneration_window_is_open(),
+        lines=[remuneration_line_view(line) for line in lines],
+    )
+
+
+def _load_remuneration_report_or_404(report_id: int) -> MonthlyRemunerationReport:
+    report = MonthlyRemunerationReport.objects.select_related("site", "prepared_by").filter(pk=report_id).first()
+    if report is None:
+        raise Http404("Remuneration form not found.")
+    return report
+
+
+@router.post("/remuneration/sites/{site_id}/prepare", response=MonthlyRemunerationReportOut)
+def remuneration_prepare(
+    request: AuthenticatedRequest, site_id: int, payload: RemunerationPrepareIn
+) -> MonthlyRemunerationReportOut:
+    site = _load_site_or_404(site_id)
+    report = prepare_monthly_remuneration(actor=request.auth, site=site, period=payload.period)
+    return _remuneration_report_out(
+        MonthlyRemunerationReport.objects.select_related("site", "prepared_by").get(pk=report.pk)
+    )
+
+
+@router.get("/remuneration/sites/{site_id}", response=MonthlyRemunerationReportOut)
+def remuneration_detail(request: AuthenticatedRequest, site_id: int, period: date) -> MonthlyRemunerationReportOut:
+    if not site_in_user_scope(request.auth, site_id):
+        raise PermissionDenied("The remuneration site is outside your authorized scope.")
+    report = MonthlyRemunerationReport.objects.select_related("site", "prepared_by").filter(site_id=site_id, period=period).first()
+    if report is None:
+        raise Http404("No remuneration form exists for this site and month.")
+    if request.auth.role == RoleCode.SITE_SUPERVISOR and report.prepared_by_id != request.auth.pk:
+        raise PermissionDenied("You can only view the remuneration form you prepared.")
+    return _remuneration_report_out(report)
+
+
+@router.patch("/remuneration/reports/{report_id}/lines/{line_id}", response=MonthlyRemunerationReportOut)
+def remuneration_payment_decision(
+    request: AuthenticatedRequest, report_id: int, line_id: int, payload: RemunerationPaymentDecisionIn
+) -> MonthlyRemunerationReportOut:
+    report = _load_remuneration_report_or_404(report_id)
+    line = MonthlyRemunerationLine.objects.select_related("cleaner").filter(pk=line_id, report=report).first()
+    if line is None:
+        raise Http404("Remuneration row not found.")
+    save_payment_contact_decision(
+        report=report,
+        line=line,
+        actor=request.auth,
+        phone=payload.proposed_yas_zantel_phone,
+        account=payload.proposed_pbz_account_number,
+    )
+    return _remuneration_report_out(_load_remuneration_report_or_404(report.pk))
+
+
+@router.post("/remuneration/reports/{report_id}/submit", response=MonthlyRemunerationReportOut)
+def remuneration_submit(request: AuthenticatedRequest, report_id: int) -> MonthlyRemunerationReportOut:
+    report = submit_monthly_remuneration(report=_load_remuneration_report_or_404(report_id), actor=request.auth)
+    return _remuneration_report_out(_load_remuneration_report_or_404(report.pk))
+
+
+@router.post("/remuneration/reports/{report_id}/review", response=MonthlyRemunerationReportOut)
+def remuneration_review(
+    request: AuthenticatedRequest, report_id: int, payload: RemunerationReviewIn
+) -> MonthlyRemunerationReportOut:
+    report = review_monthly_remuneration(
+        report=_load_remuneration_report_or_404(report_id), actor=request.auth, action=payload.action, reason=payload.reason
+    )
+    return _remuneration_report_out(_load_remuneration_report_or_404(report.pk))
 
 
 # --------------------------------------------------------------------------- #

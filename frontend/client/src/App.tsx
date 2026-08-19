@@ -21,6 +21,7 @@ import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
 import IntegrationSettingsPage from "@/pages/IntegrationSettingsPage";
 import TraineeManagementPage from "@/pages/TraineeManagementPage";
+import RemunerationPage from "@/pages/RemunerationPage";
 import { SupervisorRosterPage, SupervisorTimetableAdminPage } from "@/pages/SupervisorRosterPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -50,6 +51,7 @@ function Router() {
     <Route path="/people/cleaners"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "People operations", title: "A cleaner registry built for responsible review.", description: "Search and review authorised cleaner records, document states, and onboarding readiness without exposing sensitive data outside policy.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
     <Route path="/people/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Work allocation", title: "Assignments that match the day’s reality.", description: "Find cleaner-site assignments and schedules, then use the backend-controlled lifecycle actions for active, suspended, and ended work.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/attendance"><ProtectedPage><AttendancePage /></ProtectedPage></Route>
+    <Route path="/remuneration"><ProtectedPage><RemunerationPage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/supervision/roster"><ProtectedPage><SupervisorRosterPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>

@@ -264,3 +264,12 @@
 - [x] Add the exact PDF equipment report headings and auditable site-equipment condition/movement workflow for the responsible scheduled supervisor role.
 - [x] Include immutable submission snapshots, actor/role/site/shift/date context, review states, and audit history for every supervisor checklist and equipment report.
 - [x] Add backend and frontend role-isolation, timetable, shift, off-day, multi-site submission, audit, PDF-label, and responsive-grid regression tests; validate, document, commit, and push.
+
+## Monthly Remuneration Preparation Form
+
+- [x] Preserve the exact remuneration-form heading and columns from `WBC_FOMUYAMISHAHARA.docx.pdf` in a documented source catalogue.
+- [x] Add a Site Supervisor remuneration window restricted to the 15th–25th of the selected Tanzania-local month, with clear open/closed state and no payroll calculation outside that window.
+- [x] Pre-fill only the authorized site’s active cleaners, their present/absent monthly attendance totals, and start-work date only when the cleaner began during the selected month.
+- [x] Add payment-contact confirmation that uses the last approved Yas/Zantel phone and PBZ account when no replacement is entered, while allowing an audited proposed replacement without exposing unmasked prior values broadly.
+- [x] Add administrator/HR review of remuneration contact changes and immutable submitted monthly snapshots including authenticated attestation rather than a copied signature image.
+- [x] Add a beginner-friendly spreadsheet-style remuneration form, role isolation, window, attendance, new-cleaner, payment-change, review, audit, and responsive-grid regression tests; validate, commit, and push.

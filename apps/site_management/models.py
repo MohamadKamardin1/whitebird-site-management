@@ -580,6 +580,97 @@ class SupervisorChecklistSubmission(UserStampedModel):
             raise ValidationError("The checklist supervisor must match the timetable entry.")
 
 
+class RemunerationWorkflowStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    REVIEWED = "reviewed", "Reviewed"
+    RETURNED = "returned", "Returned"
+
+
+class PaymentChangeStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class CleanerPaymentProfile(UserStampedModel):
+    """Last approved payment contact; values are only exposed masked to site staff."""
+
+    cleaner = models.OneToOneField("Cleaner", on_delete=models.CASCADE, related_name="payment_profile")
+    yas_zantel_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
+    pbz_account_number = models.CharField(max_length=64, blank=True, default="")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payment_profiles"
+    )
+
+    class Meta:
+        verbose_name = "Cleaner payment profile"
+        verbose_name_plural = "Cleaner payment profiles"
+
+
+class MonthlyRemunerationReport(UserStampedModel):
+    """One auditable site remuneration preparation form per calendar month."""
+
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="monthly_remuneration_reports")
+    period = models.DateField(db_index=True, help_text="First day of the remuneration month.")
+    prepared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="prepared_monthly_remuneration_reports"
+    )
+    status = models.CharField(
+        max_length=16, choices=RemunerationWorkflowStatus.choices, default=RemunerationWorkflowStatus.DRAFT, db_index=True
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_monthly_remuneration_reports"
+    )
+    return_reason = models.TextField(blank=True, default="")
+    snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Monthly remuneration report"
+        verbose_name_plural = "Monthly remuneration reports"
+        ordering = ["-period", "site__name"]
+        constraints = [models.UniqueConstraint(fields=["site", "period"], name="uniq_site_monthly_remuneration_report")]
+        indexes = [models.Index(fields=["site", "period", "status"])]
+
+    @property
+    def is_editable(self) -> bool:
+        return self.status in {RemunerationWorkflowStatus.DRAFT, RemunerationWorkflowStatus.RETURNED}
+
+    def clean(self) -> None:
+        super().clean()
+        if self.period and self.period.day != 1:
+            raise ValidationError("The remuneration period must be the first day of its month.")
+
+
+class MonthlyRemunerationLine(TimeStampedModel):
+    """Pre-filled cleaner row plus optional proposed payment-contact replacements."""
+
+    report = models.ForeignKey(MonthlyRemunerationReport, on_delete=models.CASCADE, related_name="lines")
+    cleaner = models.ForeignKey("Cleaner", on_delete=models.PROTECT, related_name="monthly_remuneration_lines")
+    assignment = models.ForeignKey("CleanerSiteAssignment", on_delete=models.PROTECT, related_name="monthly_remuneration_lines")
+    present_days = models.PositiveSmallIntegerField(default=0)
+    absent_days = models.PositiveSmallIntegerField(default=0)
+    start_work_date = models.DateField(null=True, blank=True)
+    proposed_yas_zantel_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
+    proposed_pbz_account_number = models.CharField(max_length=64, blank=True, default="")
+    phone_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
+    account_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
+
+    class Meta:
+        verbose_name = "Monthly remuneration line"
+        verbose_name_plural = "Monthly remuneration lines"
+        ordering = ["cleaner__last_name", "cleaner__first_name"]
+        constraints = [models.UniqueConstraint(fields=["report", "cleaner"], name="uniq_monthly_remuneration_cleaner")]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.assignment.site_id != self.report.site_id or self.assignment.cleaner_id != self.cleaner_id:
+            raise ValidationError("The remuneration line assignment must match the cleaner and report site.")
+
+
 class Notification(TimeStampedModel):
     """In-platform notification targeted at a user.
 

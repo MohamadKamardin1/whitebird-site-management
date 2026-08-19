@@ -176,6 +176,49 @@ class SupervisorChecklistOut(Schema):
     snapshot: dict[str, Any] = Field(default_factory=dict)
 
 
+class RemunerationPrepareIn(Schema):
+    period: date
+
+
+class RemunerationPaymentDecisionIn(Schema):
+    proposed_yas_zantel_phone: str = ""
+    proposed_pbz_account_number: str = ""
+
+
+class RemunerationReviewIn(Schema):
+    action: str = Field(pattern="^(reviewed|returned)$")
+    reason: str = ""
+
+
+class RemunerationLineOut(Schema):
+    id: int
+    cleaner_id: int
+    cleaner_name: str
+    present_days: int
+    absent_days: int
+    start_work_date: date | None = None
+    last_phone_masked: str = ""
+    last_account_masked: str = ""
+    proposed_yas_zantel_phone: str = ""
+    proposed_pbz_account_number: str = ""
+    phone_change_status: str
+    account_change_status: str
+
+
+class MonthlyRemunerationReportOut(Schema):
+    id: int
+    site_id: int
+    site_name: str
+    period: date
+    prepared_by_id: int
+    prepared_by_name: str
+    status: str
+    submitted_at: datetime | None = None
+    return_reason: str = ""
+    window_open: bool
+    lines: list[RemunerationLineOut] = Field(default_factory=list)
+
+
 class SiteCreateIn(Schema):
     name: str = Field(min_length=1, max_length=160)
     zone_id: int | None = None
