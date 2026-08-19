@@ -23,6 +23,8 @@ import IntegrationSettingsPage from "@/pages/IntegrationSettingsPage";
 import TraineeManagementPage from "@/pages/TraineeManagementPage";
 import RemunerationPage from "@/pages/RemunerationPage";
 import AdminRemunerationPage from "@/pages/AdminRemunerationPage";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import InboxPage from "@/pages/InboxPage";
 import { SupervisorRosterPage, SupervisorTimetableAdminPage } from "@/pages/SupervisorRosterPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -42,7 +44,7 @@ function Router() {
     <Route path="/admin/estate"><ProtectedPage><AdminEstatePage /></ProtectedPage></Route>
     <Route path="/admin/integrations"><ProtectedPage><IntegrationSettingsPage /></ProtectedPage></Route>
     <Route path="/admin/remuneration"><ProtectedPage><AdminRemunerationPage /></ProtectedPage></Route>
-    <Route path="/admin/users"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Platform governance", title: "Users and roles with accountable access.", description: "System administrators create, revoke, and review platform roles without entering daily site execution work.", endpoint: "/auth/users", filterLabel: "users", disableUsers: true }} /></ProtectedPage></Route>
+    <Route path="/admin/users"><ProtectedPage><AdminUsersPage /></ProtectedPage></Route>
     <Route path="/admin/supervisor-timetables"><ProtectedPage><SupervisorTimetableAdminPage /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
     <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>
@@ -61,6 +63,7 @@ function Router() {
     <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>
     <Route path="/reports"><ProtectedPage><ReportsPage /></ProtectedPage></Route>
     <Route path="/notifications"><ProtectedPage><NotificationsPage /></ProtectedPage></Route>
+    <Route path="/inbox"><ProtectedPage><InboxPage /></ProtectedPage></Route>
     <Route path="/settings/profile"><ProtectedPage><ProfilePage /></ProtectedPage></Route>
     <Route component={NotFound} />
   </Switch></WouterRouter>;

@@ -13,6 +13,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import AuditLog
@@ -112,7 +113,31 @@ def activate_user(*, user: User, actor: User) -> User:
 
 
 def deactivate_user(*, user: User, actor: User) -> User:
-    return update_user(user=user, actor=actor, is_active=False)
+    with transaction.atomic():
+        updated = update_user(user=user, actor=actor, is_active=False)
+        ApiToken.objects.filter(user=updated, is_active=True).update(is_active=False)
+        _audit(AuditLog.Action.TOKEN_REVOKE, actor, updated, "Revoked active tokens after account deactivation")
+    return updated
+
+
+def permanently_delete_user(*, user: User, actor: User) -> bool:
+    """Delete only a user without retained operational history; otherwise preserve evidence by deactivation."""
+    protected_relations = (
+        user.audit_logs.exists()
+        or user.api_tokens.exists()
+        or user.site_supervisor_assignments.exists()
+        or user.zone_supervisor_assignments.exists()
+        or user.ags_assignments.exists()
+        or user.supervisor_timetable_entries.exists()
+        or user.supervisor_checklist_submissions.exists()
+    )
+    if protected_relations:
+        deactivate_user(user=user, actor=actor)
+        _audit(AuditLog.Action.ARCHIVE, actor, user, "Retained user history; account deactivated instead of deleted")
+        return False
+    _audit(AuditLog.Action.DELETE, actor, user, f"Deleted user {user.email} with no retained operational history")
+    user.delete()
+    return True
 
 
 def login_and_issue_tokens(

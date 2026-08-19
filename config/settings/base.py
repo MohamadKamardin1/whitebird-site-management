@@ -55,6 +55,7 @@ LANGUAGE_CODE = env("LANGUAGE_CODE")
 
 INSTALLED_APPS = [
     # Django
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -132,6 +133,13 @@ if DATABASES["default"]["ENGINE"] != "django.db.backends.sqlite3":
     DATABASES["default"]["OPTIONS"] = {"connect_timeout": env.int("POSTGRES_CONNECT_TIMEOUT", default=10)}
 
 REDIS_URL = env.str("REDIS_URL", default="redis://127.0.0.1:6379/0")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [REDIS_URL]},
+    }
+}
 
 CACHES = {
     "default": {

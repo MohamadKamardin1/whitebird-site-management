@@ -281,3 +281,16 @@
 - [x] Include site, cleaner name, worked/present days, absent days, new-worker start date, masked previous payment contacts, proposed replacement contacts, change states, form status, and saved/submitted/reviewed audit actors and times in the administrator view.
 - [x] Preserve strict payment-data protection: administrators may review necessary audit information; non-administrators remain limited to their existing scoped and masked view.
 - [x] Add localization and administrator-all-site remuneration regression tests; validate, commit, and push.
+
+## Administrator User Management and Role-Scoped Messaging
+
+- [x] Build an administrator user directory with auditable user creation, activation, deactivation, protected deletion/retention policy, role change, password reset/change, full profile review, assignment history, and per-user audit trail.
+- [x] Add audited Site Supervisor assignment management: assign authorized site, transfer/change site with effective date, close old assignment, and preserve assignment history.
+- [x] Add audited Zone Supervisor zone assignment and transfer management with effective dates, active/inactive status, and historical zone accountability.
+- [x] Add audited Assistant General Supervisor zone assignment management, including multi-zone scope where policy permits, transfers, and historical accountability.
+- [x] Add General Supervisor account management and governed escalation/review scope without exposing unrelated operational data.
+- [x] Define strict role-scoped conversation permissions: Administrators can contact users; Zone Supervisors can contact their assigned Site Supervisors; Assistant and General Supervisors can contact authorized operational roles; all conversations are access-checked at creation and read time.
+- [x] Add private direct conversations and governed group conversations with retained membership history, read state, delivery timestamp, retained message audit trail, and bounded group membership governance.
+- [x] Add secure document, PDF, image, and voice-message attachments using protected object storage, file-type/size validation, metadata controls, and authorized user-bound download access.
+- [x] Add real-time message delivery and inbox UX with safe polling fallback, conversation search, unread counts, responsive WhatsApp-style layout, and no user-scope leakage.
+- [x] Add unit/API/UI regression tests for user lifecycle, password changes, role changes, supervisor transfers, conversation permissions, group membership, attachment authorization, realtime fallback, and audits; validate, document, commit, and push.

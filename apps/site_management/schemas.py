@@ -98,6 +98,45 @@ class SiteSupervisorOut(Schema):
     is_active: bool = True
 
 
+class SupervisorAssignmentCreateIn(Schema):
+    user_id: int
+    site_id: int | None = None
+    zone_id: int | None = None
+    all_zones: bool = False
+    assigned_from: date
+    assigned_to: date | None = None
+    is_primary: bool = False
+
+
+class SupervisorAssignmentTransferIn(Schema):
+    assigned_from: date
+    site_id: int | None = None
+    zone_id: int | None = None
+    all_zones: bool = False
+    is_primary: bool = False
+
+
+class SupervisorAssignmentHistoryOut(Schema):
+    id: int
+    assignment_type: str
+    user_id: int
+    user_name: str
+    user_role: str
+    site_id: int | None = None
+    site_name: str = ""
+    zone_id: int | None = None
+    zone_name: str = ""
+    all_zones: bool = False
+    assigned_from: date
+    assigned_to: date | None = None
+    is_primary: bool = False
+    is_active: bool
+    created_by_name: str = ""
+    updated_by_name: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+
 class SupervisorTimetableEntryIn(Schema):
     supervisor_id: int
     zone_id: int
@@ -1397,3 +1436,74 @@ class IntegrationSettingsOut(Schema):
 class IntegrationSettingsIn(Schema):
     deepseek_api_key: str | None = None
     mapbox_public_token: str | None = None
+
+
+class ConversationMemberOut(Schema):
+    id: int
+    full_name: str
+    email: str
+    role: str
+    joined_at: datetime
+    is_active: bool
+    last_read_at: datetime | None = None
+
+
+class ConversationAttachmentOut(Schema):
+    id: int
+    attachment_type: str
+    original_filename: str
+    content_type: str = ""
+    size_bytes: int = 0
+    download_token: str
+    download_url: str
+    duration_seconds: int | None = None
+    created_at: datetime
+
+
+class MessageOut(Schema):
+    id: int
+    conversation_id: int
+    sender_id: int | None = None
+    sender_name: str = ""
+    body: str = ""
+    attachments: list[ConversationAttachmentOut] = Field(default_factory=list)
+    created_at: datetime
+    delivered_at: datetime | None = None
+
+
+class ConversationOut(Schema):
+    id: int
+    conversation_type: str
+    title: str = ""
+    members: list[ConversationMemberOut] = Field(default_factory=list)
+    last_message_at: datetime | None = None
+    last_message_preview: str = ""
+    unread_count: int = 0
+    created_at: datetime
+
+
+class ConversationCreateIn(Schema):
+    conversation_type: str = Field(default="direct", pattern="^(direct|group)$")
+    title: str = Field(default="", max_length=160)
+    member_ids: list[int] = Field(default_factory=list)
+
+
+class MessageCreateIn(Schema):
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class MessagePageOut(Schema):
+    items: list[MessageOut] = Field(default_factory=list)
+    next_after_id: int | None = None
+
+
+class ConversationReadOut(Schema):
+    conversation_id: int
+    last_read_at: datetime
+
+
+class MessagingContactOut(Schema):
+    id: int
+    full_name: str
+    email: str
+    role: str

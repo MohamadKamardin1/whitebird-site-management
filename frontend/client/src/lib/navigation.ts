@@ -1,5 +1,5 @@
 /** White Bird role-aware navigation: UI visibility follows the capability matrix; API authorization remains authoritative. */
-import { Archive, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, PackageCheck, PackageSearch, Settings2, UsersRound, UserRoundPlus, UserCog, GraduationCap, WalletCards } from "lucide-react";
+import { Archive, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardList, FileBarChart2, Gauge, HardHat, LayoutDashboard, MessageCircleMore, PackageCheck, PackageSearch, Settings2, UsersRound, UserRoundPlus, UserCog, GraduationCap, WalletCards } from "lucide-react";
 
 export type NavEntry = { href: string; label: string; icon: typeof LayoutDashboard; roles?: string[] };
 
@@ -27,6 +27,7 @@ export const primaryNavigation: NavEntry[] = [
 ];
 
 export const secondaryNavigation: NavEntry[] = [
+  { href: "/inbox", label: "Messages", icon: MessageCircleMore },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings/profile", label: "Account & security", icon: Gauge },
   { href: "/reports", label: "Report archive", icon: Archive },

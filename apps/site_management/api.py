@@ -6,12 +6,13 @@ services (writes) or selectors (reads), and shape output schemas.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, cast
 
 from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from ninja import File, Form, Query, Router, UploadedFile
@@ -151,6 +152,7 @@ from .issues_services import (
 from .models import (
     Asset,
     AssetCategory,
+    AssistantGeneralSupervisorAssignment,
     AssistantGeneralSummaryReport,
     AttendanceRecord,
     AttendanceStatus,
@@ -161,6 +163,9 @@ from .models import (
     CleanerShiftAssignment,
     CleanerSiteAssignment,
     CleanerStatus,
+    Conversation,
+    ConversationMessage,
+    ConversationType,
     DailySiteReport,
     Department,
     Gender,
@@ -195,6 +200,7 @@ from .models import (
     ZoneSummaryReport,
     SupervisorChecklistSubmission,
     SupervisorTimetableEntry,
+    ZoneSupervisorAssignment,
 )
 from .policies import can_export_data
 from .reporting_selectors import (
@@ -262,6 +268,10 @@ from .schemas import (
     CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
+    ConversationCreateIn,
+    ConversationMemberOut,
+    ConversationOut,
+    ConversationReadOut,
     DailyReportChallengesIn,
     DailySiteReportOut,
     DepartmentCreateIn,
@@ -300,6 +310,8 @@ from .schemas import (
     JobUpdateIn,
     MessageOut,
     MonthlyRemunerationReportOut,
+    MessagingContactOut,
+    MessagePageOut,
     MissingSiteReportOut,
     NotificationOut,
     OperationalRoleCreateIn,
@@ -324,6 +336,9 @@ from .schemas import (
     SiteStatusOut,
     SiteSummaryOut,
     SiteSupervisorOut,
+    SupervisorAssignmentCreateIn,
+    SupervisorAssignmentHistoryOut,
+    SupervisorAssignmentTransferIn,
     SiteTypeOut,
     SiteUpdateIn,
     StatusRef,
@@ -363,6 +378,17 @@ from .schemas import (
     ZoneSummaryReportOut,
     ZoneUpdateIn,
 )
+from .messaging_serializers import contact_out, conversation_out, member_out, message_out
+from .messaging_services import (
+    contactable_users,
+    create_attachment_message,
+    create_group_conversation,
+    get_conversation_or_404,
+    get_or_create_direct_conversation,
+    mark_read,
+    send_message,
+    upload_attachment,
+)
 from .scoping import site_in_user_scope, visible_sites, visible_zones
 from .selectors import (
     SiteFilter,
@@ -385,6 +411,9 @@ from .selectors import (
 from .services import (
     SiteDraft,
     archive_site,
+    assign_assistant_general_supervisor,
+    assign_site_supervisor,
+    assign_zone_supervisor,
     assign_staff,
     create_area,
     create_asset,
@@ -397,6 +426,9 @@ from .services import (
     deactivate_department,
     deactivate_operational_role,
     deactivate_shift,
+    end_assistant_general_supervisor_assignment,
+    end_site_supervisor_assignment,
+    end_zone_supervisor_assignment,
     mark_all_notifications_read,
     mark_notifications_read,
     restore_site,
@@ -1583,6 +1615,142 @@ def assignment_set_primary(request: AuthenticatedRequest, site_id: int, assignme
     return _assignment_out(set_primary_assignment(assignment=assignment, actor=request.auth))
 
 
+def _supervisor_assignment_out(assignment: Any, assignment_type: str) -> SupervisorAssignmentHistoryOut:
+    site = getattr(assignment, "site", None)
+    zone = getattr(assignment, "zone", None)
+    return SupervisorAssignmentHistoryOut(
+        id=assignment.pk,
+        assignment_type=assignment_type,
+        user_id=assignment.user_id,
+        user_name=assignment.user.full_name,
+        user_role=assignment.user.role,
+        site_id=site.pk if site else None,
+        site_name=site.name if site else "",
+        zone_id=zone.pk if zone else None,
+        zone_name=zone.name if zone else "",
+        all_zones=getattr(assignment, "all_zones", False),
+        assigned_from=assignment.assigned_from,
+        assigned_to=assignment.assigned_to,
+        is_primary=getattr(assignment, "is_primary", False),
+        is_active=assignment.is_active,
+        created_by_name=assignment.created_by.full_name if assignment.created_by else "",
+        updated_by_name=assignment.updated_by.full_name if assignment.updated_by else "",
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+def _admin_supervisor_user_or_404(user_id: int, expected_role: RoleCode) -> User:
+    user = User.objects.filter(pk=user_id, is_active=True, role=expected_role).first()
+    if user is None:
+        raise Http404(f"An active {expected_role.label} account was not found.")
+    return user
+
+
+def _require_system_administrator(actor: User) -> None:
+    if not actor.is_system_admin:
+        raise PermissionDenied("System admin role required.")
+
+
+@router.get("/admin/supervisor-assignments", response=list[SupervisorAssignmentHistoryOut])
+def supervisor_assignment_history(request: AuthenticatedRequest, user_id: int | None = None) -> list[SupervisorAssignmentHistoryOut]:
+    _require_system_administrator(request.auth)
+    site_rows = SiteSupervisorAssignment.objects.select_related("user", "site", "created_by", "updated_by").all()
+    zone_rows = ZoneSupervisorAssignment.objects.select_related("user", "zone", "created_by", "updated_by").all()
+    assistant_rows = AssistantGeneralSupervisorAssignment.objects.select_related("user", "zone", "created_by", "updated_by").all()
+    if user_id is not None:
+        site_rows = site_rows.filter(user_id=user_id)
+        zone_rows = zone_rows.filter(user_id=user_id)
+        assistant_rows = assistant_rows.filter(user_id=user_id)
+    rows = [
+        *[_supervisor_assignment_out(row, "site_supervisor") for row in site_rows],
+        *[_supervisor_assignment_out(row, "zone_supervisor") for row in zone_rows],
+        *[_supervisor_assignment_out(row, "assistant_general_supervisor") for row in assistant_rows],
+    ]
+    return sorted(rows, key=lambda item: (item.user_name.lower(), item.assigned_from, item.id), reverse=True)
+
+
+@router.post("/admin/supervisor-assignments/{assignment_type}", response=SupervisorAssignmentHistoryOut)
+def supervisor_assignment_create(
+    request: AuthenticatedRequest, assignment_type: str, payload: SupervisorAssignmentCreateIn
+) -> SupervisorAssignmentHistoryOut:
+    _require_system_administrator(request.auth)
+    if assignment_type == "site_supervisor":
+        site = _load_site_or_404(payload.site_id or 0)
+        assignment = assign_site_supervisor(
+            site=site,
+            user=_admin_supervisor_user_or_404(payload.user_id, RoleCode.SITE_SUPERVISOR),
+            assigned_from=payload.assigned_from,
+            assigned_to=payload.assigned_to,
+            is_primary=payload.is_primary,
+            actor=request.auth,
+        )
+    elif assignment_type == "zone_supervisor":
+        zone = Zone.objects.filter(pk=payload.zone_id or 0, is_active=True).first()
+        if zone is None:
+            raise Http404("Zone not found.")
+        assignment = assign_zone_supervisor(
+            zone=zone,
+            user=_admin_supervisor_user_or_404(payload.user_id, RoleCode.ZONE_SUPERVISOR),
+            assigned_from=payload.assigned_from,
+            assigned_to=payload.assigned_to,
+            actor=request.auth,
+        )
+    elif assignment_type == "assistant_general_supervisor":
+        zone = Zone.objects.filter(pk=payload.zone_id, is_active=True).first() if payload.zone_id else None
+        if not payload.all_zones and zone is None:
+            raise ValidationError("Choose a zone or select all zones.")
+        assignment = assign_assistant_general_supervisor(
+            user=_admin_supervisor_user_or_404(payload.user_id, RoleCode.ASSISTANT_GENERAL_SUPERVISOR),
+            all_zones=payload.all_zones,
+            zone=zone,
+            assigned_from=payload.assigned_from,
+            assigned_to=payload.assigned_to,
+            actor=request.auth,
+        )
+    else:
+        raise ValidationError("Unsupported supervisor assignment type.")
+    return _supervisor_assignment_out(assignment, assignment_type)
+
+
+@router.post("/admin/supervisor-assignments/{assignment_type}/{assignment_id}/transfer", response=SupervisorAssignmentHistoryOut)
+def supervisor_assignment_transfer(
+    request: AuthenticatedRequest, assignment_type: str, assignment_id: int, payload: SupervisorAssignmentTransferIn
+) -> SupervisorAssignmentHistoryOut:
+    _require_system_administrator(request.auth)
+    if assignment_type == "site_supervisor":
+        old = SiteSupervisorAssignment.objects.select_related("user").filter(pk=assignment_id, is_active=True).first()
+        if old is None:
+            raise Http404("Active site supervisor assignment not found.")
+        old.assigned_to = payload.assigned_from - timedelta(days=1)
+        old.save(update_fields=["assigned_to", "updated_at"])
+        end_site_supervisor_assignment(assignment=old, actor=request.auth)
+        return supervisor_assignment_create(request, assignment_type, SupervisorAssignmentCreateIn(
+            user_id=old.user_id, site_id=payload.site_id, assigned_from=payload.assigned_from, is_primary=payload.is_primary
+        ))
+    if assignment_type == "zone_supervisor":
+        old = ZoneSupervisorAssignment.objects.select_related("user").filter(pk=assignment_id, is_active=True).first()
+        if old is None:
+            raise Http404("Active zone supervisor assignment not found.")
+        old.assigned_to = payload.assigned_from - timedelta(days=1)
+        old.save(update_fields=["assigned_to", "updated_at"])
+        end_zone_supervisor_assignment(assignment=old, actor=request.auth)
+        return supervisor_assignment_create(request, assignment_type, SupervisorAssignmentCreateIn(
+            user_id=old.user_id, zone_id=payload.zone_id, assigned_from=payload.assigned_from
+        ))
+    if assignment_type == "assistant_general_supervisor":
+        old = AssistantGeneralSupervisorAssignment.objects.select_related("user").filter(pk=assignment_id, is_active=True).first()
+        if old is None:
+            raise Http404("Active assistant general supervisor assignment not found.")
+        old.assigned_to = payload.assigned_from - timedelta(days=1)
+        old.save(update_fields=["assigned_to", "updated_at"])
+        end_assistant_general_supervisor_assignment(assignment=old, actor=request.auth)
+        return supervisor_assignment_create(request, assignment_type, SupervisorAssignmentCreateIn(
+            user_id=old.user_id, zone_id=payload.zone_id, all_zones=payload.all_zones, assigned_from=payload.assigned_from
+        ))
+    raise ValidationError("Unsupported supervisor assignment type.")
+
+
 # --------------------------------------------------------------------------- #
 # Statistics
 # --------------------------------------------------------------------------- #
@@ -1634,6 +1802,161 @@ def notification_unread_count(request: AuthenticatedRequest) -> dict[str, object
 def notification_mark_read(request: AuthenticatedRequest, notification_ids: list[int]) -> dict[str, object]:
     updated = mark_notifications_read(user=request.auth, notification_ids=notification_ids)
     return {"updated": updated}
+
+
+# --------------------------------------------------------------------------- #
+# Role-scoped messaging
+# --------------------------------------------------------------------------- #
+
+
+def _message_event_after_commit(*, conversation_id: int, message_id: int, actor_id: int) -> None:
+    """Notify authenticated WebSocket listeners after a message is durable."""
+
+    from .realtime import publish_conversation_event  # noqa: PLC0415
+
+    transaction.on_commit(
+        lambda: publish_conversation_event(
+            conversation_id=conversation_id,
+            event="message.created",
+            message_id=message_id,
+            actor_id=actor_id,
+        )
+    )
+
+
+@router.get("/conversations", response=list[ConversationOut], summary="My role-scoped inbox")
+def conversation_list(request: AuthenticatedRequest, unread_only: bool = False) -> list[ConversationOut]:
+    conversations = (
+        Conversation.objects.filter(is_active=True, memberships__user=request.auth, memberships__is_active=True)
+        .prefetch_related("memberships__user", "messages__attachments")
+        .distinct()
+        .order_by("-last_message_at", "-updated_at")
+    )
+    payload = [ConversationOut(**conversation_out(conversation, request.auth)) for conversation in conversations]
+    return [item for item in payload if item.unread_count > 0] if unread_only else payload
+
+
+@router.get("/conversations/unread-count", response=dict, summary="Unread conversation count")
+def conversation_unread_count(request: AuthenticatedRequest) -> dict[str, int]:
+    conversations = conversation_list(request, unread_only=True)
+    return {"count": sum(item.unread_count for item in conversations), "conversations": len(conversations)}
+
+
+@router.get("/conversations/contacts", response=list[MessagingContactOut], summary="Role-scoped messaging contacts")
+def conversation_contacts(request: AuthenticatedRequest) -> list[MessagingContactOut]:
+    return [MessagingContactOut(**contact_out(user)) for user in contactable_users(actor=request.auth)]
+
+
+@router.post("/conversations", response=ConversationOut, summary="Create or open a conversation")
+def conversation_create(request: AuthenticatedRequest, payload: ConversationCreateIn) -> ConversationOut:
+    if payload.conversation_type == ConversationType.DIRECT:
+        if len(payload.member_ids) != 1:
+            raise ValidationError("A direct conversation requires exactly one selected contact.")
+        recipient = User.objects.filter(pk=payload.member_ids[0], is_active=True).first()
+        if recipient is None:
+            raise Http404("Selected contact not found.")
+        conversation = get_or_create_direct_conversation(user_a=request.auth, user_b=recipient, actor=request.auth)
+    else:
+        conversation = create_group_conversation(title=payload.title, member_ids=payload.member_ids, actor=request.auth)
+    return ConversationOut(**conversation_out(conversation, request.auth))
+
+
+@router.get("/conversations/{conversation_id}/members", response=list[ConversationMemberOut], summary="Conversation membership")
+def conversation_members(request: AuthenticatedRequest, conversation_id: int) -> list[ConversationMemberOut]:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    memberships = conversation.memberships.select_related("user").order_by("joined_at", "pk")
+    return [ConversationMemberOut(**member_out(membership)) for membership in memberships]
+
+
+@router.get("/conversations/{conversation_id}/messages", response=MessagePageOut, summary="Conversation message history")
+def conversation_messages(
+    request: AuthenticatedRequest,
+    conversation_id: int,
+    after: int | None = None,
+    limit: int = 50,
+) -> MessagePageOut:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    bounded_limit = max(1, min(limit, 100))
+    query = conversation.messages.select_related("sender").prefetch_related("attachments")
+    if after is not None:
+        messages = list(query.filter(pk__gt=after).order_by("pk")[:bounded_limit])
+    else:
+        recent = list(query.order_by("-pk")[:bounded_limit])
+        messages = list(reversed(recent))
+    return MessagePageOut(
+        items=[MessageOut(**message_out(message, request.auth)) for message in messages],
+        next_after_id=messages[-1].pk if messages else after,
+    )
+
+
+@router.post("/conversations/{conversation_id}/messages", response=MessageOut, summary="Send a conversation message")
+def conversation_message_create(
+    request: AuthenticatedRequest, conversation_id: int, payload: MessageCreateIn
+) -> MessageOut:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    message = send_message(conversation=conversation, sender=request.auth, body=payload.body)
+    _message_event_after_commit(conversation_id=conversation.pk, message_id=message.pk, actor_id=request.auth.pk)
+    return MessageOut(**message_out(message, request.auth))
+
+
+@router.post("/conversations/{conversation_id}/attachments", response=MessageOut, summary="Send a private attachment message")
+def conversation_attachment_create(
+    request: AuthenticatedRequest,
+    conversation_id: int,
+    file: UploadedFile = File(...),
+    attachment_type: str = Form(...),
+    duration_seconds: int | None = Form(None),
+) -> MessageOut:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    message = create_attachment_message(
+        conversation=conversation,
+        upload=file,
+        attachment_type=attachment_type,
+        actor=request.auth,
+        duration_seconds=duration_seconds,
+    )
+    _message_event_after_commit(conversation_id=conversation.pk, message_id=message.pk, actor_id=request.auth.pk)
+    return MessageOut(**message_out(message, request.auth))
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/attachments",
+    response=MessageOut,
+    summary="Attach a private file to an existing message",
+)
+def conversation_message_attachment_create(
+    request: AuthenticatedRequest,
+    conversation_id: int,
+    message_id: int,
+    file: UploadedFile = File(...),
+    attachment_type: str = Form(...),
+    duration_seconds: int | None = Form(None),
+) -> MessageOut:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    message = (
+        ConversationMessage.objects.filter(pk=message_id, conversation=conversation)
+        .select_related("conversation", "sender")
+        .first()
+    )
+    if message is None:
+        raise Http404("Message not found.")
+    upload_attachment(
+        message=message,
+        upload=file,
+        attachment_type=attachment_type,
+        actor=request.auth,
+        duration_seconds=duration_seconds,
+    )
+    _message_event_after_commit(conversation_id=conversation.pk, message_id=message.pk, actor_id=request.auth.pk)
+    message = ConversationMessage.objects.select_related("sender").prefetch_related("attachments").get(pk=message.pk)
+    return MessageOut(**message_out(message, request.auth))
+
+
+@router.post("/conversations/{conversation_id}/read", response=ConversationReadOut, summary="Mark a conversation as read")
+def conversation_mark_read(request: AuthenticatedRequest, conversation_id: int) -> ConversationReadOut:
+    conversation = get_conversation_or_404(conversation_id=conversation_id, user=request.auth)
+    membership = mark_read(conversation=conversation, user=request.auth)
+    return ConversationReadOut(conversation_id=conversation.pk, last_read_at=membership.last_read_at)
 
 
 # --------------------------------------------------------------------------- #

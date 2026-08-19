@@ -10,6 +10,8 @@ from apps.accounts.auth import TokenAuth
 from apps.accounts.models import ApiToken, RoleCode, User
 from apps.accounts.permissions import role_required
 from apps.accounts.schemas import (
+    AdminPasswordResetIn,
+    AdminUserUpdateIn,
     LoginIn,
     LoginOut,
     LogoutIn,
@@ -22,15 +24,21 @@ from apps.accounts.schemas import (
     TokenCreateIn,
     TokenOut,
     UserOut,
+    UserAuditOut,
+    UserDeletionOut,
 )
 from apps.accounts.selectors import list_active_tokens, staff_directory, user_permissions, user_stats
 from apps.accounts.services import (
     create_user,
+    deactivate_user,
+    activate_user,
     issue_api_token,
     login_and_issue_tokens,
     refresh_access_token,
     revoke_api_token,
+    permanently_delete_user,
     set_password,
+    update_user,
 )
 from apps.accounts.tokens import access_token_lifetime_seconds
 from apps.core.models import AuditLog
@@ -169,6 +177,9 @@ def staff_list(request: AuthenticatedRequest) -> list[StaffMemberOut]:
             role=RoleCode(user.role),
             assignment_count=user.assignment_count,  # type: ignore[attr-defined]
             is_active=user.is_active,
+            phone=user.phone,
+            timezone=user.timezone,
+            created_at=user.created_at,
         )
         for user in staff_directory()
     ]
@@ -207,14 +218,90 @@ def user_disable(request: AuthenticatedRequest, user_id: int) -> User:
         raise ValidationError("User not found.")
     if target.pk == request.auth.pk:
         raise ValidationError("The current administrator cannot disable their own account.")
-    if target.is_active:
-        target.is_active = False
-        target.save(update_fields=["is_active", "updated_at"])
-        record_audit(
-            action=AuditLog.Action.STATUS_CHANGE,
-            actor=request.auth,
-            entity=target,
-            summary=f"Disabled user {target.email} without deleting historical records.",
-            after_data={"is_active": False, "role": target.role},
-        )
+    return deactivate_user(user=target, actor=request.auth)
+
+
+def _admin_target_or_404(*, actor: User, user_id: int) -> User:
+    if not actor.is_system_admin:
+        raise PermissionDenied("System admin role required.")
+    target = User.objects.filter(pk=user_id).first()
+    if target is None:
+        raise ValidationError("User not found.")
     return target
+
+
+def _protect_last_active_administrator(*, target: User, requested_active: bool | None, requested_role: RoleCode | None) -> None:
+    is_leaving_admin = target.is_system_admin and (requested_active is False or (requested_role and requested_role != RoleCode.SYSTEM_ADMIN))
+    if is_leaving_admin and User.objects.filter(role=RoleCode.SYSTEM_ADMIN, is_active=True).exclude(pk=target.pk).count() == 0:
+        raise ValidationError("At least one active System Administrator account must remain.")
+
+
+@router.post("/users/{user_id}/activate", response=UserOut, summary="Activate a user account")
+def user_activate(request: AuthenticatedRequest, user_id: int) -> User:
+    target = _admin_target_or_404(actor=request.auth, user_id=user_id)
+    return activate_user(user=target, actor=request.auth)
+
+
+@router.patch("/users/{user_id}", response=UserOut, summary="Update a user profile, role, or active state")
+def user_update(request: AuthenticatedRequest, user_id: int, payload: AdminUserUpdateIn) -> User:
+    target = _admin_target_or_404(actor=request.auth, user_id=user_id)
+    _protect_last_active_administrator(target=target, requested_active=payload.is_active, requested_role=payload.role)
+    if target.pk == request.auth.pk and payload.is_active is False:
+        raise ValidationError("The current administrator cannot deactivate their own account.")
+    return update_user(
+        user=target,
+        actor=request.auth,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        phone=payload.phone,
+        timezone=payload.timezone,
+        role=payload.role,
+        is_active=payload.is_active,
+    )
+
+
+@router.post("/users/{user_id}/password-reset", response=MessageOut, summary="Set a new password for a user")
+def user_password_reset(request: AuthenticatedRequest, user_id: int, payload: AdminPasswordResetIn) -> MessageOut:
+    target = _admin_target_or_404(actor=request.auth, user_id=user_id)
+    set_password(user=target, new_password=payload.new_password, actor=request.auth)
+    ApiToken.objects.filter(user=target, is_active=True).update(is_active=False)
+    record_audit(
+        action=AuditLog.Action.TOKEN_REVOKE,
+        actor=request.auth,
+        entity=target,
+        summary="Revoked active tokens after administrator password reset",
+    )
+    return MessageOut(detail="Password updated and active sessions revoked.")
+
+
+@router.delete("/users/{user_id}", response=UserDeletionOut, summary="Delete a user only when no historical evidence requires retention")
+def user_delete(request: AuthenticatedRequest, user_id: int) -> UserDeletionOut:
+    target = _admin_target_or_404(actor=request.auth, user_id=user_id)
+    if target.pk == request.auth.pk:
+        raise ValidationError("The current administrator cannot delete their own account.")
+    _protect_last_active_administrator(target=target, requested_active=False, requested_role=None)
+    target_id = target.pk
+    deleted = permanently_delete_user(user=target, actor=request.auth)
+    return UserDeletionOut(
+        user_id=target_id,
+        deleted=deleted,
+        retained=not deleted,
+        detail="User deleted." if deleted else "User retained for audit integrity and deactivated instead.",
+    )
+
+
+@router.get("/users/{user_id}/audit", response=list[UserAuditOut], summary="Read the audit history for one user")
+def user_audit(request: AuthenticatedRequest, user_id: int) -> list[UserAuditOut]:
+    target = _admin_target_or_404(actor=request.auth, user_id=user_id)
+    return [
+        UserAuditOut(
+            id=entry.pk,
+            action=entry.action,
+            summary=entry.summary,
+            actor_name=entry.user.full_name if entry.user else "System",
+            created_at=entry.created_at,
+            before_data=entry.before_data,
+            after_data=entry.after_data,
+        )
+        for entry in AuditLog.objects.filter(model_name__icontains="user", object_id=str(target.pk)).select_related("user")[:200]
+    ]

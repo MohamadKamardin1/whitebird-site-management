@@ -2370,3 +2370,99 @@ class AIOptimizationBrief(UserStampedModel):
 
     def __str__(self) -> str:
         return f"{self.get_brief_type_display()} {self.report_date} · {self.scope_key} · {self.status}"
+
+
+# --------------------------------------------------------------------------- #
+# Role-scoped conversations and secure attachments
+# --------------------------------------------------------------------------- #
+
+
+class ConversationType(models.TextChoices):
+    DIRECT = "direct", "Direct"
+    GROUP = "group", "Group"
+
+
+class Conversation(UserStampedModel):
+    """A retained direct or governed group conversation.
+
+    ``direct_key`` is deterministic for direct threads (sorted participant IDs),
+    preventing duplicate one-to-one inboxes. Group membership is versioned in
+    ``ConversationMembership`` rather than copied into JSON.
+    """
+
+    conversation_type = models.CharField(max_length=16, choices=ConversationType.choices, db_index=True)
+    title = models.CharField(max_length=160, blank=True, default="")
+    direct_key = models.CharField(max_length=64, blank=True, default=None, unique=True, null=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["-last_message_at", "-updated_at"]
+        indexes = [models.Index(fields=["conversation_type", "is_active", "last_message_at"])]
+
+    def __str__(self) -> str:
+        return self.title or f"{self.get_conversation_type_display()} conversation #{self.pk}"
+
+
+class ConversationMembership(UserStampedModel):
+    """Immutable membership dates provide group accountability and read state."""
+
+    conversation = models.ForeignKey(Conversation, on_delete=models.PROTECT, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="message_memberships")
+    joined_at = models.DateTimeField(default=timezone.now, db_index=True)
+    left_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["conversation_id", "user__email"]
+        constraints = [models.UniqueConstraint(fields=["conversation", "user"], name="uniq_conversation_member")]
+        indexes = [models.Index(fields=["user", "is_active", "conversation"])]
+
+    def __str__(self) -> str:
+        return f"{self.user} in conversation {self.conversation_id}"
+
+
+class ConversationMessage(UserStampedModel):
+    """An append-only message body; edits are intentionally not supported."""
+
+    conversation = models.ForeignKey(Conversation, on_delete=models.PROTECT, related_name="messages")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="sent_conversation_messages"
+    )
+    body = models.TextField(blank=True, default="", max_length=5000)
+    delivered_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [models.Index(fields=["conversation", "created_at"])]
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.body and not self.pk:
+            raise ValidationError("A message needs text or an attachment.")
+
+    def __str__(self) -> str:
+        return f"message {self.pk} in conversation {self.conversation_id}"
+
+
+class MessageAttachmentType(models.TextChoices):
+    DOCUMENT = "document", "Document"
+    PDF = "pdf", "PDF"
+    IMAGE = "image", "Image"
+    VOICE = "voice", "Voice"
+
+
+class ConversationMessageAttachment(PrivateFileModel):
+    """A private, metadata-validated attachment for a retained message."""
+
+    message = models.ForeignKey(ConversationMessage, on_delete=models.PROTECT, related_name="attachments")
+    attachment_type = models.CharField(max_length=16, choices=MessageAttachmentType.choices, db_index=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [models.Index(fields=["message", "attachment_type"])]
+
+    def __str__(self) -> str:
+        return self.original_filename or f"attachment {self.pk}"
