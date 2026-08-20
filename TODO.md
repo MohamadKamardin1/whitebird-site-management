@@ -294,3 +294,9 @@
 - [x] Add secure document, PDF, image, and voice-message attachments using protected object storage, file-type/size validation, metadata controls, and authorized user-bound download access.
 - [x] Add real-time message delivery and inbox UX with safe polling fallback, conversation search, unread counts, responsive WhatsApp-style layout, and no user-scope leakage.
 - [x] Add unit/API/UI regression tests for user lifecycle, password changes, role changes, supervisor transfers, conversation permissions, group membership, attachment authorization, realtime fallback, and audits; validate, document, commit, and push.
+
+## Operations Navigation Scrolling Fix
+
+- [x] Make the Operations navigation section independently vertically scrollable so long role-specific menus never overlap the Workspace links on desktop or mobile.
+- [x] Keep Workspace links and the sidebar scope summary consistently positioned and accessible after Operations navigation scrolling.
+- [ ] Validate the corrected desktop and mobile sidebar behavior, then commit and push the fix.
