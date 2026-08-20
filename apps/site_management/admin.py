@@ -974,7 +974,15 @@ class StockRequestAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[typ
     date_hierarchy = "request_date"
     raw_id_fields = ("site", "store", "requested_by", "reviewed_by", "created_by", "updated_by")
     inlines = [StockRequestItemInline]
-    actions = ["submit_requests", "review_requests", "reject_requests", "complete_requests"]
+    actions = [
+        "submit_requests",
+        "review_requests",
+        "assistant_approve_requests",
+        "start_hr_packing_requests",
+        "assemble_requests",
+        "reject_requests",
+        "complete_requests",
+    ]
     readonly_fields = ("status", "reviewed_by", "reviewed_at")
 
     @admin.display(description="Status")
@@ -1014,7 +1022,60 @@ class StockRequestAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[typ
                 updated += 1
             except Exception:
                 continue
-        self.message_user(request, f"{updated} request(s) reviewed.")
+        self.message_user(request, f"{updated} request(s) zone-verified.")
+
+    @admin.action(description="Assistant-approve selected verified requests")
+    def assistant_approve_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import assistant_approve_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.ZONE_VERIFIED):
+            approved = [
+                {
+                    "item_id": item.pk,
+                    "approved_quantity": item.verified_quantity if item.verified_quantity is not None else item.requested_quantity,
+                }
+                for item in stock_request.items.all()
+            ]
+            try:
+                assistant_approve_stock_request(request=stock_request, actor=request.user, approved=approved)
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) Assistant-approved.")
+
+    @admin.action(description="Move selected approved requests into HR packing")
+    def start_hr_packing_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import start_hr_stock_packing  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.ASSISTANT_APPROVED):
+            try:
+                start_hr_stock_packing(request=stock_request, actor=request.user, notes="HR packing via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) moved to HR packing.")
+
+    @admin.action(description="Record selected HR-packed requests as assembled")
+    def assemble_requests(self, request: Any, queryset: Any) -> None:
+        from apps.site_management.store_services import assemble_stock_request  # noqa: PLC0415
+
+        updated = 0
+        for stock_request in queryset.filter(status=StockRequestStatus.HR_PACKING):
+            packed = [
+                {
+                    "item_id": item.pk,
+                    "packed_quantity": item.assistant_approved_quantity or 0,
+                }
+                for item in stock_request.items.all()
+            ]
+            try:
+                assemble_stock_request(request=stock_request, actor=request.user, packed=packed, notes="Assembled via admin")
+                updated += 1
+            except Exception:
+                continue
+        self.message_user(request, f"{updated} request(s) assembled.")
 
     @admin.action(description="Reject selected requests")
     def reject_requests(self, request: Any, queryset: Any) -> None:
@@ -1022,7 +1083,13 @@ class StockRequestAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[typ
 
         updated = 0
         for stock_request in queryset.filter(
-            status__in=[StockRequestStatus.SUBMITTED, StockRequestStatus.ZONE_REVIEWED]
+            status__in=[
+                StockRequestStatus.SUBMITTED,
+                StockRequestStatus.ZONE_REVIEWED,
+                StockRequestStatus.ZONE_VERIFIED,
+                StockRequestStatus.ASSISTANT_APPROVED,
+                StockRequestStatus.HR_PACKING,
+            ]
         ):
             try:
                 reject_stock_request(request=stock_request, actor=request.user, reason="Rejected via admin")
@@ -1036,7 +1103,7 @@ class StockRequestAdmin(ScopedAdminMixin, admin.ModelAdmin):  # type: ignore[typ
         from apps.site_management.store_services import complete_stock_request  # noqa: PLC0415
 
         updated = 0
-        for stock_request in queryset.filter(status=StockRequestStatus.ZONE_REVIEWED):
+        for stock_request in queryset.filter(status=StockRequestStatus.ASSEMBLED):
             try:
                 complete_stock_request(request=stock_request, actor=request.user)
                 updated += 1

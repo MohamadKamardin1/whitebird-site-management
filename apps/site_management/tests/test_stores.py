@@ -30,9 +30,11 @@ from apps.site_management.factories import (
 from apps.site_management.models import (
     CleanerAssignmentStatus,
     CleanerStatus,
+    CompanyProduct,
     SiteStore,
     StockMovementType,
     StockRequestStatus,
+    StoreType,
     StoreItem,
 )
 from apps.site_management.store_selectors import (
@@ -50,7 +52,10 @@ from apps.site_management.store_selectors import (
 from apps.site_management.store_services import (
     add_store_item,
     adjust_stock,
+    assemble_stock_request,
+    assistant_approve_stock_request,
     complete_stock_request,
+    create_company_product,
     create_stock_request,
     create_store,
     issue_stock,
@@ -59,7 +64,9 @@ from apps.site_management.store_services import (
     record_stock_movement,
     reject_stock_request,
     review_stock_request,
+    start_hr_stock_packing,
     submit_stock_request,
+    transfer_stock,
     update_store,
     update_store_item,
 )
@@ -124,6 +131,62 @@ def test_negative_opening_stock_rejected(site, admin_user) -> None:
     store = _make_store(site)
     with pytest.raises(ValidationError):
         add_store_item(store=store, item_name="Bleach", actor=admin_user, opening_stock=Decimal("-1"))
+
+
+@pytest.mark.django_db
+def test_company_store_hierarchy_and_catalogue_transfer(site, admin_user) -> None:
+    super_store = create_store(site=None, store_name="Zanzibar Super Store", store_type=StoreType.SUPER, actor=admin_user)
+    power_store = create_store(
+        site=None,
+        store_name="Unguja Power Store",
+        store_type=StoreType.POWER,
+        parent_store=super_store,
+        actor=admin_user,
+    )
+    site_store = create_store(
+        site=site,
+        store_name="Beach Resort Site Store",
+        store_type=StoreType.SITE,
+        parent_store=power_store,
+        actor=admin_user,
+    )
+    assert site_store.parent_store_id == power_store.pk
+    product = create_company_product(
+        product_name="Hand soap",
+        product_code="SOAP-01",
+        unit="litre",
+        current_unit_cost=Decimal("4.50"),
+        actor=admin_user,
+        category="hygiene",
+    )
+    source_item = add_store_item(
+        store=power_store,
+        item_name="ignored when product is selected",
+        product=product,
+        opening_stock=Decimal("30"),
+        actor=admin_user,
+    )
+    destination_item = add_store_item(
+        store=site_store,
+        item_name="ignored when product is selected",
+        product=product,
+        opening_stock=Decimal("0"),
+        actor=admin_user,
+    )
+    transfer = transfer_stock(
+        source_item=source_item,
+        destination_item=destination_item,
+        quantity=Decimal("12"),
+        actor=admin_user,
+        notes="Monthly resort allocation",
+    )
+    source_item.refresh_from_db()
+    destination_item.refresh_from_db()
+    assert transfer.unit_cost == Decimal("4.50")
+    assert source_item.current_stock == Decimal("18")
+    assert destination_item.current_stock == Decimal("12")
+    assert transfer.movements.filter(movement_type=StockMovementType.TRANSFER_OUT).count() == 1
+    assert transfer.movements.filter(movement_type=StockMovementType.TRANSFER_IN).count() == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +332,8 @@ def test_low_stock_notifies_store_manager(site, admin_user) -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_request_workflow_to_completion(site, admin_user, zone_user) -> None:
+    assistant = UserFactory(role=RoleCode.ASSISTANT_GENERAL_SUPERVISOR)
+    hr = UserFactory(role=RoleCode.HR)
     store = _make_store(site)
     item = _make_item(store, "50")
     request = create_stock_request(
@@ -293,17 +358,39 @@ def test_request_workflow_to_completion(site, admin_user, zone_user) -> None:
         actor=zone_user,
         approved=[{"item_id": request_item.pk, "approved_quantity": Decimal("10")}],
     )
-    assert reviewed.status == StockRequestStatus.ZONE_REVIEWED
+    assert reviewed.status == StockRequestStatus.ZONE_VERIFIED
     assert reviewed.reviewed_by_id == zone_user.pk
+    request_item.refresh_from_db()
+    assert request_item.verified_quantity == Decimal("10")
 
     with pytest.raises(ValidationError):
         review_stock_request(request=request, actor=zone_user, approved=[])
 
-    completed = complete_stock_request(request=request, actor=zone_user)
+    assistant_approved = assistant_approve_stock_request(
+        request=request,
+        actor=assistant,
+        approved=[{"item_id": request_item.pk, "approved_quantity": Decimal("9")}],
+    )
+    assert assistant_approved.status == StockRequestStatus.ASSISTANT_APPROVED
+    request_item.refresh_from_db()
+    assert request_item.assistant_approved_quantity == Decimal("9")
+
+    packing = start_hr_stock_packing(request=request, actor=hr, notes="Prepare island dispatch")
+    assert packing.status == StockRequestStatus.HR_PACKING
+    assembled = assemble_stock_request(
+        request=request,
+        actor=hr,
+        packed=[{"item_id": request_item.pk, "packed_quantity": Decimal("9")}],
+    )
+    assert assembled.status == StockRequestStatus.ASSEMBLED
+    request_item.refresh_from_db()
+    assert request_item.packed_quantity == Decimal("9")
+
+    completed = complete_stock_request(request=request, actor=admin_user)
     assert completed.status == StockRequestStatus.COMPLETED
     item.refresh_from_db()
-    assert item.current_stock == Decimal("40")
-    assert item.movements.filter(movement_type=StockMovementType.ISSUED).exists()
+    assert item.current_stock == Decimal("50")
+    assert completed.approval_events.count() == 4
 
 
 @pytest.mark.django_db
@@ -323,6 +410,23 @@ def test_request_rejection(site, admin_user, zone_user) -> None:
     assert rejected.status == StockRequestStatus.REJECTED
     item.refresh_from_db()
     assert item.current_stock == Decimal("50")
+
+
+@pytest.mark.django_db
+def test_site_supervisor_request_window_locks_after_the_seventeenth(site, site_supervisor_user, monkeypatch) -> None:
+    from apps.site_management import store_services
+
+    SiteSupervisorAssignmentFactory(site=site, user=site_supervisor_user)
+    store = _make_store(site)
+    item = _make_item(store, "10")
+    monkeypatch.setattr(store_services.timezone, "localdate", lambda: date(2026, 8, 18))
+    with pytest.raises(ValidationError, match="after the 17th"):
+        create_stock_request(
+            site=site,
+            store=store,
+            actor=site_supervisor_user,
+            items=[{"store_item_id": item.pk, "requested_quantity": Decimal("2")}],
+        )
 
 
 @pytest.mark.django_db
@@ -462,8 +566,26 @@ def test_api_store_flow(site, admin_user, admin_client) -> None:
         data={"approved": [{"item_id": item_row_id, "approved_quantity": "4"}]},
         content_type="application/json",
     )
-    assert reviewed.json()["status"] == "zone_reviewed"
+    assert reviewed.json()["status"] == "zone_verified"
 
+    assistant_approved = admin_client.post(
+        f"/api/site-management/v1/stores/{store_id}/requests/{req_id}/assistant-approve",
+        data={"approved": [{"item_id": item_row_id, "approved_quantity": "4"}]},
+        content_type="application/json",
+    )
+    assert assistant_approved.json()["status"] == "assistant_approved"
+    packing = admin_client.post(
+        f"/api/site-management/v1/stores/{store_id}/requests/{req_id}/hr-pack",
+        data={"reason": "Prepare dispatch"},
+        content_type="application/json",
+    )
+    assert packing.json()["status"] == "hr_packing"
+    assembled = admin_client.post(
+        f"/api/site-management/v1/stores/{store_id}/requests/{req_id}/assemble",
+        data={"packed": [{"item_id": item_row_id, "packed_quantity": "4"}]},
+        content_type="application/json",
+    )
+    assert assembled.json()["status"] == "assembled"
     completed = admin_client.post(f"/api/site-management/v1/stores/{store_id}/requests/{req_id}/complete")
     assert completed.json()["status"] == "completed"
 
@@ -471,7 +593,7 @@ def test_api_store_flow(site, admin_user, admin_client) -> None:
     assert listed.json()["count"] == 1
     assert listed.json()["results"][0]["items"][0]["unit"] == item.json()["unit"]
     movements = admin_client.get(f"/api/site-management/v1/stores/{store_id}/movements", {"movement_type": "issued"})
-    assert movements.json()["count"] == 1
+    assert movements.json()["count"] == 0
 
 
 @pytest.mark.django_db
@@ -680,7 +802,7 @@ def test_admin_stock_request_actions(site, admin_user) -> None:
     req.refresh_from_db()
     assert req.status == StockRequestStatus.SUBMITTED
 
-    # Review action approves full requested quantities.
+    # Zone verification action records full requested quantities.
     assert (
         client.post(
             "/admin/site_management/stockrequest/",
@@ -689,10 +811,39 @@ def test_admin_stock_request_actions(site, admin_user) -> None:
         == 302
     )
     req.refresh_from_db()
-    assert req.status == StockRequestStatus.ZONE_REVIEWED
+    assert req.status == StockRequestStatus.ZONE_VERIFIED
     assert req.items.first().approved_quantity == Decimal("5")
 
-    # Complete action issues stock.
+    # Assistant approval, HR packing, and HR assembly retain each accountable step.
+    assert (
+        client.post(
+            "/admin/site_management/stockrequest/",
+            data={"action": "assistant_approve_requests", "_selected_action": [req.pk]},
+        ).status_code
+        == 302
+    )
+    req.refresh_from_db()
+    assert req.status == StockRequestStatus.ASSISTANT_APPROVED
+    assert (
+        client.post(
+            "/admin/site_management/stockrequest/",
+            data={"action": "start_hr_packing_requests", "_selected_action": [req.pk]},
+        ).status_code
+        == 302
+    )
+    req.refresh_from_db()
+    assert req.status == StockRequestStatus.HR_PACKING
+    assert (
+        client.post(
+            "/admin/site_management/stockrequest/",
+            data={"action": "assemble_requests", "_selected_action": [req.pk]},
+        ).status_code
+        == 302
+    )
+    req.refresh_from_db()
+    assert req.status == StockRequestStatus.ASSEMBLED
+
+    # Completion follows assembly and does not mutate site inventory; a separate transfer records delivery.
     assert (
         client.post(
             "/admin/site_management/stockrequest/",
@@ -703,7 +854,7 @@ def test_admin_stock_request_actions(site, admin_user) -> None:
     req.refresh_from_db()
     assert req.status == StockRequestStatus.COMPLETED
     item.refresh_from_db()
-    assert item.current_stock == Decimal("45")
+    assert item.current_stock == Decimal("50")
 
     # Reject action.
     req2 = _make_request()

@@ -376,3 +376,13 @@
 - [x] Add the Full day shift alongside Asubuhi and Mchana, preserving accurate display and audit history.
 - [x] Add administrator timetable list, activation, deactivation, replacement/addition, and safe deletion controls with retained-record safeguards where dependent checklist evidence exists.
 - [x] Extend RBAC, services, APIs, wizard behavior, scheduler displays, tests, documentation, validation, and release commit for the expanded timetable workflow.
+
+## Administrator Navigation and Multi-Tier Store Workflow
+- [x] Remove non-administrator operational tabs from the System Administrator navigation and remove the redundant Administration navigation entry.
+- [x] Add a controlled store hierarchy supporting Super Store, Power Store, and Site Store records, optional site assignment, parent-store distribution relationships, and administrator/store-manager management.
+- [x] Add a company product catalogue with unit of measure and current unit cost, plus per-store opening stock quantities for monthly inventory initialization.
+- [x] Record audited stock movements between stores, including item, source, destination, quantity, unit cost, movement date, responsible actor, and resulting inventory balances.
+- [x] Add store and site usage analytics that show weekly consumption quantities, values, high-use items, and the sites or stores using them.
+- [x] Restrict Site Supervisor monthly stock requests to the configured request window and lock request updates after the 17th day of the relevant month.
+- [x] Implement the requested approval chain: Site Supervisor submission, Zone Supervisor physical verification, Assistant General Supervisor approval, and HR packing/assembly visibility.
+- [x] Build bilingual role-aware store interfaces, API authorization, audit coverage, migrations, regression tests, validation, release documentation, commit, and push for the complete workflow.

@@ -13,7 +13,7 @@ from constance import config
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
 from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.utils import timezone
 from ninja import File, Form, Query, Router, UploadedFile
@@ -164,6 +164,7 @@ from .models import (
     CleanerShiftAssignment,
     CleanerSiteAssignment,
     CleanerStatus,
+    CompanyProduct,
     Conversation,
     ConversationMessage,
     ConversationType,
@@ -193,7 +194,11 @@ from .models import (
     StockMovement,
     StockMovementType,
     StockRequest,
+    StockRequestApproval,
+    StockTransfer,
     StoreItem,
+    StoreMonthlyOpening,
+    StoreType,
     TraineeEvaluation,
     TraineeProgram,
     WorkMode,
@@ -271,6 +276,9 @@ from .schemas import (
     CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
+    CompanyProductCreateIn,
+    CompanyProductOut,
+    CompanyProductUpdateIn,
     ConversationCreateIn,
     ConversationMemberOut,
     ConversationOut,
@@ -357,16 +365,23 @@ from .schemas import (
     SupervisorTimetableEntryUpdateIn,
     StockMovementCreateIn,
     StockMovementOut,
+    StockRequestAssemblyIn,
     StockRequestCreateIn,
     StockRequestDecisionIn,
     StockRequestItemOut,
     StockRequestOut,
     StockRequestReviewIn,
+    StockUsageTrendOut,
+    StockTransferCreateIn,
+    StockTransferOut,
     StoreCreateIn,
     StoreItemCreateIn,
     StoreItemOut,
     StoreItemUpdateIn,
+    StoreMonthlyOpeningIn,
+    StoreMonthlyOpeningOut,
     StoreOut,
+    StoreUpdateIn,
     TemplateItemIn,
     TemplateItemOut,
     ThemeOut,
@@ -461,14 +476,23 @@ from .store_selectors import (
 from .store_services import (
     add_store_item,
     adjust_stock,
+    assemble_stock_request,
+    assistant_approve_stock_request,
     complete_stock_request,
+    create_company_product,
     create_stock_request,
     create_store,
     record_damage_loss,
+    record_monthly_opening,
     record_stock_movement,
     reject_stock_request,
     review_stock_request,
+    start_hr_stock_packing,
     submit_stock_request,
+    transfer_stock,
+    update_company_product,
+    update_stock_request,
+    update_store,
     update_store_item,
 )
 from .supervisor_roster_services import (
@@ -3255,7 +3279,10 @@ def trainee_drop(request: AuthenticatedRequest, program_id: int, payload: Traine
 def _store_read(user: User, store_id: int) -> None:
     if not (management_required(user) or user.is_store_manager or user.is_management_viewer):
         raise PermissionDenied("Store records require a management role.")
-    if not user.is_system_admin and not site_in_user_scope(user, getattr(_load_store_or_404(store_id), "site_id", 0)):
+    if user.is_system_admin or user.is_store_manager or user.is_hr:
+        return
+    store = _load_store_or_404(store_id)
+    if store.site_id is None or not site_in_user_scope(user, store.site_id):
         raise PermissionDenied("You do not have access to this store.")
 
 
@@ -3270,9 +3297,9 @@ def _store_manage(user: User, store_id: int) -> None:
 
 
 def _store_configure(user: User, store_id: int | None = None) -> None:
-    """Only administrators define stores, stock items, and reorder thresholds."""
-    if not user.is_system_admin:
-        raise PermissionDenied("Only system administrators may define site stock.")
+    """Central inventory roles define stores, products, stock levels, and thresholds."""
+    if not (user.is_system_admin or user.is_store_manager):
+        raise PermissionDenied("Only System Administrators or Store Managers may configure company stock.")
     if store_id is not None:
         _store_read(user, store_id)
 
@@ -3291,6 +3318,37 @@ def _store_review(user: User) -> None:
         raise PermissionDenied("Only Store Manager or zone-level management can review stock requests.")
 
 
+def _central_inventory_manage(user: User) -> None:
+    if not (user.is_system_admin or user.is_store_manager):
+        raise PermissionDenied("Only System Administrators or Store Managers can manage company inventory.")
+
+
+def _site_stock_request_manage(user: User, store: SiteStore) -> None:
+    if user.is_system_admin:
+        return
+    if not user.is_site_supervisor or store.site_id is None or not site_in_user_scope(user, store.site_id):
+        raise PermissionDenied("Only the assigned Site Supervisor can prepare this site stock request.")
+
+
+def _zone_stock_request_verify(user: User, stock_request: StockRequest) -> None:
+    if user.is_system_admin:
+        return
+    if not user.is_zone_supervisor or not site_in_user_scope(user, stock_request.site_id):
+        raise PermissionDenied("Only the assigned Zone Supervisor can physically verify this stock request.")
+
+
+def _assistant_stock_request_approve(user: User, stock_request: StockRequest) -> None:
+    if user.is_system_admin:
+        return
+    if not user.is_assistant_general_supervisor or not site_in_user_scope(user, stock_request.site_id):
+        raise PermissionDenied("Only the assigned Assistant General Supervisor can approve this stock request.")
+
+
+def _hr_stock_request_pack(user: User) -> None:
+    if not (user.is_system_admin or user.is_hr):
+        raise PermissionDenied("Only HR can pack and assemble approved stock requests.")
+
+
 def _load_store_or_404(store_id: int) -> SiteStore:
     store = SiteStore.objects.filter(pk=store_id).first()
     if store is None:
@@ -3301,11 +3359,15 @@ def _load_store_or_404(store_id: int) -> SiteStore:
 def _store_out(store: SiteStore) -> StoreOut:
     annotated = getattr(store, "annotated_item_count", None)
     managed_by = store.managed_by
+    parent_store = store.parent_store
     return StoreOut(
         id=store.pk,
         site_id=store.site_id,
-        site_name=store.site.name,
+        site_name=store.site.name if store.site_id else None,
         store_name=store.store_name,
+        store_type=store.store_type,
+        parent_store_id=store.parent_store_id,
+        parent_store_name=parent_store.store_name if parent_store else None,
         location=store.location,
         managed_by=managed_by.email if managed_by else None,
         managed_by_id=store.managed_by_id,
@@ -3316,16 +3378,64 @@ def _store_out(store: SiteStore) -> StoreOut:
     )
 
 
+def _company_product_out(product: CompanyProduct) -> CompanyProductOut:
+    return CompanyProductOut(
+        id=product.pk,
+        product_name=product.product_name,
+        product_code=product.product_code,
+        unit=product.unit,
+        category=product.category,
+        current_unit_cost=product.current_unit_cost,
+        description=product.description,
+        is_active=product.is_active,
+        created_at=product.created_at,
+    )
+
+
+def _transfer_out(transfer: StockTransfer) -> StockTransferOut:
+    creator = transfer.created_by
+    return StockTransferOut(
+        id=transfer.pk,
+        source_store_id=transfer.source_store_id,
+        source_store_name=transfer.source_store.store_name,
+        destination_store_id=transfer.destination_store_id,
+        destination_store_name=transfer.destination_store.store_name,
+        product_id=transfer.product_id,
+        product_name=transfer.product.product_name,
+        quantity=transfer.quantity,
+        unit=transfer.product.unit,
+        unit_cost=transfer.unit_cost,
+        transfer_date=transfer.transfer_date,
+        notes=transfer.notes,
+        created_by=creator.email if creator else None,
+        created_at=transfer.created_at,
+    )
+
+
+def _monthly_opening_out(opening: StoreMonthlyOpening) -> StoreMonthlyOpeningOut:
+    return StoreMonthlyOpeningOut(
+        id=opening.pk,
+        store_item_id=opening.store_item_id,
+        item_name=opening.store_item.item_name,
+        opening_month=opening.opening_month,
+        opening_quantity=opening.opening_quantity,
+        unit_cost=opening.unit_cost,
+        created_at=opening.created_at,
+    )
+
+
 def _store_item_out(item: StoreItem) -> StoreItemOut:
     return StoreItemOut(
         id=item.pk,
         store_id=item.store_id,
+        product_id=item.product_id,
         item_name=item.item_name,
         item_code=item.item_code,
         unit=item.unit,
         category=item.category,
         opening_stock=item.opening_stock,
         current_stock=item.current_stock,
+        unit_cost=item.unit_cost,
         minimum_stock_level=item.minimum_stock_level,
         low_stock=item.low_stock,
         is_active=item.is_active,
@@ -3345,6 +3455,8 @@ def _movement_out(m: StockMovement) -> StockMovementOut:
         item_name=m.store_item.item_name,
         movement_type=m.movement_type,
         quantity=m.quantity,
+        unit_cost=m.unit_cost,
+        transfer_id=m.transfer_id,
         movement_date=m.movement_date,
         cleaner_id=m.cleaner_id,
         cleaner_name=cleaner.full_name if cleaner else None,
@@ -3367,6 +3479,9 @@ def _request_out(r: StockRequest) -> StockRequestOut:
             requested_quantity=item.requested_quantity,
             quantity_left=item.quantity_left,
             approved_quantity=item.approved_quantity,
+            verified_quantity=item.verified_quantity,
+            assistant_approved_quantity=item.assistant_approved_quantity,
+            packed_quantity=item.packed_quantity,
             unit=item.unit or item.store_item.unit,
             notes=item.notes,
         )
@@ -3379,11 +3494,21 @@ def _request_out(r: StockRequest) -> StockRequestOut:
         store_id=r.store_id,
         store_name=r.store.store_name,
         request_date=r.request_date,
+        request_month=r.request_month,
         requested_by=requested_by.email if requested_by else None,
         status=r.status,
         notes=r.notes,
         reviewed_by=reviewed_by.email if reviewed_by else None,
         reviewed_at=r.reviewed_at,
+        approval_events=[
+            {
+                "stage": approval.stage,
+                "decision_by": approval.decision_by.email,
+                "notes": approval.notes,
+                "created_at": approval.created_at,
+            }
+            for approval in r.approval_events.select_related("decision_by").all()
+        ],
         items=items,
         created_at=r.created_at,
     )
@@ -3394,6 +3519,137 @@ def _load_request_or_404(store_id: int, request_id: int) -> StockRequest:
     if request is None or request.store_id != store_id:
         raise Http404("Stock request not found.")
     return request
+
+
+@router.get("/inventory/usage-trends", response=list[StockUsageTrendOut], summary="Weekly stock usage and cost trends")
+def inventory_usage_trends_endpoint(
+    request: AuthenticatedRequest,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> list[StockUsageTrendOut]:
+    if not (request.auth.is_system_admin or request.auth.is_store_manager or request.auth.is_hr):
+        raise PermissionDenied("Stock usage trends require a central inventory role.")
+    end = date_to or timezone.localdate()
+    start = date_from or (end - timedelta(days=6))
+    cost_expression = ExpressionWrapper(
+        F("quantity") * F("unit_cost"), output_field=DecimalField(max_digits=24, decimal_places=2)
+    )
+    rows = (
+        StockMovement.objects.filter(
+            movement_type=StockMovementType.ISSUED,
+            movement_date__gte=start,
+            movement_date__lte=end,
+        )
+        .values(
+            "store_item__store_id",
+            "store_item__store__store_name",
+            "store_item__store__site__name",
+            "store_item__item_name",
+            "store_item__unit",
+        )
+        .annotate(quantity_used=Sum("quantity"), value_used=Sum(cost_expression))
+        .order_by("-value_used", "store_item__store__store_name", "store_item__item_name")
+    )
+    return [
+        StockUsageTrendOut(
+            store_id=row["store_item__store_id"],
+            store_name=row["store_item__store__store_name"],
+            site_name=row["store_item__store__site__name"],
+            item_name=row["store_item__item_name"],
+            unit=row["store_item__unit"],
+            quantity_used=row["quantity_used"],
+            value_used=row["value_used"],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/company-products", response=Paginated[CompanyProductOut], summary="List company products")
+def company_product_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    search: str | None = None,
+) -> Paginated[CompanyProductOut]:
+    if not (management_required(request.auth) or request.auth.is_management_viewer):
+        raise PermissionDenied("Company products require a management role.")
+    products = CompanyProduct.objects.all()
+    if search:
+        products = products.filter(Q(product_name__icontains=search) | Q(product_code__icontains=search))
+    items, count, page, page_size = paginate(products.order_by("product_name"), filters.page, filters.page_size)
+    return paginated_response(request, products, page, page_size, [_company_product_out(product) for product in items], count)
+
+
+@router.post("/company-products", response=CompanyProductOut, summary="Create a company product")
+def company_product_create_endpoint(request: AuthenticatedRequest, payload: CompanyProductCreateIn) -> CompanyProductOut:
+    _central_inventory_manage(request.auth)
+    return _company_product_out(
+        create_company_product(
+            product_name=payload.product_name,
+            product_code=payload.product_code,
+            unit=payload.unit,
+            current_unit_cost=payload.current_unit_cost,
+            category=payload.category,
+            description=payload.description,
+            actor=request.auth,
+        )
+    )
+
+
+@router.put("/company-products/{product_id}", response=CompanyProductOut, summary="Update a company product")
+def company_product_update_endpoint(
+    request: AuthenticatedRequest, product_id: int, payload: CompanyProductUpdateIn
+) -> CompanyProductOut:
+    _central_inventory_manage(request.auth)
+    product = CompanyProduct.objects.filter(pk=product_id).first()
+    if product is None:
+        raise Http404("Company product not found.")
+    return _company_product_out(
+        update_company_product(
+            product=product,
+            actor=request.auth,
+            product_name=payload.product_name,
+            product_code=payload.product_code,
+            unit=payload.unit,
+            category=payload.category,
+            current_unit_cost=payload.current_unit_cost,
+            description=payload.description,
+            is_active=payload.is_active,
+        )
+    )
+
+
+@router.get("/stock-transfers", response=Paginated[StockTransferOut], summary="List audited stock transfers")
+def stock_transfer_list_endpoint(
+    request: AuthenticatedRequest,
+    filters: PageParams = PAGE_PARAMS_DEFAULT,
+    store_id: int | None = None,
+) -> Paginated[StockTransferOut]:
+    if not (request.auth.is_system_admin or request.auth.is_store_manager or request.auth.is_hr):
+        raise PermissionDenied("Company transfer records require a central inventory role.")
+    transfers = StockTransfer.objects.select_related("source_store", "destination_store", "product", "created_by")
+    if store_id:
+        transfers = transfers.filter(Q(source_store_id=store_id) | Q(destination_store_id=store_id))
+    items, count, page, page_size = paginate(transfers, filters.page, filters.page_size)
+    return paginated_response(request, transfers, page, page_size, [_transfer_out(transfer) for transfer in items], count)
+
+
+@router.post("/stock-transfers", response=StockTransferOut, summary="Transfer stock between stores")
+def stock_transfer_create_endpoint(request: AuthenticatedRequest, payload: StockTransferCreateIn) -> StockTransferOut:
+    _central_inventory_manage(request.auth)
+    source = StoreItem.objects.select_related("store", "product").filter(pk=payload.source_item_id, is_active=True).first()
+    destination = StoreItem.objects.select_related("store", "product").filter(pk=payload.destination_item_id, is_active=True).first()
+    if source is None or destination is None:
+        raise Http404("Active source and destination store items are required.")
+    transfer = transfer_stock(
+        source_item=source,
+        destination_item=destination,
+        quantity=payload.quantity,
+        transfer_date=payload.transfer_date,
+        unit_cost=payload.unit_cost,
+        notes=payload.notes,
+        actor=request.auth,
+    )
+    return _transfer_out(StockTransfer.objects.select_related("source_store", "destination_store", "product", "created_by").get(pk=transfer.pk))
 
 
 @router.get(
@@ -3434,18 +3690,45 @@ def store_low_stock_endpoint(
 
 @router.post("/stores", response=StoreOut, summary="Create a store")
 def store_create(request: AuthenticatedRequest, payload: StoreCreateIn) -> StoreOut:
-    site = _load_site_or_404(payload.site_id)
     _store_configure(request.auth)
-    if not user_can_manage_site(request.auth, site.pk):
-        raise PermissionDenied("You do not have permission to create a store for this site.")
+    site = _load_site_or_404(payload.site_id) if payload.site_id else None
+    parent_store = SiteStore.objects.filter(pk=payload.parent_store_id).first() if payload.parent_store_id else None
+    if payload.parent_store_id and parent_store is None:
+        raise Http404("Parent store not found.")
     managed_by = User.objects.filter(pk=payload.managed_by_id).first() if payload.managed_by_id else None
     return _store_out(
         create_store(
             site=site,
             store_name=payload.store_name,
             actor=request.auth,
+            store_type=payload.store_type,
+            parent_store=parent_store,
             location=payload.location,
             managed_by=managed_by,
+        )
+    )
+
+
+@router.put("/stores/{store_id}", response=StoreOut, summary="Update a store hierarchy record")
+def store_update_endpoint(request: AuthenticatedRequest, store_id: int, payload: StoreUpdateIn) -> StoreOut:
+    _store_configure(request.auth, store_id)
+    store = _load_store_or_404(store_id)
+    site = _load_site_or_404(payload.site_id) if payload.site_id else None
+    parent_store = SiteStore.objects.filter(pk=payload.parent_store_id).first() if payload.parent_store_id else None
+    if payload.parent_store_id and parent_store is None:
+        raise Http404("Parent store not found.")
+    managed_by = User.objects.filter(pk=payload.managed_by_id).first() if payload.managed_by_id else None
+    return _store_out(
+        update_store(
+            store=store,
+            actor=request.auth,
+            site=site,
+            store_name=payload.store_name,
+            store_type=payload.store_type,
+            parent_store=parent_store,
+            location=payload.location,
+            managed_by=managed_by,
+            is_active=payload.is_active,
         )
     )
 
@@ -3467,14 +3750,19 @@ def store_items_endpoint(request: AuthenticatedRequest, store_id: int) -> list[S
 def store_item_create(request: AuthenticatedRequest, store_id: int, payload: StoreItemCreateIn) -> StoreItemOut:
     _store_configure(request.auth, store_id)
     store = _load_store_or_404(store_id)
+    product = CompanyProduct.objects.filter(pk=payload.product_id, is_active=True).first() if payload.product_id else None
+    if payload.product_id and product is None:
+        raise Http404("Active company product not found.")
     return _store_item_out(
         add_store_item(
             store=store,
             item_name=payload.item_name,
             actor=request.auth,
+            product=product,
             item_code=payload.item_code,
             unit=payload.unit,
             category=payload.category,
+            unit_cost=payload.unit_cost,
             opening_stock=payload.opening_stock,
             minimum_stock_level=payload.minimum_stock_level,
         )
@@ -3493,18 +3781,45 @@ def store_item_update(
     item = StoreItem.objects.filter(pk=item_id, store_id=store_id).first()
     if item is None:
         raise Http404("Store item not found.")
+    product = CompanyProduct.objects.filter(pk=payload.product_id, is_active=True).first() if payload.product_id else None
+    if payload.product_id and product is None:
+        raise Http404("Active company product not found.")
     return _store_item_out(
         update_store_item(
             item=item,
             actor=request.auth,
+            product=product,
             item_name=payload.item_name,
             item_code=payload.item_code,
             unit=payload.unit,
             category=payload.category,
+            unit_cost=payload.unit_cost,
             minimum_stock_level=payload.minimum_stock_level,
             is_active=payload.is_active,
         )
     )
+
+
+@router.post(
+    "/stores/{store_id}/monthly-openings",
+    response=StoreMonthlyOpeningOut,
+    summary="Record a monthly store opening balance",
+)
+def store_monthly_opening_create(
+    request: AuthenticatedRequest, store_id: int, payload: StoreMonthlyOpeningIn
+) -> StoreMonthlyOpeningOut:
+    _store_configure(request.auth, store_id)
+    item = StoreItem.objects.select_related("store").filter(pk=payload.store_item_id, store_id=store_id).first()
+    if item is None:
+        raise Http404("Store item not found.")
+    opening = record_monthly_opening(
+        store_item=item,
+        opening_month=payload.opening_month,
+        opening_quantity=payload.opening_quantity,
+        unit_cost=payload.unit_cost,
+        actor=request.auth,
+    )
+    return _monthly_opening_out(StoreMonthlyOpening.objects.select_related("store_item").get(pk=opening.pk))
 
 
 @router.get(
@@ -3609,8 +3924,10 @@ def store_requests_endpoint(
 def store_request_create(
     request: AuthenticatedRequest, store_id: int, payload: StockRequestCreateIn
 ) -> StockRequestOut:
-    _store_manage(request.auth, store_id)
     store = _load_store_or_404(store_id)
+    _site_stock_request_manage(request.auth, store)
+    if store.site_id is None or store.site is None:
+        raise ValidationError("Site stock requests require a Site Store assignment.")
     items = [
         {
             "store_item_id": row.store_item_id,
@@ -3631,13 +3948,41 @@ def store_request_create(
     return _request_out(stock_request_or_none(created.pk) or created)
 
 
+@router.put(
+    "/stores/{store_id}/requests/{request_id}",
+    response=StockRequestOut,
+    summary="Update a timely draft stock request",
+)
+def store_request_update(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestCreateIn
+) -> StockRequestOut:
+    store = _load_store_or_404(store_id)
+    _site_stock_request_manage(request.auth, store)
+    stock_request = _load_request_or_404(store_id, request_id)
+    updated = update_stock_request(
+        request=stock_request,
+        actor=request.auth,
+        items=[
+            {
+                "store_item_id": row.store_item_id,
+                "requested_quantity": row.requested_quantity,
+                "quantity_left": row.quantity_left,
+                "notes": row.notes,
+            }
+            for row in payload.items
+        ],
+        notes=payload.notes,
+    )
+    return _request_out(stock_request_or_none(updated.pk) or updated)
+
+
 @router.post(
     "/stores/{store_id}/requests/{request_id}/submit",
     response=StockRequestOut,
     summary="Submit a draft stock request",
 )
 def store_request_submit(request: AuthenticatedRequest, store_id: int, request_id: int) -> StockRequestOut:
-    _store_manage(request.auth, store_id)
+    _site_stock_request_manage(request.auth, _load_store_or_404(store_id))
     stock_request = _load_request_or_404(store_id, request_id)
     submit_stock_request(request=stock_request, actor=request.auth)
     return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
@@ -3651,10 +3996,58 @@ def store_request_submit(request: AuthenticatedRequest, store_id: int, request_i
 def store_request_review(
     request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestReviewIn
 ) -> StockRequestOut:
-    _store_review(request.auth)
     stock_request = _load_request_or_404(store_id, request_id)
+    _zone_stock_request_verify(request.auth, stock_request)
     approved = [{"item_id": row.item_id, "approved_quantity": row.approved_quantity} for row in payload.approved]
     review_stock_request(request=stock_request, actor=request.auth, approved=approved, notes=payload.notes)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/assistant-approve",
+    response=StockRequestOut,
+    summary="Approve a zone-verified stock request (Assistant General Supervisor)",
+)
+def store_request_assistant_approve(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestReviewIn
+) -> StockRequestOut:
+    stock_request = _load_request_or_404(store_id, request_id)
+    _assistant_stock_request_approve(request.auth, stock_request)
+    approved = [{"item_id": row.item_id, "approved_quantity": row.approved_quantity} for row in payload.approved]
+    assistant_approve_stock_request(request=stock_request, actor=request.auth, approved=approved, notes=payload.notes)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/hr-pack",
+    response=StockRequestOut,
+    summary="Move an Assistant-approved request into HR packing",
+)
+def store_request_hr_pack(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestDecisionIn
+) -> StockRequestOut:
+    _hr_stock_request_pack(request.auth)
+    stock_request = _load_request_or_404(store_id, request_id)
+    start_hr_stock_packing(request=stock_request, actor=request.auth, notes=payload.reason)
+    return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
+
+
+@router.post(
+    "/stores/{store_id}/requests/{request_id}/assemble",
+    response=StockRequestOut,
+    summary="Record HR assembled quantities",
+)
+def store_request_assemble(
+    request: AuthenticatedRequest, store_id: int, request_id: int, payload: StockRequestAssemblyIn
+) -> StockRequestOut:
+    _hr_stock_request_pack(request.auth)
+    stock_request = _load_request_or_404(store_id, request_id)
+    assemble_stock_request(
+        request=stock_request,
+        actor=request.auth,
+        packed=[{"item_id": row.item_id, "packed_quantity": row.packed_quantity} for row in payload.packed],
+        notes=payload.notes,
+    )
     return _request_out(stock_request_or_none(stock_request.pk) or stock_request)
 
 
@@ -3678,7 +4071,7 @@ def store_request_reject(
     summary="Complete a reviewed stock request (issues approved stock)",
 )
 def store_request_complete(request: AuthenticatedRequest, store_id: int, request_id: int) -> StockRequestOut:
-    _store_review(request.auth)
+    _central_inventory_manage(request.auth)
     stock_request = _load_request_or_404(store_id, request_id)
     complete_stock_request(request=stock_request, actor=request.auth)
     return _request_out(stock_request_or_none(stock_request.pk) or stock_request)

@@ -41,7 +41,7 @@ def store_list(user: User, spec: StoreFilter) -> QuerySet[SiteStore]:
     qs: QuerySet[SiteStore] = SiteStore.objects.select_related("site", "managed_by").annotate(
         annotated_item_count=Count("items", distinct=True)
     )
-    if not user.is_system_admin:
+    if not (user.is_system_admin or user.is_store_manager or user.is_hr):
         qs = qs.filter(site__in=visible_sites(user))
     if spec.site_id:
         qs = qs.filter(site_id=spec.site_id)
@@ -62,7 +62,7 @@ def store_detail(user: User, store_id: int) -> SiteStore | None:
 def stock_items(user: User, store_id: int) -> QuerySet[StoreItem]:
     """Active items of a store in the user's scope (single query)."""
     qs: QuerySet[StoreItem] = StoreItem.objects.select_related("store", "store__site").filter(store_id=store_id)
-    if not user.is_system_admin:
+    if not (user.is_system_admin or user.is_store_manager or user.is_hr):
         qs = qs.filter(store__site__in=visible_sites(user))
     return qs.order_by("item_name")
 
@@ -72,7 +72,7 @@ def stock_movements(user: User, spec: StockMovementFilter) -> QuerySet[StockMove
     qs: QuerySet[StockMovement] = StockMovement.objects.select_related(
         "store_item", "store_item__store", "store_item__store__site", "cleaner", "area", "recorded_by"
     )
-    if not user.is_system_admin:
+    if not (user.is_system_admin or user.is_store_manager or user.is_hr):
         qs = qs.filter(store_item__store__site__in=visible_sites(user))
     if spec.store_id:
         qs = qs.filter(store_item__store_id=spec.store_id)
@@ -92,7 +92,7 @@ def low_stock_items(user: User, site_id: int | None = None) -> QuerySet[StoreIte
     qs: QuerySet[StoreItem] = StoreItem.objects.select_related("store", "store__site").filter(
         current_stock__lte=F("minimum_stock_level")
     )
-    if not user.is_system_admin:
+    if not (user.is_system_admin or user.is_store_manager or user.is_hr):
         qs = qs.filter(store__site__in=visible_sites(user))
     if site_id:
         qs = qs.filter(store__site_id=site_id)
@@ -104,7 +104,7 @@ def stock_requests(user: User, spec: StockRequestFilter) -> QuerySet[StockReques
     qs: QuerySet[StockRequest] = StockRequest.objects.select_related(
         "site", "store", "requested_by", "reviewed_by"
     ).prefetch_related("items__store_item")
-    if not user.is_system_admin:
+    if not (user.is_system_admin or user.is_store_manager or user.is_hr):
         qs = qs.filter(site__in=visible_sites(user))
     if spec.store_id:
         qs = qs.filter(store_id=spec.store_id)

@@ -25,6 +25,7 @@ from apps.core.models import AuditLog
 from apps.core.services import model_data, publish_domain_event, record_audit
 
 from .models import (
+    CompanyProduct,
     INCREASING_MOVEMENT_TYPES,
     Cleaner,
     SiteArea,
@@ -32,9 +33,14 @@ from .models import (
     StockMovement,
     StockMovementType,
     StockRequest,
+    StockRequestApproval,
+    StockRequestApprovalStage,
     StockRequestItem,
     StockRequestStatus,
+    StockTransfer,
     StoreItem,
+    StoreMonthlyOpening,
+    StoreType,
 )
 from .services import notify
 
@@ -78,17 +84,21 @@ def _audit(
 
 def create_store(
     *,
-    site: Any,
+    site: Any | None,
     store_name: str,
     actor: User,
+    store_type: str = StoreType.SITE,
+    parent_store: SiteStore | None = None,
     location: str = "",
     managed_by: User | None = None,
 ) -> SiteStore:
-    """Create a store for a site (one or more stores per site allowed)."""
+    """Create a Super, Power, or Site Store with an optional site assignment."""
     with transaction.atomic():
         store = SiteStore(
             site=site,
             store_name=store_name,
+            store_type=store_type,
+            parent_store=parent_store,
             location=location,
             managed_by=managed_by,
             created_by=actor,
@@ -96,7 +106,8 @@ def create_store(
         )
         store.full_clean()
         store.save()
-        _audit(AuditLog.Action.CREATE, store, actor, f"Created store {store.store_name} at {site.name}")
+        scope = site.name if site else "company distribution network"
+        _audit(AuditLog.Action.CREATE, store, actor, f"Created {store.get_store_type_display()} {store.store_name} at {scope}")
     return store
 
 
@@ -104,7 +115,10 @@ def update_store(
     *,
     store: SiteStore,
     actor: User,
+    site: Any | None = None,
     store_name: str | None = None,
+    store_type: str | None = None,
+    parent_store: SiteStore | None = None,
     location: str | None = None,
     managed_by: User | None = None,
     is_active: bool | None = None,
@@ -112,8 +126,14 @@ def update_store(
     """Update store metadata or soft-deactivate it."""
     with transaction.atomic():
         before = model_data(store)
+        if site is not None:
+            store.site = site
         if store_name is not None:
             store.store_name = store_name
+        if store_type is not None:
+            store.store_type = store_type
+        if parent_store is not None:
+            store.parent_store = parent_store
         if location is not None:
             store.location = location
         if managed_by is not None:
@@ -127,14 +147,56 @@ def update_store(
     return store
 
 
+def create_company_product(
+    *,
+    product_name: str,
+    product_code: str,
+    unit: str,
+    current_unit_cost: Decimal,
+    actor: User,
+    category: str = "",
+    description: str = "",
+) -> CompanyProduct:
+    with transaction.atomic():
+        product = CompanyProduct(
+            product_name=product_name,
+            product_code=product_code,
+            unit=unit,
+            current_unit_cost=current_unit_cost,
+            category=category,
+            description=description,
+            created_by=actor,
+            updated_by=actor,
+        )
+        product.full_clean()
+        product.save()
+        _audit(AuditLog.Action.CREATE, product, actor, f"Created company product {product.product_name}")
+    return product
+
+
+def update_company_product(*, product: CompanyProduct, actor: User, **values: Any) -> CompanyProduct:
+    with transaction.atomic():
+        before = model_data(product)
+        for field, value in values.items():
+            if value is not None:
+                setattr(product, field, value)
+        product.updated_by = actor
+        product.full_clean()
+        product.save()
+        _audit(AuditLog.Action.UPDATE, product, actor, f"Updated company product {product.product_name}", before=before)
+    return product
+
+
 def add_store_item(
     *,
     store: SiteStore,
     item_name: str,
     actor: User,
+    product: CompanyProduct | None = None,
     item_code: str = "",
     unit: str = "piece",
     category: str = "",
+    unit_cost: Decimal | None = None,
     opening_stock: Decimal = Decimal("0"),
     minimum_stock_level: Decimal | None = None,
 ) -> StoreItem:
@@ -145,12 +207,14 @@ def add_store_item(
         min_level = minimum_stock_level if minimum_stock_level is not None else Decimal(str(config.LOW_STOCK_DEFAULT))
         item = StoreItem(
             store=store,
-            item_name=item_name,
-            item_code=item_code,
-            unit=unit,
-            category=category,
+            product=product,
+            item_name=product.product_name if product else item_name,
+            item_code=product.product_code if product else item_code,
+            unit=product.unit if product else unit,
+            category=product.category if product else category,
             opening_stock=opening_stock,
             current_stock=opening_stock,
+            unit_cost=unit_cost if unit_cost is not None else (product.current_unit_cost if product else Decimal("0")),
             minimum_stock_level=min_level,
             created_by=actor,
             updated_by=actor,
@@ -162,6 +226,7 @@ def add_store_item(
                 store_item=item,
                 movement_type=StockMovementType.OPENING,
                 quantity=opening_stock,
+                unit_cost=item.unit_cost,
                 movement_date=datetime.date.today(),
                 recorded_by=actor,
                 notes="Opening stock",
@@ -176,10 +241,12 @@ def update_store_item(
     *,
     item: StoreItem,
     actor: User,
+    product: CompanyProduct | None = None,
     item_name: str | None = None,
     item_code: str | None = None,
     unit: str | None = None,
     category: str | None = None,
+    unit_cost: Decimal | None = None,
     minimum_stock_level: Decimal | None = None,
     is_active: bool | None = None,
 ) -> StoreItem:
@@ -187,6 +254,12 @@ def update_store_item(
     it changes only through recorded movements."""
     with transaction.atomic():
         before = model_data(item)
+        if product is not None:
+            item.product = product
+            item.item_name = product.product_name
+            item.item_code = product.product_code
+            item.unit = product.unit
+            item.category = product.category
         if item_name is not None:
             item.item_name = item_name
         if item_code is not None:
@@ -195,6 +268,8 @@ def update_store_item(
             item.unit = unit
         if category is not None:
             item.category = category
+        if unit_cost is not None:
+            item.unit_cost = unit_cost
         if minimum_stock_level is not None:
             item.minimum_stock_level = minimum_stock_level
         if is_active is not None:
@@ -223,7 +298,13 @@ def _movement_delta(movement_type: str, quantity: Decimal) -> Decimal:
             raise ValidationError("Movement quantity must be positive.", code="positive_quantity_required")
         return quantity
     if movement_type in {
-        t.value for t in (StockMovementType.ISSUED, StockMovementType.DAMAGED, StockMovementType.LOST)
+        t.value
+        for t in (
+            StockMovementType.ISSUED,
+            StockMovementType.TRANSFER_OUT,
+            StockMovementType.DAMAGED,
+            StockMovementType.LOST,
+        )
     }:
         if quantity <= 0:
             raise ValidationError("Movement quantity must be positive.", code="positive_quantity_required")
@@ -243,6 +324,8 @@ def record_stock_movement(
     cleaner: Cleaner | None = None,
     area: SiteArea | None = None,
     notes: str = "",
+    unit_cost: Decimal | None = None,
+    transfer: StockTransfer | None = None,
 ) -> StockMovement:
     """Record a stock movement and atomically update ``current_stock``.
 
@@ -265,9 +348,11 @@ def record_stock_movement(
             store_item=locked,
             movement_type=movement_type,
             quantity=quantity if movement_type == StockMovementType.ADJUSTMENT else abs(delta),
+            unit_cost=unit_cost if unit_cost is not None else locked.unit_cost,
             movement_date=movement_date or datetime.date.today(),
             cleaner=cleaner,
             area=area,
+            transfer=transfer,
             notes=notes,
             recorded_by=actor,
             created_by=actor,
@@ -285,6 +370,111 @@ def record_stock_movement(
         )
         _maybe_low_stock_alert(locked, actor)
     return movement
+
+
+def transfer_stock(
+    *,
+    source_item: StoreItem,
+    destination_item: StoreItem,
+    quantity: Decimal,
+    actor: User,
+    transfer_date: datetime.date | None = None,
+    unit_cost: Decimal | None = None,
+    notes: str = "",
+) -> StockTransfer:
+    """Transfer a catalogue product between stores with linked debit/credit movements."""
+    if source_item.store_id == destination_item.store_id:
+        raise ValidationError("Source and destination stores must be different.", code="transfer_same_store")
+    if source_item.product_id is None or destination_item.product_id is None:
+        raise ValidationError("Transfers require company catalogue products at both stores.", code="transfer_product_required")
+    if source_item.product_id != destination_item.product_id:
+        raise ValidationError("Source and destination items must represent the same company product.", code="transfer_product_mismatch")
+    if quantity <= 0:
+        raise ValidationError("Transfer quantity must be positive.", code="transfer_quantity_invalid")
+    with transaction.atomic():
+        source = StoreItem.objects.select_for_update().select_related("store", "product").get(pk=source_item.pk)
+        destination = StoreItem.objects.select_for_update().select_related("store", "product").get(pk=destination_item.pk)
+        if source.current_stock < quantity and not config.ALLOW_NEGATIVE_STOCK:
+            raise ValidationError("Insufficient stock for this transfer.", code="insufficient_stock")
+        transfer = StockTransfer(
+            source_store=source.store,
+            destination_store=destination.store,
+            product=source.product,
+            source_item=source,
+            destination_item=destination,
+            quantity=quantity,
+            unit_cost=unit_cost if unit_cost is not None else source.unit_cost,
+            transfer_date=transfer_date or datetime.date.today(),
+            notes=notes,
+            created_by=actor,
+            updated_by=actor,
+        )
+        transfer.full_clean()
+        transfer.save()
+        record_stock_movement(
+            store_item=source,
+            movement_type=StockMovementType.TRANSFER_OUT,
+            quantity=quantity,
+            actor=actor,
+            movement_date=transfer.transfer_date,
+            notes=f"Transfer {transfer.pk} to {destination.store.store_name}. {notes}".strip(),
+            unit_cost=transfer.unit_cost,
+            transfer=transfer,
+        )
+        record_stock_movement(
+            store_item=destination,
+            movement_type=StockMovementType.TRANSFER_IN,
+            quantity=quantity,
+            actor=actor,
+            movement_date=transfer.transfer_date,
+            notes=f"Transfer {transfer.pk} from {source.store.store_name}. {notes}".strip(),
+            unit_cost=transfer.unit_cost,
+            transfer=transfer,
+        )
+        _audit(
+            AuditLog.Action.CREATE,
+            transfer,
+            actor,
+            f"Transferred {quantity} {source.unit} of {source.item_name} from {source.store.store_name} to {destination.store.store_name}",
+        )
+    return transfer
+
+
+def record_monthly_opening(
+    *,
+    store_item: StoreItem,
+    opening_month: datetime.date,
+    opening_quantity: Decimal,
+    unit_cost: Decimal,
+    actor: User,
+) -> StoreMonthlyOpening:
+    """Capture an auditable opening quantity and cost for one store item/month."""
+    month = opening_month.replace(day=1)
+    with transaction.atomic():
+        if StoreMonthlyOpening.objects.filter(store_item=store_item, opening_month=month).exists():
+            raise ValidationError("This store item already has an opening record for the selected month.", code="opening_exists")
+        movement = record_stock_movement(
+            store_item=store_item,
+            movement_type=StockMovementType.OPENING,
+            quantity=opening_quantity,
+            actor=actor,
+            movement_date=month,
+            notes=f"Monthly opening stock for {month.isoformat()}",
+            unit_cost=unit_cost,
+        )
+        opening = StoreMonthlyOpening(
+            store_item=store_item,
+            opening_month=month,
+            opening_quantity=opening_quantity,
+            unit_cost=unit_cost,
+            opening_movement=movement,
+            created_by=actor,
+            updated_by=actor,
+        )
+        opening.full_clean()
+        opening.save()
+        _audit(AuditLog.Action.CREATE, opening, actor, f"Recorded monthly opening for {store_item.item_name} at {store_item.store.store_name}")
+    return opening
 
 
 def _maybe_low_stock_alert(item: StoreItem, actor: User) -> None:
@@ -412,6 +602,12 @@ def adjust_stock(
 # --------------------------------------------------------------------------- #
 
 
+def _require_site_supervisor_request_window(actor: User) -> None:
+    """Site Supervisors may prepare or submit a monthly request only through day 17."""
+    if actor.role == "site_supervisor" and timezone.localdate().day > 17:
+        raise ValidationError("Monthly stock requests cannot be created or changed after the 17th.", code="request_window_closed")
+
+
 def create_stock_request(
     *,
     site: Any,
@@ -423,14 +619,17 @@ def create_stock_request(
 ) -> StockRequest:
     """Create a DRAFT stock request with its requested items."""
     with transaction.atomic():
+        _require_site_supervisor_request_window(actor)
         if store.site_id != site.pk:
             raise ValidationError("Store must belong to the site.", code="store_site_mismatch")
         if not items:
             raise ValidationError("A stock request needs at least one item.", code="no_items")
+        requested_date = request_date or datetime.date.today()
         request = StockRequest(
             site=site,
             store=store,
-            request_date=request_date or datetime.date.today(),
+            request_date=requested_date,
+            request_month=requested_date.replace(day=1),
             requested_by=actor,
             status=StockRequestStatus.DRAFT,
             notes=notes,
@@ -459,9 +658,45 @@ def create_stock_request(
     return request
 
 
+def update_stock_request(
+    *, request: StockRequest, actor: User, items: list[dict[str, Any]], notes: str = ""
+) -> StockRequest:
+    """Replace a Site Supervisor draft before the monthly request lock date."""
+    _require_site_supervisor_request_window(actor)
+    with transaction.atomic():
+        if request.status != StockRequestStatus.DRAFT:
+            raise ValidationError("Only draft requests can be changed.", code="invalid_status")
+        if request.requested_by_id != actor.pk and not actor.is_system_admin:
+            raise ValidationError("Only the requesting Site Supervisor can update this draft.", code="requester_required")
+        if not items:
+            raise ValidationError("A stock request needs at least one item.", code="no_items")
+        before = model_data(request)
+        request.items.all().delete()
+        for row in items:
+            store_item = StoreItem.objects.filter(pk=row["store_item_id"], store_id=request.store_id, is_active=True).first()
+            if store_item is None:
+                raise ValidationError("A selected item does not belong to this request store.", code="item_store_mismatch")
+            request_item = StockRequestItem(
+                request=request,
+                store_item=store_item,
+                requested_quantity=row["requested_quantity"],
+                quantity_left=row.get("quantity_left", 0),
+                unit=store_item.unit,
+                notes=row.get("notes", ""),
+            )
+            request_item.full_clean()
+            request_item.save()
+        request.notes = notes
+        request.updated_by = actor
+        request.save(update_fields=["notes", "updated_by", "updated_at"])
+        _audit(AuditLog.Action.UPDATE, request, actor, f"Updated stock request {request.pk}", before=before)
+    return request
+
+
 def submit_stock_request(*, request: StockRequest, actor: User) -> StockRequest:
     """Submit a draft request; emits a ``StockRequestSubmitted`` event."""
     with transaction.atomic():
+        _require_site_supervisor_request_window(actor)
         if request.status != StockRequestStatus.DRAFT:
             raise ValidationError("Only draft requests can be submitted.", code="invalid_status")
         if not request.items.exists():
@@ -493,7 +728,7 @@ def review_stock_request(
     approved: list[dict[str, Any]],
     notes: str = "",
 ) -> StockRequest:
-    """Review a submitted request: approve quantities per item → ZONE_REVIEWED."""
+    """Record a Zone Supervisor's physical verification quantities."""
     with transaction.atomic():
         if request.status != StockRequestStatus.SUBMITTED:
             raise ValidationError("Only submitted requests can be reviewed.", code="invalid_status")
@@ -511,25 +746,132 @@ def review_stock_request(
                 raise ValidationError(
                     "Approved quantity cannot exceed the requested quantity.", code="approved_exceeds_requested"
                 )
-            item.approved_quantity = approved_qty
-            item.save(update_fields=["approved_quantity", "updated_at"])
+            item.verified_quantity = approved_qty
+            item.approved_quantity = approved_qty  # legacy-compatible verified value
+            item.save(update_fields=["verified_quantity", "approved_quantity", "updated_at"])
         before = model_data(request)
-        request.status = StockRequestStatus.ZONE_REVIEWED
+        request.status = StockRequestStatus.ZONE_VERIFIED
         request.notes = notes if notes.strip() else request.notes
         request.reviewed_by = actor
         request.reviewed_at = timezone.now()
         request.updated_by = actor
         request.save(update_fields=["status", "notes", "reviewed_by", "reviewed_at", "updated_by", "updated_at"])
-        _audit(
-            AuditLog.Action.STATUS_CHANGE, request, actor, f"Zone reviewed stock request {request.pk}", before=before
+        StockRequestApproval.objects.create(
+            request=request,
+            stage=StockRequestApprovalStage.ZONE_VERIFIED,
+            decision_by=actor,
+            notes=notes,
+            created_by=actor,
+            updated_by=actor,
         )
+        _audit(AuditLog.Action.STATUS_CHANGE, request, actor, f"Zone verified stock request {request.pk}", before=before)
+    return request
+
+
+def assistant_approve_stock_request(
+    *, request: StockRequest, actor: User, approved: list[dict[str, Any]], notes: str = ""
+) -> StockRequest:
+    """Record Assistant General Supervisor approval after a physical zone verification."""
+    with transaction.atomic():
+        if request.status != StockRequestStatus.ZONE_VERIFIED:
+            raise ValidationError("Only zone-verified requests can be approved by an Assistant General Supervisor.", code="invalid_status")
+        request_items = {item.pk: item for item in request.items.select_related("store_item")}
+        for row in approved:
+            item = request_items.get(row["item_id"])
+            if item is None:
+                raise ValidationError("A selected item does not belong to this request.", code="item_not_in_request")
+            quantity = Decimal(str(row["approved_quantity"]))
+            cap = item.verified_quantity if item.verified_quantity is not None else item.requested_quantity
+            if quantity < 0 or quantity > cap:
+                raise ValidationError("Assistant approval must be between zero and the verified quantity.", code="assistant_quantity_invalid")
+            item.assistant_approved_quantity = quantity
+            item.save(update_fields=["assistant_approved_quantity", "updated_at"])
+        before = model_data(request)
+        request.status = StockRequestStatus.ASSISTANT_APPROVED
+        request.notes = notes if notes.strip() else request.notes
+        request.reviewed_by = actor
+        request.reviewed_at = timezone.now()
+        request.updated_by = actor
+        request.save(update_fields=["status", "notes", "reviewed_by", "reviewed_at", "updated_by", "updated_at"])
+        StockRequestApproval.objects.create(
+            request=request,
+            stage=StockRequestApprovalStage.ASSISTANT_APPROVED,
+            decision_by=actor,
+            notes=notes,
+            created_by=actor,
+            updated_by=actor,
+        )
+        _audit(AuditLog.Action.STATUS_CHANGE, request, actor, f"Assistant approved stock request {request.pk}", before=before)
+    return request
+
+
+def start_hr_stock_packing(*, request: StockRequest, actor: User, notes: str = "") -> StockRequest:
+    """Move an Assistant-approved request into the HR packing queue."""
+    with transaction.atomic():
+        if request.status != StockRequestStatus.ASSISTANT_APPROVED:
+            raise ValidationError("Only Assistant-approved requests can enter HR packing.", code="invalid_status")
+        before = model_data(request)
+        request.status = StockRequestStatus.HR_PACKING
+        request.notes = notes if notes.strip() else request.notes
+        request.updated_by = actor
+        request.save(update_fields=["status", "notes", "updated_by", "updated_at"])
+        StockRequestApproval.objects.create(
+            request=request,
+            stage=StockRequestApprovalStage.HR_PACKED,
+            decision_by=actor,
+            notes=notes,
+            created_by=actor,
+            updated_by=actor,
+        )
+        _audit(AuditLog.Action.STATUS_CHANGE, request, actor, f"HR began packing stock request {request.pk}", before=before)
+    return request
+
+
+def assemble_stock_request(
+    *, request: StockRequest, actor: User, packed: list[dict[str, Any]], notes: str = ""
+) -> StockRequest:
+    """Record the final quantities HR assembled for a request."""
+    with transaction.atomic():
+        if request.status != StockRequestStatus.HR_PACKING:
+            raise ValidationError("Only requests in HR packing can be assembled.", code="invalid_status")
+        request_items = {item.pk: item for item in request.items.all()}
+        for row in packed:
+            item = request_items.get(row["item_id"])
+            if item is None:
+                raise ValidationError("A selected item does not belong to this request.", code="item_not_in_request")
+            quantity = Decimal(str(row["packed_quantity"]))
+            cap = item.assistant_approved_quantity or Decimal("0")
+            if quantity < 0 or quantity > cap:
+                raise ValidationError("Packed quantity must be between zero and the Assistant-approved quantity.", code="packed_quantity_invalid")
+            item.packed_quantity = quantity
+            item.save(update_fields=["packed_quantity", "updated_at"])
+        before = model_data(request)
+        request.status = StockRequestStatus.ASSEMBLED
+        request.notes = notes if notes.strip() else request.notes
+        request.updated_by = actor
+        request.save(update_fields=["status", "notes", "updated_by", "updated_at"])
+        StockRequestApproval.objects.create(
+            request=request,
+            stage=StockRequestApprovalStage.ASSEMBLED,
+            decision_by=actor,
+            notes=notes,
+            created_by=actor,
+            updated_by=actor,
+        )
+        _audit(AuditLog.Action.STATUS_CHANGE, request, actor, f"HR assembled stock request {request.pk}", before=before)
     return request
 
 
 def reject_stock_request(*, request: StockRequest, actor: User, reason: str) -> StockRequest:
     """Reject a submitted request."""
     with transaction.atomic():
-        if request.status not in {StockRequestStatus.SUBMITTED, StockRequestStatus.ZONE_REVIEWED}:
+        if request.status not in {
+            StockRequestStatus.SUBMITTED,
+            StockRequestStatus.ZONE_REVIEWED,
+            StockRequestStatus.ZONE_VERIFIED,
+            StockRequestStatus.ASSISTANT_APPROVED,
+            StockRequestStatus.HR_PACKING,
+        }:
             raise ValidationError("This request cannot be rejected.", code="invalid_status")
         if not reason.strip():
             raise ValidationError("A reason is required to reject a request.", code="reason_required")
@@ -540,29 +882,20 @@ def reject_stock_request(*, request: StockRequest, actor: User, reason: str) -> 
         request.reviewed_at = timezone.now()
         request.updated_by = actor
         request.save(update_fields=["status", "notes", "reviewed_by", "reviewed_at", "updated_by", "updated_at"])
+        StockRequestApproval.objects.get_or_create(
+            request=request,
+            stage=StockRequestApprovalStage.REJECTED,
+            defaults={"decision_by": actor, "notes": reason, "created_by": actor, "updated_by": actor},
+        )
         _audit(AuditLog.Action.STATUS_CHANGE, request, actor, f"Rejected stock request {request.pk}", before=before)
     return request
 
 
 def complete_stock_request(*, request: StockRequest, actor: User) -> StockRequest:
-    """Complete a reviewed request by issuing approved quantities against the store."""
+    """Close an HR-assembled request after its separately audited transfer handover."""
     with transaction.atomic():
-        if request.status != StockRequestStatus.ZONE_REVIEWED:
-            raise ValidationError("Only zone-reviewed requests can be completed.", code="invalid_status")
-        issued = 0
-        for item in request.items.all():
-            if item.approved_quantity is None:
-                continue
-            record_stock_movement(
-                store_item=item.store_item,
-                movement_type=StockMovementType.ISSUED,
-                quantity=item.approved_quantity,
-                actor=actor,
-                notes=f"Stock request {request.pk}",
-            )
-            issued += 1
-        if issued == 0:
-            raise ValidationError("No approved quantities to complete.", code="no_approved_items")
+        if request.status != StockRequestStatus.ASSEMBLED:
+            raise ValidationError("Only HR-assembled requests can be completed.", code="invalid_status")
         before = model_data(request)
         request.status = StockRequestStatus.COMPLETED
         request.updated_by = actor

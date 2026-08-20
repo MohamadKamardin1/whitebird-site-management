@@ -15,7 +15,8 @@ import NotificationsPage from "@/pages/NotificationsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import NotFound from "@/pages/NotFound";
 import MarketingPage from "@/pages/MarketingPage";
-import { ReportsPage, SiteIssuesPage, StockRequestsPage } from "@/pages/OperationalWorkflowsPage";
+import { ReportsPage, SiteIssuesPage } from "@/pages/OperationalWorkflowsPage";
+import StockWorkflowPage from "@/pages/StockWorkflowPage";
 import RoleWorkspacesPage from "@/pages/RoleWorkspacesPage";
 import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
@@ -41,7 +42,6 @@ function Router() {
     <Route path="/marketing" component={MarketingPage} />
     <Route path="/login" component={LoginPage} />
     <Route path="/"><ProtectedPage><DashboardPage /></ProtectedPage></Route>
-    <Route path="/admin"><ProtectedPage><RoleWorkspacesPage mode="admin" /></ProtectedPage></Route>
     <Route path="/admin/estate"><ProtectedPage><AdminEstatePage /></ProtectedPage></Route>
     <Route path="/admin/integrations"><ProtectedPage><IntegrationSettingsPage /></ProtectedPage></Route>
     <Route path="/admin/remuneration"><ProtectedPage><AdminRemunerationPage /></ProtectedPage></Route>
@@ -62,7 +62,7 @@ function Router() {
     <Route path="/supervision/timetable"><ProtectedPage><PersonalSupervisorSchedulerPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
-    <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>
+    <Route path="/stores"><ProtectedPage><StockWorkflowPage /></ProtectedPage></Route>
     <Route path="/reports"><ProtectedPage><ReportsPage /></ProtectedPage></Route>
     <Route path="/notifications"><ProtectedPage><NotificationsPage /></ProtectedPage></Route>
     <Route path="/inbox"><ProtectedPage><InboxPage /></ProtectedPage></Route>

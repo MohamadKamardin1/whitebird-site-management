@@ -1468,21 +1468,49 @@ class StockMovementType(models.TextChoices):
     OPENING = "opening", "Opening"
     RECEIVED = "received", "Received"
     ISSUED = "issued", "Issued"
+    TRANSFER_IN = "transfer_in", "Transfer In"
+    TRANSFER_OUT = "transfer_out", "Transfer Out"
     RETURNED = "returned", "Returned"
     DAMAGED = "damaged", "Damaged"
     LOST = "lost", "Lost"
     ADJUSTMENT = "adjustment", "Adjustment"
 
 
-INCREASING_MOVEMENT_TYPES = {StockMovementType.OPENING, StockMovementType.RECEIVED, StockMovementType.RETURNED}
-DECREASING_MOVEMENT_TYPES = {StockMovementType.ISSUED, StockMovementType.DAMAGED, StockMovementType.LOST}
+INCREASING_MOVEMENT_TYPES = {
+    StockMovementType.OPENING,
+    StockMovementType.RECEIVED,
+    StockMovementType.TRANSFER_IN,
+    StockMovementType.RETURNED,
+}
+DECREASING_MOVEMENT_TYPES = {
+    StockMovementType.ISSUED,
+    StockMovementType.TRANSFER_OUT,
+    StockMovementType.DAMAGED,
+    StockMovementType.LOST,
+}
+
+
+class StoreType(models.TextChoices):
+    """Distribution level for the company-wide supply hierarchy."""
+
+    SUPER = "super", "Super Store"
+    POWER = "power", "Power Store"
+    SITE = "site", "Site Store"
 
 
 class SiteStore(UserStampedModel, ActivatableModel):
-    """A store location within a site. Sites may run one or more stores."""
+    """A physical stock point in the Super → Power → Site distribution hierarchy.
 
-    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="stores")
+    A site assignment is intentionally optional: Super and Power Stores may
+    supply more than one location, while Site Stores must identify their site.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.SET_NULL, related_name="stores", null=True, blank=True)
     store_name = models.CharField(max_length=160)
+    store_type = models.CharField(max_length=16, choices=StoreType.choices, default=StoreType.SITE, db_index=True)
+    parent_store = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="child_stores"
+    )
     location = models.CharField(max_length=255, blank=True, default="")
     managed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1493,13 +1521,31 @@ class SiteStore(UserStampedModel, ActivatableModel):
     )
 
     class Meta:
-        verbose_name = "Site store"
-        verbose_name_plural = "Site stores"
-        ordering = ["site__name", "store_name"]
-        indexes = [models.Index(fields=["site", "is_active"])]
+        verbose_name = "Store"
+        verbose_name_plural = "Stores"
+        ordering = ["store_type", "store_name"]
+        indexes = [
+            models.Index(fields=["site", "is_active"]),
+            models.Index(fields=["parent_store", "is_active"]),
+            models.Index(fields=["store_type", "is_active"]),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.store_name} @ {self.site.name}"
+        return f"{self.store_name} @ {self.site.name}" if self.site else self.store_name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.parent_store_id and self.parent_store_id == self.pk:
+            raise ValidationError("A store cannot distribute stock to itself.")
+        if self.store_type == StoreType.SUPER and self.parent_store_id:
+            raise ValidationError("A Super Store cannot have a parent store.")
+        if self.store_type == StoreType.POWER and self.parent_store and self.parent_store.store_type != StoreType.SUPER:
+            raise ValidationError("A Power Store may only be supplied by a Super Store.")
+        if self.store_type == StoreType.SITE:
+            if self.site_id is None:
+                raise ValidationError("A Site Store must be assigned to a site.")
+            if self.parent_store and self.parent_store.store_type not in {StoreType.SUPER, StoreType.POWER}:
+                raise ValidationError("A Site Store may only be supplied by a Super or Power Store.")
 
     @property
     def item_count(self) -> int:
@@ -1510,16 +1556,42 @@ class SiteStore(UserStampedModel, ActivatableModel):
         return self.items.filter(current_stock__lte=models.F("minimum_stock_level")).count()
 
 
+class CompanyProduct(UserStampedModel, ActivatableModel):
+    """The company-wide product catalogue and current reference unit price."""
+
+    product_name = models.CharField(max_length=160)
+    product_code = models.CharField(max_length=40, unique=True, db_index=True)
+    unit = models.CharField(max_length=32, default="piece")
+    category = models.CharField(max_length=64, blank=True, default="")
+    current_unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    description = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Company product"
+        verbose_name_plural = "Company products"
+        ordering = ["product_name"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(current_unit_cost__gte=0), name="ck_companyproduct_cost_nonneg"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product_name} ({self.unit})"
+
+
 class StoreItem(UserStampedModel, ActivatableModel):
-    """A stocked item in a site store with running stock level and reorder point."""
+    """A product stocked at one store with a running quantity and cost snapshot."""
 
     store = models.ForeignKey(SiteStore, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(
+        CompanyProduct, on_delete=models.SET_NULL, null=True, blank=True, related_name="store_items"
+    )
     item_name = models.CharField(max_length=160)
     item_code = models.CharField(max_length=32, blank=True, default="")
     unit = models.CharField(max_length=32, default="piece")
     category = models.CharField(max_length=64, blank=True, default="")
     opening_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     current_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     minimum_stock_level = models.DecimalField(max_digits=10, decimal_places=2, default=5)
 
     class Meta:
@@ -1534,6 +1606,7 @@ class StoreItem(UserStampedModel, ActivatableModel):
                 name="uniq_store_item_code",
             ),
             models.CheckConstraint(condition=models.Q(opening_stock__gte=0), name="ck_storeitem_opening_nonneg"),
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_storeitem_cost_nonneg"),
             models.CheckConstraint(condition=models.Q(minimum_stock_level__gte=0), name="ck_storeitem_min_nonneg"),
         ]
         indexes = [
@@ -1551,6 +1624,46 @@ class StoreItem(UserStampedModel, ActivatableModel):
         return self.current_stock <= self.minimum_stock_level
 
 
+class StockTransfer(UserStampedModel):
+    """An immutable, value-tracked movement of one product between two stores."""
+
+    source_store = models.ForeignKey(SiteStore, on_delete=models.PROTECT, related_name="outgoing_transfers")
+    destination_store = models.ForeignKey(SiteStore, on_delete=models.PROTECT, related_name="incoming_transfers")
+    product = models.ForeignKey(CompanyProduct, on_delete=models.PROTECT, related_name="transfers")
+    source_item = models.ForeignKey(StoreItem, on_delete=models.PROTECT, related_name="outgoing_transfers")
+    destination_item = models.ForeignKey(StoreItem, on_delete=models.PROTECT, related_name="incoming_transfers")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    transfer_date = models.DateField(db_index=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Stock transfer"
+        verbose_name_plural = "Stock transfers"
+        ordering = ["-transfer_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["source_store", "transfer_date"]),
+            models.Index(fields=["destination_store", "transfer_date"]),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="ck_stocktransfer_quantity_positive"),
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_stocktransfer_cost_nonneg"),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.source_store_id == self.destination_store_id:
+            raise ValidationError("Source and destination stores must be different.")
+        if self.source_item_id and self.source_item.store_id != self.source_store_id:
+            raise ValidationError("The source item must belong to the source store.")
+        if self.destination_item_id and self.destination_item.store_id != self.destination_store_id:
+            raise ValidationError("The destination item must belong to the destination store.")
+        if self.source_item_id and self.source_item.product_id not in {None, self.product_id}:
+            raise ValidationError("The source item does not match the transfer product.")
+        if self.destination_item_id and self.destination_item.product_id not in {None, self.product_id}:
+            raise ValidationError("The destination item does not match the transfer product.")
+
+
 class StockMovement(UserStampedModel):
     """An immutable stock movement against a store item.
 
@@ -1561,8 +1674,10 @@ class StockMovement(UserStampedModel):
     """
 
     store_item = models.ForeignKey(StoreItem, on_delete=models.CASCADE, related_name="movements")
+    transfer = models.ForeignKey(StockTransfer, on_delete=models.SET_NULL, null=True, blank=True, related_name="movements")
     movement_type = models.CharField(max_length=16, choices=StockMovementType.choices, db_index=True)
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     movement_date = models.DateField(db_index=True)
     cleaner = models.ForeignKey(
         Cleaner, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_movements"
@@ -1584,6 +1699,7 @@ class StockMovement(UserStampedModel):
         indexes = [models.Index(fields=["store_item", "movement_date"])]
         constraints = [
             models.CheckConstraint(condition=~models.Q(quantity=0), name="ck_stockmovement_nonzero"),
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_stockmovement_cost_nonneg"),
         ]
 
     def __str__(self) -> str:
@@ -1600,6 +1716,8 @@ class StockMovement(UserStampedModel):
         if self.movement_type != StockMovementType.ADJUSTMENT and self.quantity < 0:
             raise ValidationError("Only ADJUSTMENT movements may carry a negative quantity.", code="negative_magnitude")
         if self.cleaner_id and self.cleaner is not None:
+            if self.store_item.store.site_id is None:
+                raise ValidationError("Cleaner usage can only be recorded against a site-assigned store.")
             assigned = self.cleaner.site_assignments.filter(site_id=self.store_item.store.site_id).exists()
             if not assigned:
                 raise ValidationError(
@@ -1613,6 +1731,10 @@ class StockRequestStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     SUBMITTED = "submitted", "Submitted"
     ZONE_REVIEWED = "zone_reviewed", "Zone Reviewed"
+    ZONE_VERIFIED = "zone_verified", "Zone Verified"
+    ASSISTANT_APPROVED = "assistant_approved", "Assistant Approved"
+    HR_PACKING = "hr_packing", "HR Packing"
+    ASSEMBLED = "assembled", "Assembled"
     OFFICE_PROCESSED = "office_processed", "Office Processed"
     COMPLETED = "completed", "Completed"
     REJECTED = "rejected", "Rejected"
@@ -1651,6 +1773,7 @@ class StockRequest(UserStampedModel):
         related_name="reviewed_stock_requests",
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    request_month = models.DateField(null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = "Stock request"
@@ -1659,6 +1782,7 @@ class StockRequest(UserStampedModel):
         indexes = [
             models.Index(fields=["site", "status"]),
             models.Index(fields=["store", "status"]),
+            models.Index(fields=["request_month", "status"]),
         ]
 
     def __str__(self) -> str:
@@ -1670,6 +1794,34 @@ class StockRequest(UserStampedModel):
             raise ValidationError("Store must belong to the request's site.", code="store_site_mismatch")
 
 
+class StockRequestApprovalStage(models.TextChoices):
+    ZONE_VERIFIED = "zone_verified", "Zone Verified"
+    ASSISTANT_APPROVED = "assistant_approved", "Assistant Approved"
+    HR_PACKED = "hr_packed", "HR Packed"
+    ASSEMBLED = "assembled", "Assembled"
+    REJECTED = "rejected", "Rejected"
+
+
+class StockRequestApproval(UserStampedModel):
+    """Immutable accountability record for each requested stock handoff."""
+
+    request = models.ForeignKey(StockRequest, on_delete=models.CASCADE, related_name="approval_events")
+    stage = models.CharField(max_length=24, choices=StockRequestApprovalStage.choices)
+    decision_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="stock_request_decisions")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Stock request approval"
+        verbose_name_plural = "Stock request approvals"
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["request", "stage"], name="uniq_stockrequest_approval_stage"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.request_id} / {self.stage}"
+
+
 class StockRequestItem(TimeStampedModel):
     """A requested item within a stock request, with optional approved quantity."""
 
@@ -1678,6 +1830,9 @@ class StockRequestItem(TimeStampedModel):
     requested_quantity = models.DecimalField(max_digits=10, decimal_places=2)
     quantity_left = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     approved_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    verified_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    assistant_approved_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    packed_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     unit = models.CharField(max_length=32, blank=True, default="")
     notes = models.TextField(blank=True, default="")
 
@@ -1692,6 +1847,18 @@ class StockRequestItem(TimeStampedModel):
             models.CheckConstraint(
                 condition=models.Q(approved_quantity__gte=0) | models.Q(approved_quantity__isnull=True),
                 name="ck_stockrequestitem_approved_nonneg",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(verified_quantity__gte=0) | models.Q(verified_quantity__isnull=True),
+                name="ck_stockrequestitem_verified_nonneg",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(assistant_approved_quantity__gte=0) | models.Q(assistant_approved_quantity__isnull=True),
+                name="ck_stockrequestitem_assistant_approved_nonneg",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(packed_quantity__gte=0) | models.Q(packed_quantity__isnull=True),
+                name="ck_stockrequestitem_packed_nonneg",
             ),
             models.CheckConstraint(condition=models.Q(quantity_left__gte=0), name="ck_stockrequestitem_left_nonneg"),
         ]
@@ -1709,6 +1876,34 @@ class StockRequestItem(TimeStampedModel):
             raise ValidationError("Quantity left cannot be negative.", code="quantity_left_invalid")
         if self.approved_quantity is not None and self.approved_quantity < 0:
             raise ValidationError("Approved quantity cannot be negative.", code="approved_quantity_invalid")
+        if self.verified_quantity is not None and self.verified_quantity < 0:
+            raise ValidationError("Verified quantity cannot be negative.", code="verified_quantity_invalid")
+        if self.assistant_approved_quantity is not None and self.assistant_approved_quantity < 0:
+            raise ValidationError("Assistant approved quantity cannot be negative.", code="assistant_approved_quantity_invalid")
+        if self.packed_quantity is not None and self.packed_quantity < 0:
+            raise ValidationError("Packed quantity cannot be negative.", code="packed_quantity_invalid")
+
+
+class StoreMonthlyOpening(UserStampedModel):
+    """Recorded opening quantity and unit cost for one product/store/month."""
+
+    store_item = models.ForeignKey(StoreItem, on_delete=models.PROTECT, related_name="monthly_openings")
+    opening_month = models.DateField(db_index=True)
+    opening_quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    opening_movement = models.OneToOneField(
+        StockMovement, on_delete=models.PROTECT, related_name="monthly_opening_record", null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = "Store monthly opening"
+        verbose_name_plural = "Store monthly openings"
+        ordering = ["-opening_month", "store_item__item_name"]
+        constraints = [
+            models.UniqueConstraint(fields=["store_item", "opening_month"], name="uniq_store_monthly_opening"),
+            models.CheckConstraint(condition=models.Q(opening_quantity__gte=0), name="ck_storeopening_quantity_nonneg"),
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_storeopening_cost_nonneg"),
+        ]
 
 
 # --------------------------------------------------------------------------- #

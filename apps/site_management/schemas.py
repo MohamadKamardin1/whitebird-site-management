@@ -930,9 +930,12 @@ class TraineeSummaryOut(Schema):
 
 class StoreOut(Schema):
     id: int
-    site_id: int
-    site_name: str
+    site_id: int | None = None
+    site_name: str | None = None
     store_name: str
+    store_type: str = "site"
+    parent_store_id: int | None = None
+    parent_store_name: str | None = None
     location: str = ""
     managed_by: str | None = None
     managed_by_id: int | None = None
@@ -943,14 +946,19 @@ class StoreOut(Schema):
 
 
 class StoreCreateIn(Schema):
-    site_id: int
+    site_id: int | None = None
     store_name: str = Field(min_length=1, max_length=160)
+    store_type: str = Field(default="site", pattern="^(super|power|site)$")
+    parent_store_id: int | None = None
     location: str = Field(default="", max_length=255)
     managed_by_id: int | None = None
 
 
 class StoreUpdateIn(Schema):
+    site_id: int | None = None
     store_name: str | None = Field(default=None, min_length=1, max_length=160)
+    store_type: str | None = Field(default=None, pattern="^(super|power|site)$")
+    parent_store_id: int | None = None
     location: str | None = Field(default=None, max_length=255)
     managed_by_id: int | None = None
     is_active: bool | None = None
@@ -959,12 +967,14 @@ class StoreUpdateIn(Schema):
 class StoreItemOut(Schema):
     id: int
     store_id: int
+    product_id: int | None = None
     item_name: str
     item_code: str = ""
     unit: str = "piece"
     category: str = ""
     opening_stock: Decimal
     current_stock: Decimal
+    unit_cost: Decimal = Decimal("0")
     minimum_stock_level: Decimal
     low_stock: bool = False
     is_active: bool = True
@@ -972,19 +982,23 @@ class StoreItemOut(Schema):
 
 
 class StoreItemCreateIn(Schema):
+    product_id: int | None = None
     item_name: str = Field(min_length=1, max_length=160)
     item_code: str = Field(default="", max_length=32)
     unit: str = Field(default="piece", max_length=32)
     category: str = Field(default="", max_length=64)
+    unit_cost: Decimal | None = Field(default=None, ge=0)
     opening_stock: Decimal = Field(default=Decimal("0"), ge=0)
     minimum_stock_level: Decimal | None = Field(default=None, ge=0)
 
 
 class StoreItemUpdateIn(Schema):
+    product_id: int | None = None
     item_name: str | None = Field(default=None, min_length=1, max_length=160)
     item_code: str | None = Field(default=None, max_length=32)
     unit: str | None = Field(default=None, max_length=32)
     category: str | None = Field(default=None, max_length=64)
+    unit_cost: Decimal | None = Field(default=None, ge=0)
     minimum_stock_level: Decimal | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
@@ -997,6 +1011,8 @@ class StockMovementOut(Schema):
     item_name: str
     movement_type: str
     quantity: Decimal
+    unit_cost: Decimal = Decimal("0")
+    transfer_id: int | None = None
     movement_date: date
     cleaner_id: int | None = None
     cleaner_name: str | None = None
@@ -1025,6 +1041,9 @@ class StockRequestItemOut(Schema):
     requested_quantity: Decimal
     quantity_left: Decimal = Decimal("0")
     approved_quantity: Decimal | None = None
+    verified_quantity: Decimal | None = None
+    assistant_approved_quantity: Decimal | None = None
+    packed_quantity: Decimal | None = None
     unit: str = ""
     notes: str = ""
 
@@ -1036,11 +1055,13 @@ class StockRequestOut(Schema):
     store_id: int
     store_name: str
     request_date: date
+    request_month: date | None = None
     requested_by: str | None = None
     status: str
     notes: str = ""
     reviewed_by: str | None = None
     reviewed_at: datetime | None = None
+    approval_events: list["StockRequestApprovalOut"] = Field(default_factory=list)
     items: list[StockRequestItemOut] = Field(default_factory=list)
     created_at: datetime
 
@@ -1070,6 +1091,107 @@ class StockRequestApprovalIn(Schema):
 
 class StockRequestDecisionIn(Schema):
     reason: str = Field(default="", min_length=1)
+
+
+class StockRequestApprovalOut(Schema):
+    stage: str
+    decision_by: str
+    notes: str = ""
+    created_at: datetime
+
+
+class StockRequestAssemblyItemIn(Schema):
+    item_id: int
+    packed_quantity: Decimal = Field(ge=0)
+
+
+class StockRequestAssemblyIn(Schema):
+    packed: list[StockRequestAssemblyItemIn] = Field(min_length=1)
+    notes: str = ""
+
+
+class CompanyProductOut(Schema):
+    id: int
+    product_name: str
+    product_code: str
+    unit: str
+    category: str = ""
+    current_unit_cost: Decimal
+    description: str = ""
+    is_active: bool = True
+    created_at: datetime
+
+
+class CompanyProductCreateIn(Schema):
+    product_name: str = Field(min_length=1, max_length=160)
+    product_code: str = Field(min_length=1, max_length=40)
+    unit: str = Field(min_length=1, max_length=32)
+    category: str = Field(default="", max_length=64)
+    current_unit_cost: Decimal = Field(ge=0)
+    description: str = ""
+
+
+class CompanyProductUpdateIn(Schema):
+    product_name: str | None = Field(default=None, min_length=1, max_length=160)
+    product_code: str | None = Field(default=None, min_length=1, max_length=40)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    category: str | None = Field(default=None, max_length=64)
+    current_unit_cost: Decimal | None = Field(default=None, ge=0)
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class StockTransferCreateIn(Schema):
+    source_item_id: int
+    destination_item_id: int
+    quantity: Decimal = Field(gt=0)
+    transfer_date: date | None = None
+    unit_cost: Decimal | None = Field(default=None, ge=0)
+    notes: str = ""
+
+
+class StockTransferOut(Schema):
+    id: int
+    source_store_id: int
+    source_store_name: str
+    destination_store_id: int
+    destination_store_name: str
+    product_id: int
+    product_name: str
+    quantity: Decimal
+    unit: str
+    unit_cost: Decimal
+    transfer_date: date
+    notes: str = ""
+    created_by: str | None = None
+    created_at: datetime
+
+
+class StoreMonthlyOpeningIn(Schema):
+    store_item_id: int
+    opening_month: date
+    opening_quantity: Decimal = Field(ge=0)
+    unit_cost: Decimal = Field(ge=0)
+
+
+class StoreMonthlyOpeningOut(Schema):
+    id: int
+    store_item_id: int
+    item_name: str
+    opening_month: date
+    opening_quantity: Decimal
+    unit_cost: Decimal
+    created_at: datetime
+
+
+class StockUsageTrendOut(Schema):
+    store_id: int
+    store_name: str
+    site_name: str | None = None
+    item_name: str
+    unit: str
+    quantity_used: Decimal
+    value_used: Decimal
 
 
 class TemplateItemIn(Schema):
