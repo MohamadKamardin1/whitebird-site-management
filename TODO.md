@@ -386,3 +386,7 @@
 - [x] Restrict Site Supervisor monthly stock requests to the configured request window and lock request updates after the 17th day of the relevant month.
 - [x] Implement the requested approval chain: Site Supervisor submission, Zone Supervisor physical verification, Assistant General Supervisor approval, and HR packing/assembly visibility.
 - [x] Build bilingual role-aware store interfaces, API authorization, audit coverage, migrations, regression tests, validation, release documentation, commit, and push for the complete workflow.
+
+## Individual HR Cleaner Registration
+- [x] Add a bilingual individual cleaner registration form to HR Onboarding alongside the retained validated bulk Excel template flow.
+- [x] Validate required identity fields, optional contact and emergency-contact fields, trainee default status, duplicate identity errors, responsive layout, frontend checks, and release documentation.
