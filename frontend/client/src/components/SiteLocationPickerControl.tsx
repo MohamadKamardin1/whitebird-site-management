@@ -10,9 +10,21 @@ type Coordinates = { latitude: string; longitude: string };
 const ZANZIBAR_DEFAULT: [number, number] = [39.2083, -6.1659];
 
 function readCoordinate(latitude: string, longitude: string): [number, number] | null {
+  if (!latitude.trim() || !longitude.trim()) return null;
   const lat = Number(latitude);
   const lng = Number(longitude);
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 ? [lng, lat] : null;
+}
+
+function browserPosition(): Promise<[number, number] | null> {
+  if (!navigator.geolocation) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve([position.coords.longitude, position.coords.latitude]),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 60_000 },
+    );
+  });
 }
 
 function coordinateText(value: Coordinates) {
@@ -32,6 +44,7 @@ export function SiteLocationPickerControl({ token, latitude, longitude, onChange
   const [runtimeToken, setRuntimeToken] = useState(token);
   const [loadingMap, setLoadingMap] = useState(false);
   const [mapError, setMapError] = useState("");
+  const [browserCenter, setBrowserCenter] = useState<[number, number] | null>(null);
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -47,12 +60,12 @@ export function SiteLocationPickerControl({ token, latitude, longitude, onChange
   useEffect(() => {
     if (!open || loadingMap || !runtimeToken || !mapContainer.current) return;
     mapboxgl.accessToken = runtimeToken;
-    const initialPosition = readCoordinate(latitude, longitude) || ZANZIBAR_DEFAULT;
+    const initialPosition = readCoordinate(latitude, longitude) || browserCenter || ZANZIBAR_DEFAULT;
     const map = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/streets-v12",
       center: initialPosition,
-      zoom: selected ? 15 : 10,
+      zoom: selected ? 15 : browserCenter ? 14 : 10,
     });
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
     mapRef.current = map;
@@ -78,7 +91,7 @@ export function SiteLocationPickerControl({ token, latitude, longitude, onChange
       map.remove();
       mapRef.current = null;
     };
-  }, [open, runtimeToken, loadingMap, latitude, longitude]);
+  }, [open, runtimeToken, loadingMap, latitude, longitude, browserCenter]);
 
   const apply = () => {
     if (!readCoordinate(pending.latitude, pending.longitude)) return;
@@ -90,11 +103,13 @@ export function SiteLocationPickerControl({ token, latitude, longitude, onChange
     setMapError("");
     setLoadingMap(true);
     setOpen(true);
+    setBrowserCenter(null);
     try {
       const latest = await api.get<{ mapbox_public_token?: string }>("/integrations/settings");
       const refreshedToken = String(latest.mapbox_public_token || token || "").trim();
       if (!refreshedToken) throw new Error("No Mapbox public token is saved in Integration settings.");
       setRuntimeToken(refreshedToken);
+      if (!readCoordinate(latitude, longitude)) setBrowserCenter(await browserPosition());
     } catch (caught) {
       setMapError(readableApiError(caught).message);
     } finally {

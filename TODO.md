@@ -316,3 +316,9 @@
 
 - [x] Trace and correct the map-popup failure to load the administrator-configured Mapbox credential.
 - [x] Add a clear in-popup loading/error state and validate the configured-token map rendering before committing and pushing the fix.
+
+## Site Pin Persistence and Current Location
+
+- [x] Correct the map-picker coordinate propagation so a clicked or dragged pin saves its selected latitude and longitude instead of zero values.
+- [x] Center the picker on the browser’s current location after permission, while retaining an existing site pin or Zanzibar as the fallback.
+- [x] Validate, commit, and push the corrected location workflow.
