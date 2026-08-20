@@ -341,6 +341,19 @@ function geometryBounds(geometry: Row | undefined): mapboxgl.LngLatBounds | null
   return points.reduce((bounds, point) => bounds.extend(point), new mapboxgl.LngLatBounds(points[0], points[0]));
 }
 
+function geometryCorner(geometry: Row | undefined): [number, number] | null {
+  const coordinates = geometry?.coordinates;
+  if (!Array.isArray(coordinates)) return null;
+  let corner: [number, number] | null = null;
+  const find = (value: unknown): void => {
+    if (corner || !Array.isArray(value)) return;
+    if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") { corner = [value[0], value[1]]; return; }
+    value.forEach(find);
+  };
+  find(coordinates);
+  return corner;
+}
+
 function labelMarker(label: string, className: string) {
   const element = document.createElement("span");
   element.className = className;
@@ -403,6 +416,7 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<any>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const zoneHandlesRef = useRef<mapboxgl.Marker[]>([]);
   const mapZonesRef = useRef<Row[]>(mapZones);
   const zonePopupRef = useRef<mapboxgl.Popup | null>(null);
   const selectedZoneRef = useRef<Row | null>(selectedZone);
@@ -443,6 +457,23 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
       });
   };
 
+  const renderZoneHandles = (map: mapboxgl.Map) => {
+    zoneHandlesRef.current.forEach((marker) => marker.remove());
+    zoneHandlesRef.current = mapZonesRef.current.flatMap((zone) => {
+      const corner = geometryCorner(zone.boundary);
+      if (!corner) return [];
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "wb-zone-corner-handle";
+      element.setAttribute("aria-label", `Zone information: ${zone.name}`);
+      const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: "290px" }).setDOMContent(zonePopup(zone));
+      element.addEventListener("mouseenter", () => { zonePopupRef.current?.remove(); zonePopupRef.current = popup.addTo(map); });
+      element.addEventListener("mouseleave", () => { popup.remove(); if (zonePopupRef.current === popup) zonePopupRef.current = null; });
+      element.addEventListener("click", () => onSelectZone(zone));
+      return [new mapboxgl.Marker({ element, anchor: "center" }).setLngLat(corner).addTo(map)];
+    });
+  };
+
   // Create the map once a token is available. The map <div> is always mounted,
   // so ref.current is always present and a late-arriving token still initialises it.
   useEffect(() => {
@@ -468,19 +499,10 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     map.on("draw.update", commitBoundary);
     map.on("load", () => {
       renderMarkers(map);
+      renderZoneHandles(map);
       map.addSource("wb-admin-zones", { type: "geojson", data: zoneFeatureCollection(mapZonesRef.current) });
-      map.addLayer({ id: "wb-admin-zones-fill", type: "fill", source: "wb-admin-zones", paint: { "fill-color": "#2BC4B6", "fill-opacity": 0.08 } });
+      map.addLayer({ id: "wb-admin-zones-fill", type: "fill", source: "wb-admin-zones", paint: { "fill-color": "#2BC4B6", "fill-opacity": 0.045 } });
       map.addLayer({ id: "wb-admin-zones-outline", type: "line", source: "wb-admin-zones", paint: { "line-color": "#0F7667", "line-width": 2, "line-opacity": 0.72 } });
-      map.on("mouseenter", "wb-admin-zones-fill", (event) => {
-        map.getCanvas().style.cursor = "pointer";
-        const zoneId = Number(event.features?.[0]?.properties?.zone_id);
-        const zone = mapZonesRef.current.find((item) => item.id === zoneId);
-        if (!zone) return;
-        zonePopupRef.current?.remove();
-        zonePopupRef.current = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: "290px" }).setLngLat(event.lngLat).setDOMContent(zonePopup(zone)).addTo(map);
-      });
-      map.on("mousemove", "wb-admin-zones-fill", (event) => zonePopupRef.current?.setLngLat(event.lngLat));
-      map.on("mouseleave", "wb-admin-zones-fill", () => { map.getCanvas().style.cursor = ""; zonePopupRef.current?.remove(); zonePopupRef.current = null; });
     });
 
     mapRef.current = map;
@@ -491,6 +513,7 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
       mapRef.current = null;
       drawRef.current = null;
       markersRef.current = [];
+      zoneHandlesRef.current = [];
       zonePopupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -511,6 +534,7 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     const refreshZoneAreas = () => {
       const source = map.getSource("wb-admin-zones") as mapboxgl.GeoJSONSource | undefined;
       source?.setData(zoneFeatureCollection(mapZones));
+      renderZoneHandles(map);
     };
     if (map.loaded()) refreshZoneAreas();
     else map.once("load", refreshZoneAreas);

@@ -339,3 +339,8 @@
 
 - [x] Replace central zone labels with interactive zone-area hover details showing each zone’s name and current Zone Supervisor contact.
 - [x] Keep Zone Supervisor GIS contacts administrator-only, validate the polygon interaction, then commit and push the enhancement.
+
+## Zone Corner Hover Refinement
+
+- [x] Restrict zone information to a small dedicated boundary-corner handle rather than the zone interior.
+- [x] Preserve site-first hover information throughout the rest of the zone, then validate, commit, and push the interaction refinement.
