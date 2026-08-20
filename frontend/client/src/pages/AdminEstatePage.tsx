@@ -467,9 +467,10 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
       element.className = "wb-zone-corner-handle";
       element.setAttribute("aria-label", `Zone information: ${zone.name}`);
       const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: "290px" }).setDOMContent(zonePopup(zone));
-      element.addEventListener("mouseenter", () => { zonePopupRef.current?.remove(); zonePopupRef.current = popup.addTo(map); });
-      element.addEventListener("mouseleave", () => { popup.remove(); if (zonePopupRef.current === popup) zonePopupRef.current = null; });
-      element.addEventListener("click", () => onSelectZone(zone));
+      const reveal = () => { zonePopupRef.current?.remove(); zonePopupRef.current = popup.setLngLat(corner).addTo(map); };
+      element.addEventListener("pointerenter", reveal);
+      element.addEventListener("focus", reveal);
+      element.addEventListener("click", () => { reveal(); onSelectZone(zone); });
       return [new mapboxgl.Marker({ element, anchor: "center" }).setLngLat(corner).addTo(map)];
     });
   };

@@ -344,3 +344,8 @@
 
 - [x] Restrict zone information to a small dedicated boundary-corner handle rather than the zone interior.
 - [x] Preserve site-first hover information throughout the rest of the zone, then validate, commit, and push the interaction refinement.
+
+## Zone Corner Popup Reliability Fix
+
+- [x] Correct the zone corner handle event sequence so its zone information card opens reliably on hover or keyboard focus.
+- [x] Validate, commit, and push the repaired corner popup interaction.
