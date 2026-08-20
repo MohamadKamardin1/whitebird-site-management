@@ -89,6 +89,22 @@ class SiteDetailOut(SiteSummaryOut):
     updated_at: datetime
 
 
+class AdminMapSupervisorOut(Schema):
+    id: int
+    full_name: str
+    phone: str = ""
+
+
+class AdminMapSiteOut(Schema):
+    id: int
+    name: str
+    zone_id: int | None = None
+    zone_name: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    supervisors: list[AdminMapSupervisorOut] = Field(default_factory=list)
+
+
 class SiteSupervisorOut(Schema):
     id: int
     user_id: int

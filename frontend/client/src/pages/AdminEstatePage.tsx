@@ -23,6 +23,7 @@ function ErrorMessage({ error }: { error: unknown }) {
 export default function AdminEstatePage() {
   const [zones, setZones] = useState<Row[]>([]);
   const [sites, setSites] = useState<Row[]>([]);
+  const [mapSites, setMapSites] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -37,9 +38,10 @@ export default function AdminEstatePage() {
     setLoading(true);
     setError(null);
     try {
-      const [zoneData, siteData] = await Promise.all([api.get("/zones?page_size=100"), api.get("/sites?page_size=100")]);
+      const [zoneData, siteData, mapSiteData] = await Promise.all([api.get("/zones?page_size=100"), api.get("/sites?page_size=100"), api.get("/admin/gis/sites")]);
       setZones(asPaginated(zoneData).results);
       setSites(asPaginated(siteData).results);
+      setMapSites(Array.isArray(mapSiteData) ? mapSiteData : []);
     } catch (caught) {
       setError(caught);
     } finally {
@@ -192,7 +194,7 @@ export default function AdminEstatePage() {
         <ZoneMap
           token={mapboxToken}
           zones={zones}
-          sites={sites}
+          sites={mapSites}
           selectedZone={selectedZone}
           onSelectZone={setSelectedZone}
           onRetryToken={() => void refreshMapToken()}
@@ -322,6 +324,42 @@ function SiteRow({ site, zones, token, onSave, onDeactivate, disabled }: { site:
   );
 }
 
+function geometryBounds(geometry: Row | undefined): mapboxgl.LngLatBounds | null {
+  const coordinates = geometry?.coordinates;
+  if (!Array.isArray(coordinates)) return null;
+  const points: [number, number][] = [];
+  const collect = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") { points.push([value[0], value[1]]); return; }
+    value.forEach(collect);
+  };
+  collect(coordinates);
+  if (!points.length) return null;
+  return points.reduce((bounds, point) => bounds.extend(point), new mapboxgl.LngLatBounds(points[0], points[0]));
+}
+
+function labelMarker(label: string, className: string) {
+  const element = document.createElement("span");
+  element.className = className;
+  element.textContent = label;
+  return element;
+}
+
+function sitePopup(site: Row) {
+  const content = document.createElement("div");
+  content.className = "wb-map-hover-card";
+  const title = document.createElement("strong"); title.textContent = site.name;
+  const zone = document.createElement("span"); zone.textContent = site.zone_name ? `Zone · ${site.zone_name}` : "Zone not assigned";
+  content.append(title, zone);
+  const supervisors = Array.isArray(site.supervisors) ? site.supervisors : [];
+  if (supervisors.length) {
+    supervisors.forEach((supervisor: Row) => { const line = document.createElement("p"); line.textContent = `${supervisor.full_name}${supervisor.phone ? ` · ${supervisor.phone}` : " · Phone not recorded"}`; content.append(line); });
+  } else {
+    const line = document.createElement("p"); line.textContent = "No current Site Supervisor assigned"; content.append(line);
+  }
+  return content;
+}
+
 function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken, onSaveBoundary }: {
   token: string;
   zones: Row[];
@@ -335,6 +373,7 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<any>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const zoneLabelsRef = useRef<mapboxgl.Marker[]>([]);
   const selectedZoneRef = useRef<Row | null>(selectedZone);
   const onSaveBoundaryRef = useRef(onSaveBoundary);
   const [mapError, setMapError] = useState("");
@@ -352,12 +391,30 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
     markersRef.current = sites
       .filter((site) => site.latitude != null && site.longitude != null)
       .map((site) => {
-        const marker = new mapboxgl.Marker({ color: "#D17837" })
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className = "wb-site-map-marker";
+        element.setAttribute("aria-label", `${site.name}, ${site.zone_name || "unassigned zone"}`);
+        element.append(labelMarker(site.name, "wb-site-map-marker__label"));
+        const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 18, maxWidth: "290px" }).setDOMContent(sitePopup(site));
+        const marker = new mapboxgl.Marker({ element, anchor: "bottom" })
           .setLngLat([Number(site.longitude), Number(site.latitude)])
-          .setPopup(new mapboxgl.Popup().setHTML(`<strong>${site.name}</strong><br/>${site.city || ""}`));
+          .setPopup(popup);
+        element.addEventListener("mouseenter", () => popup.addTo(map));
+        element.addEventListener("mouseleave", () => popup.remove());
+        element.addEventListener("click", () => { map.flyTo({ center: [Number(site.longitude), Number(site.latitude)], zoom: Math.max(map.getZoom(), 15), duration: 900, essential: true }); popup.addTo(map); });
         marker.addTo(map);
         return marker;
       });
+  };
+
+  const renderZoneLabels = (map: mapboxgl.Map) => {
+    zoneLabelsRef.current.forEach((marker) => marker.remove());
+    zoneLabelsRef.current = zones.flatMap((zone) => {
+      const bounds = geometryBounds(zone.boundary);
+      if (!bounds) return [];
+      return [new mapboxgl.Marker({ element: labelMarker(zone.name, "wb-zone-map-label"), anchor: "center" }).setLngLat(bounds.getCenter()).addTo(map)];
+    });
   };
 
   // Create the map once a token is available. The map <div> is always mounted,
@@ -383,7 +440,7 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
     };
     map.on("draw.create", commitBoundary);
     map.on("draw.update", commitBoundary);
-    map.on("load", () => renderMarkers(map));
+    map.on("load", () => { renderMarkers(map); renderZoneLabels(map); });
 
     mapRef.current = map;
     drawRef.current = draw;
@@ -393,6 +450,7 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
       mapRef.current = null;
       drawRef.current = null;
       markersRef.current = [];
+      zoneLabelsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -406,11 +464,22 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, token]);
 
-  // Draw the selected zone's saved boundary.
   useEffect(() => {
-    if (!drawRef.current || !selectedZone?.boundary?.coordinates) return;
+    const map = mapRef.current;
+    if (!map || !token) return;
+    if (map.loaded()) renderZoneLabels(map);
+    else map.once("load", () => renderZoneLabels(map));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zones, token]);
+
+  // Draw the selected boundary and smoothly frame the whole operational zone.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !drawRef.current || !selectedZone) return;
     drawRef.current.deleteAll();
-    drawRef.current.add({ type: "Feature", properties: {}, geometry: selectedZone.boundary });
+    if (selectedZone.boundary?.coordinates) drawRef.current.add({ type: "Feature", properties: {}, geometry: selectedZone.boundary });
+    const bounds = geometryBounds(selectedZone.boundary);
+    if (bounds) map.fitBounds(bounds, { padding: { top: 96, right: 72, bottom: 96, left: 72 }, maxZoom: 15, duration: 1350, easing: (progress) => 1 - Math.pow(1 - progress, 4), essential: true });
   }, [selectedZone]);
 
   return (

@@ -87,3 +87,16 @@
 
 /* The month grid stays comfortably compact on desktop; mobile keeps the touch-friendly square cells. */
 @media (min-width: 1024px) { .dashboard-calendar button.aspect-square { aspect-ratio: auto; min-height: 0; height: 2.75rem; } }
+
+/* Administrator GIS: labels remain calm at a distance; full supervisor data only appears on intentional hover. */
+.wb-site-map-marker { position: relative; display: inline-flex; align-items: center; gap: .35rem; border: 0; border-radius: 999px; background: #0f7667; box-shadow: 0 7px 17px rgba(6, 77, 69, .32), 0 0 0 4px rgba(245, 255, 251, .9); color: #fff; cursor: pointer; font-family: "Manrope", sans-serif; font-weight: 800; line-height: 1; outline-offset: 4px; padding: .45rem .62rem .45rem .52rem; transition: transform 180ms cubic-bezier(.23,1,.32,1), background-color 180ms ease, box-shadow 180ms ease; }
+.wb-site-map-marker::before { width: .48rem; height: .48rem; border: 2px solid rgba(255,255,255,.92); border-radius: 999px; background: #d17837; content: ""; }
+.wb-site-map-marker::after { position: absolute; bottom: -.38rem; left: .72rem; width: .65rem; height: .65rem; background: #0f7667; content: ""; transform: rotate(45deg); }
+.wb-site-map-marker:hover, .wb-site-map-marker:focus-visible { background: #0b6155; box-shadow: 0 10px 25px rgba(6, 77, 69, .38), 0 0 0 5px rgba(229, 250, 245, .96); transform: translateY(-3px); }
+.wb-site-map-marker__label { position: relative; z-index: 1; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .66rem; letter-spacing: .02em; }
+.wb-zone-map-label { border: 1px solid rgba(15,118,103,.38); border-radius: 999px; background: rgba(255,253,248,.9); box-shadow: 0 5px 18px rgba(24,65,60,.14); color: #0b6257; font-family: "Manrope", sans-serif; font-size: .67rem; font-weight: 900; letter-spacing: .12em; padding: .45rem .7rem; pointer-events: none; text-transform: uppercase; white-space: nowrap; }
+.wb-map-hover-card { min-width: 200px; padding: .2rem; color: #21464a; font-family: "Manrope", sans-serif; }
+.wb-map-hover-card strong { display: block; font-family: "DM Serif Display", Georgia, serif; font-size: 1.1rem; font-weight: 400; letter-spacing: -.02em; }
+.wb-map-hover-card > span { display: block; margin-top: .15rem; color: #0f7667; font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.wb-map-hover-card p { margin: .75rem 0 0; border-top: 1px solid #e2ebe7; padding-top: .65rem; color: #506f6a; font-size: .76rem; font-weight: 700; line-height: 1.45; }
+@media (max-width: 639px) { .wb-site-map-marker__label { max-width: 7rem; } .wb-zone-map-label { font-size: .57rem; letter-spacing: .08em; padding: .35rem .5rem; } }

@@ -15,6 +15,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.utils import timezone
 from ninja import File, Form, Query, Router, UploadedFile
 
 from apps.accounts.models import RoleCode, User
@@ -240,6 +241,7 @@ from .remuneration_services import (
     submit_monthly_remuneration,
 )
 from .schemas import (
+    AdminMapSiteOut,
     AdminMonthlyRemunerationRowOut,
     AreaScheduleCreateIn,
     AreaScheduleUpdateIn,
@@ -665,6 +667,37 @@ def site_list(
 def site_detail(request: AuthenticatedRequest, site_id: int) -> SiteDetailOut:
     _read_access(request.auth, site_id)
     return _reload_detail(site_id)
+
+
+@router.get("/admin/gis/sites", response=list[AdminMapSiteOut], summary="Administrator GIS site context")
+def administrator_gis_sites(request: AuthenticatedRequest) -> list[AdminMapSiteOut]:
+    """Return the minimal, current supervisor details needed by the admin-only GIS map."""
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
+    today = timezone.localdate()
+    assignments = (
+        SiteSupervisorAssignment.objects.filter(is_active=True, assigned_from__lte=today)
+        .filter(Q(assigned_to__isnull=True) | Q(assigned_to__gte=today))
+        .select_related("user")
+        .order_by("site_id", "-is_primary", "user__first_name", "user__last_name", "user__email")
+    )
+    supervisors_by_site: dict[int, list[dict[str, object]]] = {}
+    for assignment in assignments:
+        supervisors_by_site.setdefault(assignment.site_id, []).append(
+            {"id": assignment.user_id, "full_name": assignment.user.full_name, "phone": assignment.user.phone}
+        )
+    sites = Site.objects.filter(is_active=True).select_related("zone").order_by("name")
+    return [
+        AdminMapSiteOut(
+            id=site.pk,
+            name=site.name,
+            zone_id=site.zone_id,
+            zone_name=site.zone.name if site.zone else "",
+            latitude=site.latitude,
+            longitude=site.longitude,
+            supervisors=supervisors_by_site.get(site.pk, []),
+        )
+        for site in sites
+    ]
 
 
 @router.post(

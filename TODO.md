@@ -327,3 +327,10 @@
 
 - [x] Trace why successful site-coordinate PATCH requests reload as “No point selected.”
 - [x] Correct the coordinate field mapping and API response handling, validate persistence after reload, then commit and push the fix.
+
+## Administrator GIS Focus and Labels
+
+- [x] Add a premium animated map focus that fits the full selected zone boundary into view when an administrator chooses a zone.
+- [x] Render persistent zone labels and site-name labels, including each site’s zone context.
+- [x] Show an authorised hover detail card for each site with the site name, zone name, active Site Supervisor name, and phone number.
+- [x] Add regression coverage, validate responsive map behavior, then commit and push the GIS enhancement.
