@@ -311,3 +311,8 @@
 - [x] Replace manual latitude/longitude entry in site creation and editing with a map-popup point picker that fills precise coordinates automatically.
 - [x] Allow administrators to reopen the picker and correct an existing site pin before saving an update.
 - [x] Validate, commit, and push the site location-picker workflow.
+
+## Site Location Picker Credential Fix
+
+- [x] Trace and correct the map-popup failure to load the administrator-configured Mapbox credential.
+- [x] Add a clear in-popup loading/error state and validate the configured-token map rendering before committing and pushing the fix.
