@@ -267,12 +267,16 @@ def test_cleaners_api_write_permissions(admin_client, general_client, viewer_use
         "/api/site-management/v1/cleaners", data=_cleaner_payload(), content_type="application/json"
     )
     assert denied.status_code in (401, 403)
-    assert (
-        general_client.post(
-            "/api/site-management/v1/cleaners", data=_cleaner_payload(), content_type="application/json"
-        ).status_code
-        == 200
+    assert general_client.post(
+        "/api/site-management/v1/cleaners", data=_cleaner_payload(id_number="GENERAL-001"), content_type="application/json"
+    ).status_code in (401, 403)
+
+    hr_user = UserFactory(role=RoleCode.HR)
+    registered = _authed(hr_user).post(
+        "/api/site-management/v1/cleaners", data=_cleaner_payload(id_number="HR-001"), content_type="application/json"
     )
+    assert registered.status_code == 200
+    assert registered.json()["status"] == CleanerStatus.TRAINEE
 
 
 @pytest.mark.django_db

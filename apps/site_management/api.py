@@ -2204,7 +2204,7 @@ def _cleaner_read(user: User) -> None:
 
 def _cleaner_write(user: User) -> None:
     """Only system administrators and explicitly authorized HR users may onboard cleaners."""
-    if not (user.is_system_admin or user.has_perm("accounts.manage_cleaners")):
+    if not (user.is_system_admin or user.role == RoleCode.HR):
         raise PermissionDenied("Only HR and system administrators may register or onboard cleaners.")
 
 
@@ -2280,6 +2280,11 @@ def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> C
         near_person_relationship=payload.near_person_relationship,
         near_person_phone=payload.near_person_phone,
         notes=payload.notes,
+        actor=request.auth,
+    )
+    cleaner = change_cleaner_status(
+        cleaner=cleaner,
+        new_status=CleanerStatus.TRAINEE,
         actor=request.auth,
     )
     return CleanerOut(**cleaner_serialize(cleaner, request.auth))

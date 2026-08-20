@@ -390,3 +390,7 @@
 ## Individual HR Cleaner Registration
 - [x] Add a bilingual individual cleaner registration form to HR Onboarding alongside the retained validated bulk Excel template flow.
 - [x] Validate required identity fields, optional contact and emergency-contact fields, trainee default status, duplicate identity errors, responsive layout, frontend checks, and release documentation.
+
+## HR Individual Registration Permission Fix
+- [x] Correct the cleaner-registration policy mapping so authenticated Human Resources users can create trainee cleaner records while unauthorized roles remain denied.
+- [x] Add and run regression coverage for HR access, unauthorized denial, and the individual cleaner-registration endpoint.
