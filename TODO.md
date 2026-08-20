@@ -305,3 +305,9 @@
 
 - [x] Replace the default Operations scrollbar with a refined, low-visual-noise premium indicator that remains usable with mouse, touch, keyboard, and assistive technology.
 - [x] Validate, commit, and push the scrollbar refinement.
+
+## Administrator Site Location Picker
+
+- [x] Replace manual latitude/longitude entry in site creation and editing with a map-popup point picker that fills precise coordinates automatically.
+- [x] Allow administrators to reopen the picker and correct an existing site pin before saving an update.
+- [x] Validate, commit, and push the site location-picker workflow.

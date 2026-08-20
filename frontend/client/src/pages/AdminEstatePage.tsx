@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AppShell } from "@/components/AppShell";
+import { SiteLocationPickerControl } from "@/components/SiteLocationPickerControl";
 import { EmptyPanel, LoadingPanel, WorkspaceHeader } from "@/components/WorkspacePrimitives";
 import { api, asPaginated, readableApiError } from "@/lib/api";
 
@@ -174,10 +175,12 @@ export default function AdminEstatePage() {
                   <Input className={fieldClass} placeholder="City" value={siteDraft.city} onChange={(event) => setSiteDraft({ ...siteDraft, city: event.target.value })} />
                   <Input className={fieldClass} placeholder="Region" value={siteDraft.region} onChange={(event) => setSiteDraft({ ...siteDraft, region: event.target.value })} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input className={fieldClass} type="number" placeholder="Latitude" value={siteDraft.latitude} onChange={(event) => setSiteDraft({ ...siteDraft, latitude: event.target.value })} />
-                  <Input className={fieldClass} type="number" placeholder="Longitude" value={siteDraft.longitude} onChange={(event) => setSiteDraft({ ...siteDraft, longitude: event.target.value })} />
-                </div>
+                <SiteLocationPickerControl
+                  token={mapboxToken}
+                  latitude={siteDraft.latitude}
+                  longitude={siteDraft.longitude}
+                  onChange={(location) => setSiteDraft({ ...siteDraft, ...location })}
+                />
               </>
             }
             onSubmit={() => void createSite()}
@@ -260,7 +263,7 @@ export default function AdminEstatePage() {
               ) : (
                 <div className="mt-3 space-y-3">
                   {sites.map((site) => (
-                    <SiteRow key={site.id} site={site} zones={zones} onSave={updateSite} onDeactivate={deactivateSite} disabled={saving} />
+                    <SiteRow key={site.id} site={site} zones={zones} token={mapboxToken} onSave={updateSite} onDeactivate={deactivateSite} disabled={saving} />
                   ))}
                 </div>
               )}
@@ -289,7 +292,7 @@ function EstateCreateCard({ title, icon, fields, onSubmit, disabled, label }: { 
   );
 }
 
-function SiteRow({ site, zones, onSave, onDeactivate, disabled }: { site: Row; zones: Row[]; onSave: (site: Row, patch: Row) => void; onDeactivate: (site: Row) => void; disabled: boolean }) {
+function SiteRow({ site, zones, token, onSave, onDeactivate, disabled }: { site: Row; zones: Row[]; token: string; onSave: (site: Row, patch: Row) => void; onDeactivate: (site: Row) => void; disabled: boolean }) {
   const [name, setName] = useState(site.name || "");
   const [zoneId, setZoneId] = useState(site.zone_id ? String(site.zone_id) : "");
   const [latitude, setLatitude] = useState(site.latitude ?? "");
@@ -302,8 +305,9 @@ function SiteRow({ site, zones, onSave, onDeactivate, disabled }: { site: Row; z
           <option value="">Unassigned zone</option>
           {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
         </select>
-        <Input className={fieldClass} type="number" placeholder="Latitude" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
-        <Input className={fieldClass} type="number" placeholder="Longitude" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+      </div>
+      <div className="mt-3">
+        <SiteLocationPickerControl token={token} latitude={String(latitude)} longitude={String(longitude)} onChange={(location) => { setLatitude(location.latitude); setLongitude(location.longitude); }} compact />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" disabled={disabled} onClick={() => onSave(site, { name, zone_id: zoneId ? Number(zoneId) : null, latitude: latitude === "" ? null : Number(latitude), longitude: longitude === "" ? null : Number(longitude) })}>
