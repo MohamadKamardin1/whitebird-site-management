@@ -351,6 +351,7 @@ from .schemas import (
     SupervisorChecklistSaveIn,
     SupervisorTimetableBatchIn,
     SupervisorTimetableBatchOut,
+    SupervisorTimetableDeletionOut,
     SupervisorTimetableEntryIn,
     SupervisorTimetableEntryOut,
     SupervisorTimetableEntryUpdateIn,
@@ -473,6 +474,7 @@ from .store_services import (
 from .supervisor_roster_services import (
     create_timetable_entry,
     deactivate_timetable_entry,
+    delete_timetable_entry,
     save_supervisor_checklist,
     review_supervisor_checklist,
     submit_supervisor_checklist,
@@ -1060,39 +1062,65 @@ def supervisor_timetable_create(request: AuthenticatedRequest, payload: Supervis
 def supervisor_timetable_batch_create(
     request: AuthenticatedRequest, payload: SupervisorTimetableBatchIn
 ) -> SupervisorTimetableBatchOut:
-    """Create one retained roster entry per selected site and its active Zone Supervisor."""
+    """Create direct, role-aware timetable entries for the selected supervisors."""
     _timetable_admin(request.auth)
     zone_ids = sorted(set(payload.zone_ids))
     site_ids = sorted(set(payload.site_ids))
+    supervisor_ids = sorted(set(payload.supervisor_ids))
     zones = list(Zone.objects.filter(pk__in=zone_ids, is_active=True).order_by("name"))
-    sites = list(Site.objects.filter(pk__in=site_ids, is_active=True).select_related("zone").order_by("name"))
+    sites_query = Site.objects.filter(is_active=True).select_related("zone")
+    sites = list((sites_query.filter(pk__in=site_ids) if site_ids else sites_query.filter(zone_id__in=zone_ids)).order_by("name"))
+    supervisors = list(User.objects.filter(pk__in=supervisor_ids, is_active=True).order_by("first_name", "last_name", "email"))
     if len(zones) != len(zone_ids):
         raise ValidationError({"zone_ids": "One or more selected zones are unavailable."})
-    if len(sites) != len(site_ids):
+    if site_ids and len(sites) != len(site_ids):
         raise ValidationError({"site_ids": "One or more selected sites are unavailable."})
+    if len(supervisors) != len(supervisor_ids):
+        raise ValidationError({"supervisor_ids": "One or more selected supervisors are unavailable."})
     invalid_sites = [site.name for site in sites if site.zone_id not in zone_ids]
     if invalid_sites:
         raise ValidationError({"site_ids": f"Each selected site must belong to a selected zone: {', '.join(invalid_sites)}."})
 
     today = timezone.localdate()
-    assignments = (
-        ZoneSupervisorAssignment.objects.filter(zone_id__in=zone_ids, is_active=True, assigned_from__lte=today)
-        .filter(Q(assigned_to__isnull=True) | Q(assigned_to__gte=today))
-        .select_related("user", "zone")
-        .order_by("zone_id", "user__first_name", "user__last_name", "user__email")
+    expected_role = (
+        RoleCode.ZONE_SUPERVISOR
+        if payload.scope_role == RoleCode.ZONE_SUPERVISOR
+        else RoleCode.ASSISTANT_GENERAL_SUPERVISOR
     )
-    supervisors_by_zone: dict[int, list[User]] = {}
-    for assignment in assignments:
-        if assignment.user.role == RoleCode.ZONE_SUPERVISOR:
-            supervisors_by_zone.setdefault(assignment.zone_id, []).append(assignment.user)
-    missing_supervisor_zones = [zone.name for zone in zones if any(site.zone_id == zone.pk for site in sites) and not supervisors_by_zone.get(zone.pk)]
-    if missing_supervisor_zones:
-        raise ValidationError({"zone_ids": f"Assign a Zone Supervisor before creating this timetable: {', '.join(missing_supervisor_zones)}."})
+    mismatched = [supervisor.full_name or supervisor.email for supervisor in supervisors if supervisor.role != expected_role]
+    if mismatched:
+        raise ValidationError({"supervisor_ids": f"Selected users do not match the chosen supervisor scope: {', '.join(mismatched)}."})
+    if expected_role == RoleCode.ZONE_SUPERVISOR and not site_ids:
+        raise ValidationError({"site_ids": "Select at least one site for a Zone Supervisor timetable."})
+
+    current_assignment = Q(is_active=True, assigned_from__lte=today) & (Q(assigned_to__isnull=True) | Q(assigned_to__gte=today))
+    coverage_by_supervisor: dict[int, set[int]] = {supervisor.pk: set() for supervisor in supervisors}
+    universal_supervisor_ids: set[int] = set()
+    if expected_role == RoleCode.ZONE_SUPERVISOR:
+        for assignment in ZoneSupervisorAssignment.objects.filter(
+            current_assignment, user_id__in=supervisor_ids, zone_id__in=zone_ids
+        ):
+            coverage_by_supervisor[assignment.user_id].add(assignment.zone_id)
+    else:
+        for assignment in AssistantGeneralSupervisorAssignment.objects.filter(
+            current_assignment, user_id__in=supervisor_ids
+        ):
+            if assignment.all_zones:
+                universal_supervisor_ids.add(assignment.user_id)
+            elif assignment.zone_id in zone_ids:
+                coverage_by_supervisor[assignment.user_id].add(assignment.zone_id)
+    for supervisor in supervisors:
+        if supervisor.pk not in universal_supervisor_ids and not coverage_by_supervisor[supervisor.pk]:
+            raise ValidationError(
+                {"supervisor_ids": f"{supervisor.full_name or supervisor.email} is not currently assigned to any selected zone."}
+            )
 
     created: list[SupervisorTimetableEntry] = []
     with transaction.atomic():
         for site in sites:
-            for supervisor in supervisors_by_zone[site.zone_id]:
+            for supervisor in supervisors:
+                if supervisor.pk not in universal_supervisor_ids and site.zone_id not in coverage_by_supervisor[supervisor.pk]:
+                    continue
                 created.append(
                     create_timetable_entry(
                         actor=request.auth,
@@ -1110,12 +1138,20 @@ def supervisor_timetable_batch_create(
                         is_active=True,
                     )
                 )
+        if not created:
+            raise ValidationError({"site_ids": "No selected sites are within the selected supervisors' current assignments."})
         record_audit(
             action=AuditLog.Action.CREATE,
             actor=request.auth,
             entity=created[0],
             summary=f"Created timetable batch '{payload.title.strip()}' with {len(created)} retained entries",
-            after_data={"scope_role": payload.scope_role, "zone_ids": zone_ids, "site_ids": site_ids, "entry_ids": [entry.pk for entry in created]},
+            after_data={
+                "scope_role": payload.scope_role,
+                "supervisor_ids": supervisor_ids,
+                "zone_ids": zone_ids,
+                "site_ids": site_ids,
+                "entry_ids": [entry.pk for entry in created],
+            },
         )
     return SupervisorTimetableBatchOut(created_count=len(created), entries=[_timetable_entry_out(entry) for entry in created])
 
@@ -1138,6 +1174,24 @@ def supervisor_timetable_update(
     return _timetable_entry_out(updated)
 
 
+@router.delete("/admin/supervisor-timetables/{entry_id}", response=SupervisorTimetableDeletionOut)
+def supervisor_timetable_delete(request: AuthenticatedRequest, entry_id: int) -> SupervisorTimetableDeletionOut:
+    _timetable_admin(request.auth)
+    entry = SupervisorTimetableEntry.objects.select_related("supervisor", "site").filter(pk=entry_id).first()
+    if entry is None:
+        raise Http404("Timetable entry not found.")
+    retained_as_inactive, _ = delete_timetable_entry(entry=entry, actor=request.auth)
+    return SupervisorTimetableDeletionOut(
+        deleted=not retained_as_inactive,
+        retained_as_inactive=retained_as_inactive,
+        message=(
+            "Checklist history exists, so the timetable was retained as inactive."
+            if retained_as_inactive
+            else "Timetable entry deleted."
+        ),
+    )
+
+
 @router.get("/supervisor/timetable", response=list[SupervisorTimetableEntryOut])
 def supervisor_timetable_for_day(request: AuthenticatedRequest, work_date: date) -> list[SupervisorTimetableEntryOut]:
     if request.auth.role not in {RoleCode.ZONE_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}:
@@ -1148,7 +1202,7 @@ def supervisor_timetable_for_day(request: AuthenticatedRequest, work_date: date)
     return [_timetable_entry_out(entry) for entry in entries if entry.is_scheduled_for(work_date)]
 
 
-@router.get("/timetables", response=list[SupervisorTimetableEntryOut], summary="Zone Supervisor scheduler entries")
+@router.get("/timetables", response=list[SupervisorTimetableEntryOut], summary="Personal supervisor scheduler entries")
 def zone_supervisor_timetable_range(
     request: AuthenticatedRequest,
     scope_role: str = "zone_supervisor",
@@ -1156,8 +1210,9 @@ def zone_supervisor_timetable_range(
     end_date: date | None = None,
 ) -> list[SupervisorTimetableEntryOut]:
     """Read-only range feed; current zone/site scope is checked on every request."""
-    if scope_role != RoleCode.ZONE_SUPERVISOR or request.auth.role != RoleCode.ZONE_SUPERVISOR:
-        raise PermissionDenied("This scheduler is limited to the Zone Supervisor timetable scope.")
+    allowed_roles = {RoleCode.ZONE_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}
+    if scope_role not in allowed_roles or request.auth.role != scope_role:
+        raise PermissionDenied("This scheduler is limited to the current supervisor timetable scope.")
     if start_date and end_date and end_date < start_date:
         raise ValidationError({"end_date": "end_date cannot be earlier than start_date."})
     entries = SupervisorTimetableEntry.objects.filter(supervisor=request.auth, is_active=True)

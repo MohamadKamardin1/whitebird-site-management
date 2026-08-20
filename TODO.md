@@ -368,3 +368,11 @@
 - [x] Implement read-only Zone Supervisor timetable APIs that are scoped server-side to assigned zones and sites.
 - [x] Build a responsive Zone Supervisor resource-row scheduler with Day, Week, and Month views, event detail popovers, and no editing affordances.
 - [x] Add Kiswahili-first translations, regression tests, validation, and a short implementation note; commit and push the completed workflow.
+
+## Expanded Bilingual Role-Aware Timetable
+- [x] Translate every timetable screen label, selectable option, backend-provided role/shift/status value, empty state, event detail, and administrator lifecycle action through the English/Kiswahili switch.
+- [x] Support direct selection of the intended Zone Supervisor for a site schedule, allowing multiple Zone Supervisors to hold distinct schedules for the same site where policy permits.
+- [x] Add Zone Supervisor and Assistant General Supervisor timetable scopes, with site-focused Zone Supervisor schedules and zone-focused Assistant General Supervisor schedules that may include selected sites across multiple assigned zones.
+- [x] Add the Full day shift alongside Asubuhi and Mchana, preserving accurate display and audit history.
+- [x] Add administrator timetable list, activation, deactivation, replacement/addition, and safe deletion controls with retained-record safeguards where dependent checklist evidence exists.
+- [x] Extend RBAC, services, APIs, wizard behavior, scheduler displays, tests, documentation, validation, and release commit for the expanded timetable workflow.

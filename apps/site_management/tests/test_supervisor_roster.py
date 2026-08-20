@@ -8,7 +8,12 @@ from apps.accounts.factories import UserFactory
 from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
 from apps.core.models import AuditLog
-from apps.site_management.factories import SiteFactory, ZoneFactory, ZoneSupervisorAssignmentFactory
+from apps.site_management.factories import (
+    AssistantGeneralSupervisorAssignmentFactory,
+    SiteFactory,
+    ZoneFactory,
+    ZoneSupervisorAssignmentFactory,
+)
 from apps.site_management.models import SupervisorChecklistSubmission, SupervisorTimetableEntry
 
 
@@ -115,8 +120,6 @@ def test_assistant_general_supervisor_only_gets_the_pdf_work_done_table(admin_us
     zone = ZoneFactory()
     site = SiteFactory(zone=zone)
     assistant = UserFactory(role=RoleCode.ASSISTANT_GENERAL_SUPERVISOR)
-    from apps.site_management.factories import AssistantGeneralSupervisorAssignmentFactory
-
     AssistantGeneralSupervisorAssignmentFactory(user=assistant, all_zones=False, zone=zone)
     work_date = timezone.localdate()
     entry = SupervisorTimetableEntry.objects.create(
@@ -146,7 +149,7 @@ def test_assistant_general_supervisor_only_gets_the_pdf_work_done_table(admin_us
 
 
 @pytest.mark.django_db
-def test_admin_batch_timetable_wizard_enforces_zone_site_integrity_and_zone_supervisor_scope(admin_user: User) -> None:
+def test_admin_batch_timetable_wizard_uses_direct_supervisor_selection_and_full_day_shift(admin_user: User) -> None:
     zone_one = ZoneFactory()
     zone_two = ZoneFactory()
     outside_zone = ZoneFactory()
@@ -155,22 +158,25 @@ def test_admin_batch_timetable_wizard_enforces_zone_site_integrity_and_zone_supe
     outside_site = SiteFactory(zone=outside_zone)
     supervisor_one = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     supervisor_two = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
+    unselected_supervisor = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     outsider = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
     today = timezone.localdate()
     ZoneSupervisorAssignmentFactory(zone=zone_one, user=supervisor_one, assigned_from=today, is_active=True)
     ZoneSupervisorAssignmentFactory(zone=zone_two, user=supervisor_two, assigned_from=today, is_active=True)
+    ZoneSupervisorAssignmentFactory(zone=zone_one, user=unselected_supervisor, assigned_from=today, is_active=True)
     ZoneSupervisorAssignmentFactory(zone=outside_zone, user=outsider, assigned_from=today, is_active=True)
     admin_client = _authed(admin_user)
     weekday = today.strftime("%a").lower()
     payload = {
         "scope_role": "zone_supervisor",
+        "supervisor_ids": [supervisor_one.pk, supervisor_two.pk],
         "zone_ids": [zone_one.pk, zone_two.pk],
         "site_ids": [site_one.pk, site_two.pk],
         "title": "Ziara za wiki ya kwanza",
         "effective_from": today.isoformat(),
         "work_days": [weekday],
         "off_days": [],
-        "shift_slot": "asubuhi",
+        "shift_slot": "full_day",
         "notes": "Ziara ya kawaida ya maeneo.",
     }
     created = admin_client.post("/api/site-management/v1/admin/supervisor-timetables/batch", data=payload, content_type="application/json")
@@ -180,6 +186,8 @@ def test_admin_batch_timetable_wizard_enforces_zone_site_integrity_and_zone_supe
     assert {row["site_id"] for row in body["entries"]} == {site_one.pk, site_two.pk}
     assert {row["supervisor_id"] for row in body["entries"]} == {supervisor_one.pk, supervisor_two.pk}
     assert {row["title"] for row in body["entries"]} == {"Ziara za wiki ya kwanza"}
+    assert {row["shift_slot"] for row in body["entries"]} == {"full_day"}
+    assert unselected_supervisor.pk not in {row["supervisor_id"] for row in body["entries"]}
     assert AuditLog.objects.filter(summary__contains="Created timetable batch").exists()
 
     invalid = admin_client.post(
@@ -198,3 +206,118 @@ def test_admin_batch_timetable_wizard_enforces_zone_site_integrity_and_zone_supe
     assert _authed(outsider).get(
         f"/api/site-management/v1/timetables?scope_role=zone_supervisor&start_date={today.isoformat()}&end_date={today.isoformat()}"
     ).json() == []
+
+
+@pytest.mark.django_db
+def test_assistant_general_supervisor_can_receive_multi_zone_timetable_entries(admin_user: User) -> None:
+    zone_one = ZoneFactory()
+    zone_two = ZoneFactory()
+    site_one = SiteFactory(zone=zone_one)
+    site_two = SiteFactory(zone=zone_two)
+    assistant = UserFactory(role=RoleCode.ASSISTANT_GENERAL_SUPERVISOR)
+    today = timezone.localdate()
+    AssistantGeneralSupervisorAssignmentFactory(user=assistant, zone=zone_one, all_zones=False, assigned_from=today)
+    AssistantGeneralSupervisorAssignmentFactory(user=assistant, zone=zone_two, all_zones=False, assigned_from=today)
+
+    response = _authed(admin_user).post(
+        "/api/site-management/v1/admin/supervisor-timetables/batch",
+        data={
+            "scope_role": "assistant_general_supervisor",
+            "supervisor_ids": [assistant.pk],
+            "zone_ids": [zone_one.pk, zone_two.pk],
+            "site_ids": [site_one.pk, site_two.pk],
+            "title": "Ziara za kanda mbili",
+            "effective_from": today.isoformat(),
+            "work_days": [today.strftime("%a").lower()],
+            "off_days": [],
+            "shift_slot": "full_day",
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200, response.content
+    assert response.json()["created_count"] == 2
+    assert {row["zone_id"] for row in response.json()["entries"]} == {zone_one.pk, zone_two.pk}
+    scheduler = _authed(assistant).get(
+        f"/api/site-management/v1/timetables?scope_role=assistant_general_supervisor&start_date={today.isoformat()}&end_date={today.isoformat()}"
+    )
+    assert scheduler.status_code == 200, scheduler.content
+    assert {row["site_id"] for row in scheduler.json()} == {site_one.pk, site_two.pk}
+
+
+@pytest.mark.django_db
+def test_admin_timetable_lifecycle_and_safe_deletion_preserve_checklist_history(admin_user: User) -> None:
+    zone = ZoneFactory()
+    site = SiteFactory(zone=zone)
+    supervisor = UserFactory(role=RoleCode.ZONE_SUPERVISOR)
+    today = timezone.localdate()
+    ZoneSupervisorAssignmentFactory(zone=zone, user=supervisor, assigned_from=today, is_active=True)
+    admin_client = _authed(admin_user)
+
+    created = admin_client.post(
+        "/api/site-management/v1/admin/supervisor-timetables",
+        data={
+            "supervisor_id": supervisor.pk,
+            "zone_id": zone.pk,
+            "site_id": site.pk,
+            "title": "Ratiba ya ukaguzi",
+            "effective_from": today.isoformat(),
+            "work_days": [today.strftime("%a").lower()],
+            "off_days": [],
+            "shift_slot": "full_day",
+        },
+        content_type="application/json",
+    )
+    assert created.status_code == 200, created.content
+    entry_id = created.json()["id"]
+
+    deactivated = admin_client.patch(
+        f"/api/site-management/v1/admin/supervisor-timetables/{entry_id}",
+        data={"is_active": False},
+        content_type="application/json",
+    )
+    assert deactivated.status_code == 200, deactivated.content
+    assert deactivated.json()["is_active"] is False
+    reactivated = admin_client.patch(
+        f"/api/site-management/v1/admin/supervisor-timetables/{entry_id}",
+        data={"is_active": True},
+        content_type="application/json",
+    )
+    assert reactivated.status_code == 200, reactivated.content
+    assert reactivated.json()["is_active"] is True
+
+    saved = _authed(supervisor).post(
+        "/api/site-management/v1/supervisor/checklists",
+        data={
+            "timetable_entry_id": entry_id,
+            "work_date": today.isoformat(),
+            "checklist_kind": "site_zilizotembelewa",
+            "table_entries": [{"JINA LA SITE": site.name, "maelezo": "Ukaguzi umefanyika."}],
+            "notes": "",
+        },
+        content_type="application/json",
+    )
+    assert saved.status_code == 200, saved.content
+
+    retained = admin_client.delete(f"/api/site-management/v1/admin/supervisor-timetables/{entry_id}")
+    assert retained.status_code == 200, retained.content
+    assert retained.json()["deleted"] is False
+    assert retained.json()["retained_as_inactive"] is True
+    assert SupervisorTimetableEntry.objects.filter(pk=entry_id, is_active=False).exists()
+
+    unused = SupervisorTimetableEntry.objects.create(
+        supervisor=supervisor,
+        zone=zone,
+        site=site,
+        title="Ratiba isiyotumika",
+        effective_from=today,
+        work_days=[today.strftime("%a").lower()],
+        off_days=[],
+        shift_slot="full_day",
+        created_by=admin_user,
+        updated_by=admin_user,
+    )
+    deleted = admin_client.delete(f"/api/site-management/v1/admin/supervisor-timetables/{unused.pk}")
+    assert deleted.status_code == 200, deleted.content
+    assert deleted.json()["deleted"] is True
+    assert not SupervisorTimetableEntry.objects.filter(pk=unused.pk).exists()

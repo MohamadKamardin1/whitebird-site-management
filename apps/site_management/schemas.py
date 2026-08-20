@@ -171,7 +171,7 @@ class SupervisorTimetableEntryIn(Schema):
     effective_to: date | None = None
     work_days: list[str] = Field(min_length=1)
     off_days: list[str] = Field(default_factory=list)
-    shift_slot: str = Field(pattern="^(asubuhi|mchana)$")
+    shift_slot: str = Field(pattern="^(asubuhi|mchana|full_day)$")
     relief_person_id: int | None = None
     notes: str = ""
 
@@ -182,7 +182,7 @@ class SupervisorTimetableEntryUpdateIn(Schema):
     effective_to: date | None = None
     work_days: list[str] | None = None
     off_days: list[str] | None = None
-    shift_slot: str | None = Field(default=None, pattern="^(asubuhi|mchana)$")
+    shift_slot: str | None = Field(default=None, pattern="^(asubuhi|mchana|full_day)$")
     relief_person_id: int | None = None
     notes: str | None = None
     is_active: bool | None = None
@@ -210,23 +210,30 @@ class SupervisorTimetableEntryOut(Schema):
 
 
 class SupervisorTimetableBatchIn(Schema):
-    """Guided roster payload; scope remains extensible while Zone Supervisor is enabled today."""
+    """Guided role-aware roster payload for direct supervisor assignment."""
 
-    scope_role: str = Field(pattern="^zone_supervisor$")
+    scope_role: str = Field(pattern="^(zone_supervisor|assistant_general_supervisor)$")
+    supervisor_ids: list[int] = Field(min_length=1)
     zone_ids: list[int] = Field(min_length=1)
-    site_ids: list[int] = Field(min_length=1)
+    site_ids: list[int] = Field(default_factory=list)
     title: str = Field(min_length=1, max_length=255)
     effective_from: date
     effective_to: date | None = None
     work_days: list[str] = Field(min_length=1)
     off_days: list[str] = Field(default_factory=list)
-    shift_slot: str = Field(pattern="^(asubuhi|mchana)$")
+    shift_slot: str = Field(pattern="^(asubuhi|mchana|full_day)$")
     notes: str = ""
 
 
 class SupervisorTimetableBatchOut(Schema):
     created_count: int
     entries: list[SupervisorTimetableEntryOut]
+
+
+class SupervisorTimetableDeletionOut(Schema):
+    deleted: bool
+    retained_as_inactive: bool
+    message: str
 
 
 class SupervisorChecklistSaveIn(Schema):

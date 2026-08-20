@@ -425,8 +425,11 @@ class AssistantGeneralSupervisorAssignment(AssignmentMixin, UserStampedModel):
         ordering = ["user__email"]
         constraints = [
             models.UniqueConstraint(
-                fields=["user"], condition=models.Q(is_active=True), name="uniq_active_ags_assignment"
-            )
+                fields=["user", "zone"], condition=models.Q(is_active=True), name="uniq_active_ags_user_zone"
+            ),
+            models.UniqueConstraint(
+                fields=["user"], condition=models.Q(is_active=True, all_zones=True), name="uniq_active_ags_all_zones"
+            ),
         ]
 
     def __str__(self) -> str:
@@ -435,8 +438,19 @@ class AssistantGeneralSupervisorAssignment(AssignmentMixin, UserStampedModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.all_zones and self.zone is not None:
+            raise ValidationError("A universal Assistant General Supervisor assignment cannot also name one zone.")
         if not self.all_zones and self.zone is None:
             raise ValidationError("A zone is required when all_zones is false.")
+        if not self.is_active:
+            return
+        active = AssistantGeneralSupervisorAssignment.objects.filter(user=self.user, is_active=True)
+        if self.pk:
+            active = active.exclude(pk=self.pk)
+        if self.all_zones and active.exists():
+            raise ValidationError("An all-zones Assistant General Supervisor assignment cannot coexist with individual zones.")
+        if not self.all_zones and active.filter(all_zones=True).exists():
+            raise ValidationError("End the all-zones assignment before adding individual zones.")
 
 
 class SupervisorShiftSlot(models.TextChoices):
@@ -444,6 +458,7 @@ class SupervisorShiftSlot(models.TextChoices):
 
     ASUBUHI = "asubuhi", "ASUBUHI"
     MCHANA = "mchana", "MCHANA"
+    FULL_DAY = "full_day", "FULL DAY"
 
 
 class SupervisorChecklistKind(models.TextChoices):

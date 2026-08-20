@@ -74,7 +74,51 @@ def update_timetable_entry(*, entry: SupervisorTimetableEntry, actor: User, **va
 
 
 def deactivate_timetable_entry(*, entry: SupervisorTimetableEntry, actor: User) -> SupervisorTimetableEntry:
-    return update_timetable_entry(entry=entry, actor=actor, is_active=False)
+    if not actor.is_system_admin:
+        raise PermissionDenied("Only a system administrator can manage supervisor timetables.")
+    with transaction.atomic():
+        if not entry.is_active:
+            return entry
+        before = model_data(entry)
+        entry.is_active = False
+        entry.updated_by = actor
+        entry.save(update_fields=["is_active", "updated_by", "updated_at"])
+        record_audit(
+            action=AuditLog.Action.STATUS_CHANGE,
+            actor=actor,
+            entity=entry,
+            summary=f"Deactivated personal timetable entry for {entry.supervisor.email}",
+            before_data=before,
+            after_data=model_data(entry),
+        )
+    return entry
+
+
+def delete_timetable_entry(*, entry: SupervisorTimetableEntry, actor: User) -> tuple[bool, SupervisorTimetableEntry | None]:
+    """Delete a timetable only when it has no checklist evidence.
+
+    Checklist submissions are protected operational records.  An attempted delete
+    against a timetable with submissions is therefore retained as an inactive
+    entry, preserving the immutable checklist-to-roster relationship.
+    """
+    if not actor.is_system_admin:
+        raise PermissionDenied("Only a system administrator can manage supervisor timetables.")
+    with transaction.atomic():
+        if entry.checklist_submissions.exists():
+            retained = deactivate_timetable_entry(entry=entry, actor=actor)
+            return True, retained
+        before = model_data(entry)
+        supervisor_email = entry.supervisor.email
+        site_name = entry.site.name
+        record_audit(
+            action=AuditLog.Action.DELETE,
+            actor=actor,
+            entity=entry,
+            summary=f"Deleted unused personal timetable entry for {supervisor_email} at {site_name}",
+            before_data=before,
+        )
+        entry.delete()
+    return False, None
 
 
 def save_supervisor_checklist(

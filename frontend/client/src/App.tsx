@@ -26,7 +26,7 @@ import AdminRemunerationPage from "@/pages/AdminRemunerationPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import InboxPage from "@/pages/InboxPage";
 import { SupervisorRosterPage, SupervisorTimetableAdminPage } from "@/pages/SupervisorRosterPage";
-import { AdminTimetableWizardPage, ZoneSupervisorSchedulerPage } from "@/pages/TimetablePages";
+import { AdminTimetableWizardPage, PersonalSupervisorSchedulerPage } from "@/pages/TimetablePages";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -59,7 +59,7 @@ function Router() {
     <Route path="/remuneration"><ProtectedPage><RemunerationPage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/supervision/roster"><ProtectedPage><SupervisorRosterPage /></ProtectedPage></Route>
-    <Route path="/supervision/timetable"><ProtectedPage><ZoneSupervisorSchedulerPage /></ProtectedPage></Route>
+    <Route path="/supervision/timetable"><ProtectedPage><PersonalSupervisorSchedulerPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
     <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>
