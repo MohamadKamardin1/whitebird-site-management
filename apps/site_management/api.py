@@ -558,6 +558,8 @@ def _summary(site: Site) -> SiteSummaryOut:
         city=site.city,
         region=site.region,
         country=site.country,
+        latitude=site.latitude,
+        longitude=site.longitude,
         capacity=site.capacity,
         department_count=getattr(site, "n_departments", site.department_count),
         asset_count=getattr(site, "n_assets", site.asset_count),

@@ -65,6 +65,8 @@ class SiteSummaryOut(Schema):
     city: str = ""
     region: str = ""
     country: str = "TZ"
+    latitude: float | None = None
+    longitude: float | None = None
     capacity: int = 0
     department_count: int = 0
     asset_count: int = 0

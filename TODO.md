@@ -322,3 +322,8 @@
 - [x] Correct the map-picker coordinate propagation so a clicked or dragged pin saves its selected latitude and longitude instead of zero values.
 - [x] Center the picker on the browser’s current location after permission, while retaining an existing site pin or Zanzibar as the fallback.
 - [x] Validate, commit, and push the corrected location workflow.
+
+## Persisted Site Pin Display Fix
+
+- [x] Trace why successful site-coordinate PATCH requests reload as “No point selected.”
+- [x] Correct the coordinate field mapping and API response handling, validate persistence after reload, then commit and push the fix.
