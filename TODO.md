@@ -349,3 +349,8 @@
 
 - [x] Correct the zone corner handle event sequence so its zone information card opens reliably on hover or keyboard focus.
 - [x] Validate, commit, and push the repaired corner popup interaction.
+
+## Zone Detail Viewer Dismissal Fix
+
+- [x] Make the zone corner detail viewer close after pointer exit and any outside-map click.
+- [x] Validate, commit, and push the corrected zone detail viewer dismissal behavior.

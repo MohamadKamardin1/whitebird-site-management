@@ -435,6 +435,11 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     mapZonesRef.current = mapZones;
   }, [mapZones]);
 
+  const dismissZonePopup = () => {
+    zonePopupRef.current?.remove();
+    zonePopupRef.current = null;
+  };
+
   const renderMarkers = (map: mapboxgl.Map) => {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = sites
@@ -467,9 +472,11 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
       element.className = "wb-zone-corner-handle";
       element.setAttribute("aria-label", `Zone information: ${zone.name}`);
       const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: "290px" }).setDOMContent(zonePopup(zone));
-      const reveal = () => { zonePopupRef.current?.remove(); zonePopupRef.current = popup.setLngLat(corner).addTo(map); };
+      const reveal = () => { dismissZonePopup(); zonePopupRef.current = popup.setLngLat(corner).addTo(map); };
       element.addEventListener("pointerenter", reveal);
       element.addEventListener("focus", reveal);
+      element.addEventListener("pointerleave", () => { if (zonePopupRef.current === popup) dismissZonePopup(); });
+      element.addEventListener("blur", () => { if (zonePopupRef.current === popup) dismissZonePopup(); });
       element.addEventListener("click", () => { reveal(); onSelectZone(zone); });
       return [new mapboxgl.Marker({ element, anchor: "center" }).setLngLat(corner).addTo(map)];
     });
@@ -498,6 +505,7 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     };
     map.on("draw.create", commitBoundary);
     map.on("draw.update", commitBoundary);
+    map.on("click", dismissZonePopup);
     map.on("load", () => {
       renderMarkers(map);
       renderZoneHandles(map);
