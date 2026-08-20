@@ -354,3 +354,9 @@
 
 - [x] Make the zone corner detail viewer close after pointer exit and any outside-map click.
 - [x] Validate, commit, and push the corrected zone detail viewer dismissal behavior.
+
+## Adaptive Compact Site Markers
+
+- [x] Replace named site pins with compact rectangular hover-only markers that preserve map space.
+- [x] Scale the site marker treatment down and hide it at low zoom, restoring it when the administrator zooms into the relevant area.
+- [x] Validate, commit, and push the adaptive site-marker refinement.

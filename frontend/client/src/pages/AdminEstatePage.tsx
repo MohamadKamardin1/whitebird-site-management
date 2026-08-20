@@ -440,6 +440,15 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     zonePopupRef.current = null;
   };
 
+  const updateSiteMarkerVisibility = (map: mapboxgl.Map) => {
+    const zoom = map.getZoom();
+    markersRef.current.forEach((marker) => {
+      const element = marker.getElement();
+      element.style.display = zoom < 9.25 ? "none" : "";
+      element.classList.toggle("is-mini", zoom < 11);
+    });
+  };
+
   const renderMarkers = (map: mapboxgl.Map) => {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = sites
@@ -447,19 +456,21 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
       .map((site) => {
         const element = document.createElement("button");
         element.type = "button";
-        element.className = "wb-site-map-marker";
+        element.className = "wb-site-map-dot";
         element.setAttribute("aria-label", `${site.name}, ${site.zone_name || "unassigned zone"}`);
-        element.append(labelMarker(site.name, "wb-site-map-marker__label"));
+        element.title = site.name;
         const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 18, maxWidth: "290px" }).setDOMContent(sitePopup(site));
+        const point: [number, number] = [Number(site.longitude), Number(site.latitude)];
         const marker = new mapboxgl.Marker({ element, anchor: "bottom" })
-          .setLngLat([Number(site.longitude), Number(site.latitude)])
+          .setLngLat(point)
           .setPopup(popup);
-        element.addEventListener("mouseenter", () => popup.addTo(map));
+        element.addEventListener("mouseenter", () => popup.setLngLat(point).addTo(map));
         element.addEventListener("mouseleave", () => popup.remove());
-        element.addEventListener("click", () => { map.flyTo({ center: [Number(site.longitude), Number(site.latitude)], zoom: Math.max(map.getZoom(), 15), duration: 900, essential: true }); popup.addTo(map); });
+        element.addEventListener("click", () => { map.flyTo({ center: point, zoom: Math.max(map.getZoom(), 15), duration: 900, essential: true }); popup.setLngLat(point).addTo(map); });
         marker.addTo(map);
         return marker;
       });
+    updateSiteMarkerVisibility(map);
   };
 
   const renderZoneHandles = (map: mapboxgl.Map) => {
@@ -506,6 +517,7 @@ function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, on
     map.on("draw.create", commitBoundary);
     map.on("draw.update", commitBoundary);
     map.on("click", dismissZonePopup);
+    map.on("zoom", () => updateSiteMarkerVisibility(map));
     map.on("load", () => {
       renderMarkers(map);
       renderZoneHandles(map);
