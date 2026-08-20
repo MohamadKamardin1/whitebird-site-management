@@ -242,6 +242,7 @@ from .remuneration_services import (
 )
 from .schemas import (
     AdminMapSiteOut,
+    AdminMapZoneOut,
     AdminMonthlyRemunerationRowOut,
     AreaScheduleCreateIn,
     AreaScheduleUpdateIn,
@@ -697,6 +698,33 @@ def administrator_gis_sites(request: AuthenticatedRequest) -> list[AdminMapSiteO
             supervisors=supervisors_by_site.get(site.pk, []),
         )
         for site in sites
+    ]
+
+
+@router.get("/admin/gis/zones", response=list[AdminMapZoneOut], summary="Administrator GIS zone context")
+def administrator_gis_zones(request: AuthenticatedRequest) -> list[AdminMapZoneOut]:
+    """Return current Zone Supervisor contacts for hover within an admin-visible zone."""
+    _ensure_role(request.auth, RoleCode.SYSTEM_ADMIN)
+    today = timezone.localdate()
+    assignments = (
+        ZoneSupervisorAssignment.objects.filter(is_active=True, assigned_from__lte=today)
+        .filter(Q(assigned_to__isnull=True) | Q(assigned_to__gte=today))
+        .select_related("user")
+        .order_by("zone_id", "user__first_name", "user__last_name", "user__email")
+    )
+    supervisors_by_zone: dict[int, list[dict[str, object]]] = {}
+    for assignment in assignments:
+        supervisors_by_zone.setdefault(assignment.zone_id, []).append(
+            {"id": assignment.user_id, "full_name": assignment.user.full_name, "phone": assignment.user.phone}
+        )
+    return [
+        AdminMapZoneOut(
+            id=zone.pk,
+            name=zone.name,
+            boundary=zone.boundary,
+            supervisors=supervisors_by_zone.get(zone.pk, []),
+        )
+        for zone in Zone.objects.filter(is_active=True).order_by("name")
     ]
 
 

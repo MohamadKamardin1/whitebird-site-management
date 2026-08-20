@@ -24,6 +24,7 @@ export default function AdminEstatePage() {
   const [zones, setZones] = useState<Row[]>([]);
   const [sites, setSites] = useState<Row[]>([]);
   const [mapSites, setMapSites] = useState<Row[]>([]);
+  const [mapZones, setMapZones] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -38,10 +39,11 @@ export default function AdminEstatePage() {
     setLoading(true);
     setError(null);
     try {
-      const [zoneData, siteData, mapSiteData] = await Promise.all([api.get("/zones?page_size=100"), api.get("/sites?page_size=100"), api.get("/admin/gis/sites")]);
+      const [zoneData, siteData, mapSiteData, mapZoneData] = await Promise.all([api.get("/zones?page_size=100"), api.get("/sites?page_size=100"), api.get("/admin/gis/sites"), api.get("/admin/gis/zones")]);
       setZones(asPaginated(zoneData).results);
       setSites(asPaginated(siteData).results);
       setMapSites(Array.isArray(mapSiteData) ? mapSiteData : []);
+      setMapZones(Array.isArray(mapZoneData) ? mapZoneData : []);
     } catch (caught) {
       setError(caught);
     } finally {
@@ -195,6 +197,7 @@ export default function AdminEstatePage() {
           token={mapboxToken}
           zones={zones}
           sites={mapSites}
+          mapZones={mapZones}
           selectedZone={selectedZone}
           onSelectZone={setSelectedZone}
           onRetryToken={() => void refreshMapToken()}
@@ -345,6 +348,32 @@ function labelMarker(label: string, className: string) {
   return element;
 }
 
+function zonePopup(zone: Row) {
+  const content = document.createElement("div");
+  content.className = "wb-map-hover-card";
+  const title = document.createElement("strong"); title.textContent = zone.name;
+  const label = document.createElement("span"); label.textContent = "Zone supervision";
+  content.append(title, label);
+  const supervisors = Array.isArray(zone.supervisors) ? zone.supervisors : [];
+  if (supervisors.length) {
+    supervisors.forEach((supervisor: Row) => { const line = document.createElement("p"); line.textContent = `${supervisor.full_name}${supervisor.phone ? ` · ${supervisor.phone}` : " · Phone not recorded"}`; content.append(line); });
+  } else {
+    const line = document.createElement("p"); line.textContent = "No current Zone Supervisor assigned"; content.append(line);
+  }
+  return content;
+}
+
+function zoneFeatureCollection(zones: Row[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: zones.filter((zone) => zone.boundary?.coordinates).map((zone) => ({
+      type: "Feature" as const,
+      properties: { zone_id: zone.id, zone_name: zone.name },
+      geometry: zone.boundary,
+    })),
+  };
+}
+
 function sitePopup(site: Row) {
   const content = document.createElement("div");
   content.className = "wb-map-hover-card";
@@ -360,10 +389,11 @@ function sitePopup(site: Row) {
   return content;
 }
 
-function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken, onSaveBoundary }: {
+function ZoneMap({ token, zones, sites, mapZones, selectedZone, onSelectZone, onRetryToken, onSaveBoundary }: {
   token: string;
   zones: Row[];
   sites: Row[];
+  mapZones: Row[];
   selectedZone: Row | null;
   onSelectZone: (zone: Row) => void;
   onRetryToken: () => void;
@@ -373,7 +403,8 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<any>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const zoneLabelsRef = useRef<mapboxgl.Marker[]>([]);
+  const mapZonesRef = useRef<Row[]>(mapZones);
+  const zonePopupRef = useRef<mapboxgl.Popup | null>(null);
   const selectedZoneRef = useRef<Row | null>(selectedZone);
   const onSaveBoundaryRef = useRef(onSaveBoundary);
   const [mapError, setMapError] = useState("");
@@ -385,6 +416,10 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
   useEffect(() => {
     onSaveBoundaryRef.current = onSaveBoundary;
   }, [onSaveBoundary]);
+
+  useEffect(() => {
+    mapZonesRef.current = mapZones;
+  }, [mapZones]);
 
   const renderMarkers = (map: mapboxgl.Map) => {
     markersRef.current.forEach((marker) => marker.remove());
@@ -406,15 +441,6 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
         marker.addTo(map);
         return marker;
       });
-  };
-
-  const renderZoneLabels = (map: mapboxgl.Map) => {
-    zoneLabelsRef.current.forEach((marker) => marker.remove());
-    zoneLabelsRef.current = zones.flatMap((zone) => {
-      const bounds = geometryBounds(zone.boundary);
-      if (!bounds) return [];
-      return [new mapboxgl.Marker({ element: labelMarker(zone.name, "wb-zone-map-label"), anchor: "center" }).setLngLat(bounds.getCenter()).addTo(map)];
-    });
   };
 
   // Create the map once a token is available. The map <div> is always mounted,
@@ -440,7 +466,22 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
     };
     map.on("draw.create", commitBoundary);
     map.on("draw.update", commitBoundary);
-    map.on("load", () => { renderMarkers(map); renderZoneLabels(map); });
+    map.on("load", () => {
+      renderMarkers(map);
+      map.addSource("wb-admin-zones", { type: "geojson", data: zoneFeatureCollection(mapZonesRef.current) });
+      map.addLayer({ id: "wb-admin-zones-fill", type: "fill", source: "wb-admin-zones", paint: { "fill-color": "#2BC4B6", "fill-opacity": 0.08 } });
+      map.addLayer({ id: "wb-admin-zones-outline", type: "line", source: "wb-admin-zones", paint: { "line-color": "#0F7667", "line-width": 2, "line-opacity": 0.72 } });
+      map.on("mouseenter", "wb-admin-zones-fill", (event) => {
+        map.getCanvas().style.cursor = "pointer";
+        const zoneId = Number(event.features?.[0]?.properties?.zone_id);
+        const zone = mapZonesRef.current.find((item) => item.id === zoneId);
+        if (!zone) return;
+        zonePopupRef.current?.remove();
+        zonePopupRef.current = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: "290px" }).setLngLat(event.lngLat).setDOMContent(zonePopup(zone)).addTo(map);
+      });
+      map.on("mousemove", "wb-admin-zones-fill", (event) => zonePopupRef.current?.setLngLat(event.lngLat));
+      map.on("mouseleave", "wb-admin-zones-fill", () => { map.getCanvas().style.cursor = ""; zonePopupRef.current?.remove(); zonePopupRef.current = null; });
+    });
 
     mapRef.current = map;
     drawRef.current = draw;
@@ -450,7 +491,7 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
       mapRef.current = null;
       drawRef.current = null;
       markersRef.current = [];
-      zoneLabelsRef.current = [];
+      zonePopupRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -467,10 +508,13 @@ function ZoneMap({ token, zones, sites, selectedZone, onSelectZone, onRetryToken
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !token) return;
-    if (map.loaded()) renderZoneLabels(map);
-    else map.once("load", () => renderZoneLabels(map));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zones, token]);
+    const refreshZoneAreas = () => {
+      const source = map.getSource("wb-admin-zones") as mapboxgl.GeoJSONSource | undefined;
+      source?.setData(zoneFeatureCollection(mapZones));
+    };
+    if (map.loaded()) refreshZoneAreas();
+    else map.once("load", refreshZoneAreas);
+  }, [mapZones, token]);
 
   // Draw the selected boundary and smoothly frame the whole operational zone.
   useEffect(() => {

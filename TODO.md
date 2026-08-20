@@ -334,3 +334,8 @@
 - [x] Render persistent zone labels and site-name labels, including each site’s zone context.
 - [x] Show an authorised hover detail card for each site with the site name, zone name, active Site Supervisor name, and phone number.
 - [x] Add regression coverage, validate responsive map behavior, then commit and push the GIS enhancement.
+
+## Administrator Zone Hover Details
+
+- [x] Replace central zone labels with interactive zone-area hover details showing each zone’s name and current Zone Supervisor contact.
+- [x] Keep Zone Supervisor GIS contacts administrator-only, validate the polygon interaction, then commit and push the enhancement.

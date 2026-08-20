@@ -10,7 +10,7 @@ from django.test import Client
 from apps.accounts.factories import UserFactory
 from apps.accounts.models import RoleCode
 from apps.accounts.services import issue_api_token
-from apps.site_management.factories import SiteFactory, SiteSupervisorAssignmentFactory, ZoneFactory
+from apps.site_management.factories import SiteFactory, SiteSupervisorAssignmentFactory, ZoneFactory, ZoneSupervisorAssignmentFactory
 
 
 def _client_for(user: object) -> Client:
@@ -28,6 +28,8 @@ def test_administrator_gis_context_returns_current_supervisor_contacts_only_to_a
     zone = ZoneFactory(name="Unguja North", code="UN-N")
     site = SiteFactory(zone=zone, latitude=-6.164817, longitude=39.201233)
     SiteSupervisorAssignmentFactory(site=site, user=supervisor, assigned_from=date.today(), is_active=True, is_primary=True)
+    zone_supervisor = UserFactory(role=RoleCode.ZONE_SUPERVISOR, first_name="Salum", last_name="Ali", phone="+255773654321")
+    ZoneSupervisorAssignmentFactory(zone=zone, user=zone_supervisor, assigned_from=date.today(), is_active=True)
 
     forbidden = _client_for(non_admin).get("/api/site-management/v1/admin/gis/sites")
     assert forbidden.status_code == 403
@@ -39,3 +41,11 @@ def test_administrator_gis_context_returns_current_supervisor_contacts_only_to_a
     assert row["latitude"] == pytest.approx(-6.164817)
     assert row["longitude"] == pytest.approx(39.201233)
     assert row["supervisors"] == [{"id": supervisor.pk, "full_name": "Asha Juma", "phone": "+255777123456"}]
+
+    zone_forbidden = _client_for(non_admin).get("/api/site-management/v1/admin/gis/zones")
+    assert zone_forbidden.status_code == 403
+    zone_response = _client_for(admin).get("/api/site-management/v1/admin/gis/zones")
+    assert zone_response.status_code == 200
+    zone_row = next(item for item in zone_response.json() if item["id"] == zone.pk)
+    assert zone_row["name"] == "Unguja North"
+    assert zone_row["supervisors"] == [{"id": zone_supervisor.pk, "full_name": "Salum Ali", "phone": "+255773654321"}]

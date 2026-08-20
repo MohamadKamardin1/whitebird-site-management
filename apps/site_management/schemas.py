@@ -105,6 +105,13 @@ class AdminMapSiteOut(Schema):
     supervisors: list[AdminMapSupervisorOut] = Field(default_factory=list)
 
 
+class AdminMapZoneOut(Schema):
+    id: int
+    name: str
+    boundary: dict[str, Any] = Field(default_factory=dict)
+    supervisors: list[AdminMapSupervisorOut] = Field(default_factory=list)
+
+
 class SiteSupervisorOut(Schema):
     id: int
     user_id: int
