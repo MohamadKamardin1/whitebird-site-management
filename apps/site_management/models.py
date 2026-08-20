@@ -475,6 +475,7 @@ class SupervisorTimetableEntry(UserStampedModel):
     )
     zone = models.ForeignKey(Zone, on_delete=models.PROTECT, related_name="supervisor_timetable_entries")
     site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="supervisor_timetable_entries")
+    title = models.CharField(max_length=255, blank=True, default="")
     effective_from = models.DateField(db_index=True)
     effective_to = models.DateField(null=True, blank=True, db_index=True)
     work_days = models.JSONField(default=list, validators=[validate_effective_days])

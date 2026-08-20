@@ -26,6 +26,7 @@ import AdminRemunerationPage from "@/pages/AdminRemunerationPage";
 import AdminUsersPage from "@/pages/AdminUsersPage";
 import InboxPage from "@/pages/InboxPage";
 import { SupervisorRosterPage, SupervisorTimetableAdminPage } from "@/pages/SupervisorRosterPage";
+import { AdminTimetableWizardPage, ZoneSupervisorSchedulerPage } from "@/pages/TimetablePages";
 
 function Protected({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -45,7 +46,7 @@ function Router() {
     <Route path="/admin/integrations"><ProtectedPage><IntegrationSettingsPage /></ProtectedPage></Route>
     <Route path="/admin/remuneration"><ProtectedPage><AdminRemunerationPage /></ProtectedPage></Route>
     <Route path="/admin/users"><ProtectedPage><AdminUsersPage /></ProtectedPage></Route>
-    <Route path="/admin/supervisor-timetables"><ProtectedPage><SupervisorTimetableAdminPage /></ProtectedPage></Route>
+    <Route path="/admin/supervisor-timetables"><ProtectedPage><AdminTimetableWizardPage /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
     <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>
     <Route path="/hr/people"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR people registry", title: "Cleaner records, documents, and onboarding readiness.", description: "Review workforce records through the HR-controlled lifecycle.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
@@ -58,6 +59,7 @@ function Router() {
     <Route path="/remuneration"><ProtectedPage><RemunerationPage /></ProtectedPage></Route>
     <Route path="/cleanliness"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/supervision/roster"><ProtectedPage><SupervisorRosterPage /></ProtectedPage></Route>
+    <Route path="/supervision/timetable"><ProtectedPage><ZoneSupervisorSchedulerPage /></ProtectedPage></Route>
     <Route path="/inspections"><ProtectedPage><CleanlinessPage /></ProtectedPage></Route>
     <Route path="/operations/issues"><ProtectedPage><SiteIssuesPage /></ProtectedPage></Route>
     <Route path="/stores"><ProtectedPage><StockRequestsPage /></ProtectedPage></Route>

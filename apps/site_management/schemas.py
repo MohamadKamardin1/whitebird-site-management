@@ -166,6 +166,7 @@ class SupervisorTimetableEntryIn(Schema):
     supervisor_id: int
     zone_id: int
     site_id: int
+    title: str = ""
     effective_from: date
     effective_to: date | None = None
     work_days: list[str] = Field(min_length=1)
@@ -176,6 +177,7 @@ class SupervisorTimetableEntryIn(Schema):
 
 
 class SupervisorTimetableEntryUpdateIn(Schema):
+    title: str | None = None
     effective_from: date | None = None
     effective_to: date | None = None
     work_days: list[str] | None = None
@@ -195,6 +197,7 @@ class SupervisorTimetableEntryOut(Schema):
     zone_name: str
     site_id: int
     site_name: str
+    title: str = ""
     effective_from: date
     effective_to: date | None = None
     work_days: list[str]
@@ -204,6 +207,26 @@ class SupervisorTimetableEntryOut(Schema):
     relief_person_name: str = ""
     notes: str = ""
     is_active: bool
+
+
+class SupervisorTimetableBatchIn(Schema):
+    """Guided roster payload; scope remains extensible while Zone Supervisor is enabled today."""
+
+    scope_role: str = Field(pattern="^zone_supervisor$")
+    zone_ids: list[int] = Field(min_length=1)
+    site_ids: list[int] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=255)
+    effective_from: date
+    effective_to: date | None = None
+    work_days: list[str] = Field(min_length=1)
+    off_days: list[str] = Field(default_factory=list)
+    shift_slot: str = Field(pattern="^(asubuhi|mchana)$")
+    notes: str = ""
+
+
+class SupervisorTimetableBatchOut(Schema):
+    created_count: int
+    entries: list[SupervisorTimetableEntryOut]
 
 
 class SupervisorChecklistSaveIn(Schema):

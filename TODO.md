@@ -360,3 +360,11 @@
 - [x] Replace named site pins with compact rectangular hover-only markers that preserve map space.
 - [x] Scale the site marker treatment down and hide it at low zoom, restoring it when the administrator zooms into the relevant area.
 - [x] Validate, commit, and push the adaptive site-marker refinement.
+
+## Timetable Core Flow
+
+- [x] Inspect existing timetable, site, zone, shift, assignment, API, and navigation structures; document any deviation from the requested reference schema.
+- [x] Implement an administrator-only guided timetable wizard with extensible scope selection, dependent multi-zone and multi-site selection, review, audit, and strict site-to-zone validation.
+- [x] Implement read-only Zone Supervisor timetable APIs that are scoped server-side to assigned zones and sites.
+- [x] Build a responsive Zone Supervisor resource-row scheduler with Day, Week, and Month views, event detail popovers, and no editing affordances.
+- [x] Add Kiswahili-first translations, regression tests, validation, and a short implementation note; commit and push the completed workflow.
