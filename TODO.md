@@ -299,4 +299,4 @@
 
 - [x] Make the Operations navigation section independently vertically scrollable so long role-specific menus never overlap the Workspace links on desktop or mobile.
 - [x] Keep Workspace links and the sidebar scope summary consistently positioned and accessible after Operations navigation scrolling.
-- [ ] Validate the corrected desktop and mobile sidebar behavior, then commit and push the fix.
+- [x] Validate the corrected desktop and mobile sidebar behavior, then commit and push the fix.
