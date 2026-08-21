@@ -231,7 +231,7 @@ def test_mask_value() -> None:
 def test_sensitive_permission_gating(admin_user, general_user, zone_user) -> None:
     cleaner = register_cleaner(**_cleaner_payload(), actor=admin_user)
     assert can_view_full_cleaner_profile(admin_user, cleaner) is True
-    assert can_view_full_cleaner_profile(general_user, cleaner) is True  # general holds sensitive perm
+    assert can_view_full_cleaner_profile(general_user, cleaner) is False
     assert can_view_full_cleaner_profile(zone_user, cleaner) is False
 
 
@@ -248,8 +248,8 @@ def test_document_view_requires_sensitive_permission(admin_user, zone_user) -> N
 
 
 @pytest.mark.django_db
-def test_cleaners_api_list_masks_pii(admin_client, admin_user, zone_client, zone_user) -> None:
-    register_cleaner(**_cleaner_payload(), actor=admin_user)
+def test_cleaners_api_list_masks_pii_and_hr_can_explicitly_reveal(admin_client, admin_user, zone_client, zone_user) -> None:
+    cleaner = register_cleaner(**_cleaner_payload(), actor=admin_user)
     response = zone_client.get("/api/site-management/v1/cleaners")
     assert response.status_code == 200
     result = response.json()["results"][0]
@@ -258,6 +258,14 @@ def test_cleaners_api_list_masks_pii(admin_client, admin_user, zone_client, zone
 
     admin_response = admin_client.get("/api/site-management/v1/cleaners")
     assert admin_response.json()["results"][0]["id_number"] == "NIDA12345"
+
+    hr_user = UserFactory(role=RoleCode.HR)
+    hr_list = _authed(hr_user).get("/api/site-management/v1/cleaners")
+    assert hr_list.json()["results"][0]["id_number"] == mask_value("NIDA12345")
+    revealed = _authed(hr_user).get(f"/api/site-management/v1/cleaners/{cleaner.pk}/sensitive")
+    assert revealed.status_code == 200
+    assert revealed.json()["id_number"] == "NIDA12345"
+    assert _authed(zone_user).get(f"/api/site-management/v1/cleaners/{cleaner.pk}/sensitive").status_code == 403
 
 
 @pytest.mark.django_db

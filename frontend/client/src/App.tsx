@@ -18,6 +18,7 @@ import MarketingPage from "@/pages/MarketingPage";
 import { ReportsPage, SiteIssuesPage } from "@/pages/OperationalWorkflowsPage";
 import StockWorkflowPage from "@/pages/StockWorkflowPage";
 import RoleWorkspacesPage from "@/pages/RoleWorkspacesPage";
+import HRCleanerRegistryPage from "@/pages/HRCleanerRegistryPage";
 import AdminEstatePage from "@/pages/AdminEstatePage";
 import StoreControlPage from "@/pages/StoreControlPage";
 import IntegrationSettingsPage from "@/pages/IntegrationSettingsPage";
@@ -49,7 +50,7 @@ function Router() {
     <Route path="/admin/supervisor-timetables"><ProtectedPage><AdminTimetableWizardPage /></ProtectedPage></Route>
     <Route path="/sites"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "Organisation hierarchy", title: "Sites and zones, in one clear portfolio.", description: "Navigate the operating estate through permitted zones, sites, supervisors, configuration, and live site context.", endpoint: "/sites", filterLabel: "sites and zones", emptyTitle: "No visible sites", emptyDescription: "Your current role has not returned visible site records. Check your assigned scope or contact a system administrator." }} /></ProtectedPage></Route>
     <Route path="/hr/onboarding"><ProtectedPage><RoleWorkspacesPage mode="hr" /></ProtectedPage></Route>
-    <Route path="/hr/people"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR people registry", title: "Cleaner records, documents, and onboarding readiness.", description: "Review workforce records through the HR-controlled lifecycle.", endpoint: "/cleaners", action: "cleaner", actionPermission: "accounts.manage_cleaners", filterLabel: "cleaners" }} /></ProtectedPage></Route>
+    <Route path="/hr/people"><ProtectedPage><HRCleanerRegistryPage /></ProtectedPage></Route>
     <Route path="/hr/assignments"><ProtectedPage><ResourceWorkspace config={{ eyebrow: "HR workforce planning", title: "Assignments and shifts with effective dates.", description: "Maintain the official cleaner-to-site and cleaner-to-shift handover.", endpoint: "/assignments", filterLabel: "assignments" }} /></ProtectedPage></Route>
     <Route path="/store-control"><ProtectedPage><StoreControlPage /></ProtectedPage></Route>
     <Route path="/trainees"><ProtectedPage><TraineeManagementPage /></ProtectedPage></Route>

@@ -270,6 +270,7 @@ from .schemas import (
     CleanerCreateIn,
     CleanerDocumentOut,
     CleanerOut,
+    CleanerSensitiveOut,
     CleanerShiftAssignmentOut,
     CleanerSiteAssignmentCreateIn,
     CleanerSiteAssignmentOut,
@@ -285,6 +286,7 @@ from .schemas import (
     ConversationReadOut,
     DailyReportChallengesIn,
     DailySiteReportOut,
+    DetailOut,
     DepartmentCreateIn,
     DepartmentOut,
     DepartmentUpdateIn,
@@ -2208,6 +2210,12 @@ def _cleaner_write(user: User) -> None:
         raise PermissionDenied("Only HR and system administrators may register or onboard cleaners.")
 
 
+def _cleaner_sensitive_read(user: User) -> None:
+    """Sensitive cleaner identifiers require an explicit HR or administrator disclosure action."""
+    if not (user.is_system_admin or user.role == RoleCode.HR):
+        raise PermissionDenied("Only HR and system administrators may reveal cleaner identity and phone data.")
+
+
 def _document_review(user: User) -> None:
     if not (
         user.is_system_admin
@@ -2333,6 +2341,27 @@ def cleaner_detail(request: AuthenticatedRequest, cleaner_id: int) -> CleanerOut
     if cleaner is None:
         raise Http404("Cleaner not found.")
     return CleanerOut(**cleaner_serialize(cleaner, request.auth))
+
+
+@router.get("/cleaners/{cleaner_id}/sensitive", response=CleanerSensitiveOut, summary="Reveal cleaner identity and phone data")
+def cleaner_sensitive_detail(request: AuthenticatedRequest, cleaner_id: int) -> CleanerSensitiveOut:
+    _cleaner_sensitive_read(request.auth)
+    cleaner = get_cleaner_or_none(cleaner_id)
+    if cleaner is None:
+        raise Http404("Cleaner not found.")
+    record_audit(
+        action=AuditLog.Action.FILE_DOWNLOAD,
+        actor=request.auth,
+        entity=cleaner,
+        summary=f"Revealed sensitive identity and phone data for {cleaner.full_name}",
+        after_data={"fields": ["id_number", "phone_number", "near_person_phone"]},
+    )
+    return CleanerSensitiveOut(
+        cleaner_id=cleaner.pk,
+        id_number=cleaner.id_number,
+        phone_number=cleaner.phone_number,
+        near_person_phone=cleaner.near_person_phone,
+    )
 
 
 @router.put("/cleaners/{cleaner_id}", response=CleanerOut, summary="Update a cleaner")
@@ -2692,12 +2721,12 @@ def cleaner_assignment_shift_create(
 
 @router.delete(
     "/assignments/{assignment_id}/shifts/{shift_assignment_id}",
-    response=MessageOut,
+    response=DetailOut,
     summary="Remove a shift from the assignment",
 )
 def cleaner_assignment_shift_delete(
     request: AuthenticatedRequest, assignment_id: int, shift_assignment_id: int
-) -> MessageOut:
+) -> DetailOut:
     _assignment_read(request.auth)
     assignment = get_assignment_or_none(assignment_id)
     if assignment is None:
@@ -2708,7 +2737,7 @@ def cleaner_assignment_shift_delete(
     if sa is None:
         raise Http404("Shift assignment not found.")
     remove_cleaner_shift(shift_assignment=sa, actor=request.auth)
-    return MessageOut(detail="Shift removed.")
+    return DetailOut(detail="Shift removed.")
 
 
 @router.get(
@@ -2798,12 +2827,12 @@ def cleaner_assignment_schedule_update(
 
 @router.delete(
     "/assignments/{assignment_id}/area-schedules/{schedule_id}",
-    response=MessageOut,
+    response=DetailOut,
     summary="Remove an area schedule",
 )
 def cleaner_assignment_schedule_delete(
     request: AuthenticatedRequest, assignment_id: int, schedule_id: int
-) -> MessageOut:
+) -> DetailOut:
     _assignment_read(request.auth)
     assignment = get_assignment_or_none(assignment_id)
     if assignment is None:
@@ -2814,7 +2843,7 @@ def cleaner_assignment_schedule_delete(
     if schedule is None:
         raise Http404("Schedule not found.")
     deactivate_area_schedule(schedule=schedule, actor=request.auth)
-    return MessageOut(detail="Schedule removed.")
+    return DetailOut(detail="Schedule removed.")
 
 
 @router.get(

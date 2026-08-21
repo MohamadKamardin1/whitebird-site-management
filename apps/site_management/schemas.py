@@ -504,6 +504,10 @@ class MessageOut(Schema):
     detail: str
 
 
+class DetailOut(Schema):
+    detail: str
+
+
 class SiteShiftOut(Schema):
     id: int
     site_id: int
@@ -620,6 +624,13 @@ class CleanerOut(Schema):
     notes: str
     created_at: datetime
     updated_at: datetime
+
+
+class CleanerSensitiveOut(Schema):
+    cleaner_id: int
+    id_number: str
+    phone_number: str
+    near_person_phone: str
 
 
 class CleanerCreateIn(Schema):

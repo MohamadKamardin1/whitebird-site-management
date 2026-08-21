@@ -30,13 +30,21 @@ def mask_value(value: str, *, keep: int = 4) -> str:
 
 
 def can_view_full_cleaner_profile(user: User, cleaner: Cleaner | None = None) -> bool:
-    """True when the user may see unmasked PII and sensitive document content."""
-    return user.is_system_admin or user.has_perm(SENSITIVE_DOCUMENT_PERMISSION)
+    """True only for administrators' ordinary full-profile views.
+
+    HR records remain masked in normal lists and require an explicit, audited
+    reveal action for each cleaner.
+    """
+    return user.is_system_admin
 
 
 def can_view_document(user: User, document: CleanerDocument) -> bool:
     """Documents are sensitive; viewing requires the sensitive permission."""
-    return can_view_full_cleaner_profile(user, document.cleaner)
+    return (
+        user.is_system_admin
+        or user.role == RoleCode.HR
+        or user.has_perm(SENSITIVE_DOCUMENT_PERMISSION)
+    )
 
 
 @dataclass(frozen=True)

@@ -742,6 +742,11 @@ def test_policy_helpers(site, admin_user, zone_user, site_supervisor_user) -> No
     assert can_edit_assignment(outsider, assignment) is False
     assert can_assign_cleaner(outsider, site, cleaner) is False
 
+    hr_user = UserFactory(role=RoleCode.HR)
+    assert can_view_assignment(hr_user, assignment) is True
+    assert can_edit_assignment(hr_user, assignment) is True
+    assert can_assign_cleaner(hr_user, site, cleaner) is True
+
 
 @pytest.mark.django_db
 def test_update_assignment_end_date_and_copy_overlap_skip(site, admin_user) -> None:

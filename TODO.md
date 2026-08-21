@@ -400,3 +400,9 @@
 - [x] Add a guided bulk-template customization screen where HR selects Active or Trainee status and the destination site before downloading a template.
 - [x] Generate and import the customized workbook with the selected onboarding status and site context enforced server-side, without trusting editable spreadsheet placement values.
 - [x] Add bilingual controls, permission and data-integrity regression coverage, validation, documentation, commit, and push for configured HR onboarding.
+
+## HR Template Access and People Registry Controls
+- [x] Correct HR authorization for customized workbook downloads and preserve a browser-safe authenticated download flow.
+- [x] Restore HR People Registry actions for cleaner editing, deactivation, and transfer or assignment management under backend-enforced HR permissions.
+- [x] Add explicit controlled reveal controls for HR to view masked cleaner ID numbers and phone numbers, preserving masked-by-default display and audit-safe authorization.
+- [x] Add bilingual UI labels, API and frontend regression coverage, validation, documentation, commit, and push for the HR access-control correction.

@@ -83,6 +83,24 @@ class WhiteBirdApiClient {
   put<T>(path: string, body?: unknown) { return this.request<T>(path, { method: "PUT", body }); }
   patch<T>(path: string, body?: unknown) { return this.request<T>(path, { method: "PATCH", body }); }
   delete<T>(path: string) { return this.request<T>(path, { method: "DELETE" }); }
+  async download(path: string, filename: string): Promise<void> {
+    const headers = new Headers();
+    const requestId = crypto.randomUUID?.();
+    if (requestId) headers.set("X-Request-ID", requestId);
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    let response: Response;
+    try { response = await fetch(this.endpoint(path), { method: "GET", headers, credentials: "include", cache: "no-store" }); }
+    catch { throw new ApiError({ status: 0, code: "network_error", message: "The operations service could not be reached. Check the API origin and your connection." }); }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: Record<string, unknown> } | null;
+      const error = payload?.error || {};
+      throw new ApiError({ status: response.status, code: String(error.code || `http_${response.status}`), message: String(error.message || "The download could not be completed."), traceId: String(error.trace_id || response.headers.get("X-Request-ID") || "") || undefined });
+    }
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
 }
 
 export const api = new WhiteBirdApiClient();
