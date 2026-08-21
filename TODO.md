@@ -394,3 +394,9 @@
 ## HR Individual Registration Permission Fix
 - [x] Correct the cleaner-registration policy mapping so authenticated Human Resources users can create trainee cleaner records while unauthorized roles remain denied.
 - [x] Add and run regression coverage for HR access, unauthorized denial, and the individual cleaner-registration endpoint.
+
+## HR Configured Onboarding Status and Bulk Templates
+- [x] Let HR choose Active or Trainee status and an initial assigned site when registering one cleaner, with audited status and assignment creation.
+- [x] Add a guided bulk-template customization screen where HR selects Active or Trainee status and the destination site before downloading a template.
+- [x] Generate and import the customized workbook with the selected onboarding status and site context enforced server-side, without trusting editable spreadsheet placement values.
+- [x] Add bilingual controls, permission and data-integrity regression coverage, validation, documentation, commit, and push for configured HR onboarding.

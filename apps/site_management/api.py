@@ -2240,10 +2240,17 @@ def cleaner_list(
 
 
 @router.get("/hr/cleaners/template.xlsx", summary="Download the HR cleaner onboarding workbook template", tags=["HR"])
-def hr_cleaner_template(request: AuthenticatedRequest) -> HttpResponse:
+def hr_cleaner_template(
+    request: AuthenticatedRequest,
+    onboarding_status: str = Query("trainee", pattern="^(trainee|active)$"),
+    site_id: int = Query(...),
+) -> HttpResponse:
     _cleaner_write(request.auth)
+    site = get_site_or_none(site_id)
+    if site is None:
+        raise Http404("Site not found.")
     response = HttpResponse(
-        build_cleaner_workbook_template(),
+        build_cleaner_workbook_template(onboarding_status=CleanerStatus(onboarding_status), site=site),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = 'attachment; filename="whitebird-cleaner-onboarding-template.xlsx"'
@@ -2259,14 +2266,31 @@ def hr_cleaner_import_preview(request: AuthenticatedRequest, workbook: UploadedF
 
 
 @router.post("/hr/cleaners/import", response=dict, summary="Import a validated HR cleaner workbook", tags=["HR"])
-def hr_cleaner_import(request: AuthenticatedRequest, workbook: UploadedFile = File(...)) -> dict[str, object]:  # type: ignore[type-arg]
+def hr_cleaner_import(
+    request: AuthenticatedRequest,
+    workbook: UploadedFile = File(...),
+    onboarding_status: str = Form(..., pattern="^(trainee|active)$"),
+    site_id: int = Form(...),
+) -> dict[str, object]:  # type: ignore[type-arg]
     _cleaner_write(request.auth)
-    return import_cleaner_workbook(uploaded_file=workbook, actor=request.auth)
+    site = get_site_or_none(site_id)
+    if site is None:
+        raise Http404("Site not found.")
+    return import_cleaner_workbook(
+        uploaded_file=workbook,
+        actor=request.auth,
+        onboarding_status=CleanerStatus(onboarding_status),
+        site=site,
+    )
 
 
 @router.post("/cleaners", response=CleanerOut, summary="Register a cleaner")
 def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> CleanerOut:
     _cleaner_write(request.auth)
+    site = get_site_or_none(payload.site_id)
+    if site is None or not site.is_active:
+        raise ValidationError("Choose an active site for the cleaner.")
+    onboarding_status = CleanerStatus(payload.onboarding_status)
     cleaner = register_cleaner(
         first_name=payload.first_name,
         last_name=payload.last_name,
@@ -2280,13 +2304,25 @@ def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> C
         near_person_relationship=payload.near_person_relationship,
         near_person_phone=payload.near_person_phone,
         notes=payload.notes,
+        initial_status=onboarding_status,
         actor=request.auth,
     )
-    cleaner = change_cleaner_status(
+    assign_cleaner_to_site(
         cleaner=cleaner,
-        new_status=CleanerStatus.TRAINEE,
+        site=site,
+        assignment_type=CleanerAssignmentType.FULL_TIME,
+        start_date=date.today(),
+        notes=f"Initial {onboarding_status.value} onboarding assignment.",
         actor=request.auth,
     )
+    if onboarding_status == CleanerStatus.TRAINEE:
+        start_trainee_program(
+            cleaner=cleaner,
+            site=site,
+            expected_end_date=date.today() + timedelta(days=90),
+            actor=request.auth,
+            notes="Started from individual HR onboarding.",
+        )
     return CleanerOut(**cleaner_serialize(cleaner, request.auth))
 
 

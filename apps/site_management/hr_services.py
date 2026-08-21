@@ -1,4 +1,4 @@
-"""Human-resources onboarding and workforce-import services."""
+"""HR cleaner workbook generation, validation, and controlled import services."""
 
 from __future__ import annotations
 
@@ -18,113 +18,84 @@ from apps.accounts.models import User
 from apps.core.models import AuditLog
 from apps.core.services import record_audit
 
-from .models import (
-    Cleaner,
-    CleanerAssignmentType,
-    CleanerStatus,
-    Gender,
-    IdType,
-    Site,
-)
+from .assignment_services import assign_cleaner_to_site
+from .models import Cleaner, CleanerAssignmentType, CleanerSiteAssignment, CleanerStatus, Gender, IdType, Site
 from .trainee_services import start_trainee_program
 
+
 HEADERS = [
-    "first_name",
-    "last_name",
-    "id_type",
-    "id_number",
-    "gender",
-    "birth_date",
-    "living_location",
-    "phone_number",
-    "near_person_name",
-    "near_person_relationship",
-    "near_person_phone",
-    "registration_date",
-    "site_code",
-    "assignment_type",
-    "shift_name",
-    "notes",
+    "first_name", "last_name", "id_type", "id_number", "gender", "birth_date",
+    "living_location", "phone_number", "near_person_name", "near_person_relationship",
+    "near_person_phone", "registration_date", "notes",
 ]
 REQUIRED = {"first_name", "last_name", "id_type", "id_number", "gender", "birth_date", "registration_date"}
+_ALLOWED_ONBOARDING_STATUSES = {CleanerStatus.TRAINEE, CleanerStatus.ACTIVE}
 
 
-def build_cleaner_workbook_template() -> bytes:
+def _configuration(*, onboarding_status: CleanerStatus | str, site: Site) -> CleanerStatus:
+    status = CleanerStatus(onboarding_status)
+    if status not in _ALLOWED_ONBOARDING_STATUSES:
+        raise ValidationError("HR onboarding status must be trainee or active.")
+    if not site.is_active:
+        raise ValidationError("Choose an active destination site.")
+    return status
+
+
+def build_cleaner_workbook_template(*, onboarding_status: CleanerStatus | str, site: Site) -> bytes:
+    """Build a workbook whose placement/status configuration is visible but server-owned."""
+    status = _configuration(onboarding_status=onboarding_status, site=site)
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Cleaners"
     sheet.append(HEADERS)
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = "A1:P201"
+    sheet.auto_filter.ref = "A1:M201"
     for column, width in {
-        "A": 18,
-        "B": 18,
-        "C": 20,
-        "D": 22,
-        "E": 14,
-        "F": 14,
-        "G": 24,
-        "H": 18,
-        "I": 20,
-        "J": 20,
-        "K": 18,
-        "L": 16,
-        "M": 16,
-        "N": 18,
-        "O": 18,
-        "P": 30,
+        "A": 18, "B": 18, "C": 20, "D": 22, "E": 14, "F": 14, "G": 24,
+        "H": 18, "I": 20, "J": 20, "K": 18, "L": 16, "M": 30,
     }.items():
         sheet.column_dimensions[column].width = width
     for cell in sheet[1]:
         cell.font = cell.font.copy(bold=True, color="FFFFFF")
         cell.fill = cell.fill.copy(fill_type="solid", fgColor="0F7667")
-    table = Table(displayName="CleanerOnboardingRows", ref="A1:P201")
+    table = Table(displayName="CleanerOnboardingRows", ref="A1:M201")
     table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium4", showRowStripes=True, showColumnStripes=False)
     sheet.add_table(table)
 
     reference = workbook.create_sheet("ReferenceData")
     reference.sheet_state = "hidden"
-    lists = {
-        "A": ("id_type", [item.value for item in IdType]),
-        "B": ("gender", [item.value for item in Gender]),
-        "C": ("assignment_type", [item.value for item in CleanerAssignmentType]),
-    }
+    lists = {"A": ("id_type", [item.value for item in IdType]), "B": ("gender", [item.value for item in Gender])}
     for column, (label, values) in lists.items():
         reference[f"{column}1"] = label
         for index, value in enumerate(values, 2):
             reference[f"{column}{index}"] = value
-    instructions = workbook.create_sheet("Instructions", 0)
-    instructions.append(["White Bird HR Cleaner Onboarding Workbook"])
-    instructions.append(["Complete the Cleaners sheet. New records are always created as trainees."])
-    instructions.append(["Use the dropdowns for id_type, gender, and assignment_type. Dates must be YYYY-MM-DD."])
-    instructions.append(
-        ["site_code and shift_name are validated again by the server. Do not edit the hidden ReferenceData sheet."]
-    )
-    instructions.append(["Upload is preview-first: invalid rows are rejected before any database changes are made."])
-    for row in instructions.iter_rows():
+
+    configuration = workbook.create_sheet("Onboarding configuration", 0)
+    configuration.append(["White Bird HR Cleaner Onboarding Workbook"])
+    configuration.append(["Selected onboarding status", status.value])
+    configuration.append(["Selected assigned site", site.name])
+    configuration.append(["Selected site code", site.code])
+    configuration.append(["Status and site are selected by HR before download and are enforced at preview/import."])
+    configuration.append(["Complete the Cleaners sheet. Dates must be YYYY-MM-DD. Do not add site or status columns."])
+    configuration.append(["Use the dropdowns for id_type and gender. Upload is preview-first: rejected rows block import."])
+    for row in configuration.iter_rows():
         row[0].alignment = row[0].alignment.copy(wrap_text=True)
-    instructions.column_dimensions["A"].width = 110
+    configuration.column_dimensions["A"].width = 105
+    configuration.column_dimensions["B"].width = 32
 
     validations = [
         DataValidation(type="list", formula1="=ReferenceData!$A$2:$A$4", allow_blank=False),
         DataValidation(type="list", formula1="=ReferenceData!$B$2:$B$5", allow_blank=False),
-        DataValidation(type="list", formula1="=ReferenceData!$C$2:$C$3", allow_blank=True),
-        DataValidation(
-            type="date", operator="between", formula1="DATE(1940,1,1)", formula2="TODAY()", allow_blank=False
-        ),
+        DataValidation(type="date", operator="between", formula1="DATE(1940,1,1)", formula2="TODAY()", allow_blank=False),
     ]
     for validation in validations:
         sheet.add_data_validation(validation)
     validations[0].add("C2:C201")
     validations[1].add("E2:E201")
-    validations[2].add("N2:N201")
-    validations[3].add("F2:F201")
-    validations[3].add("L2:L201")
+    validations[2].add("F2:F201")
+    validations[2].add("L2:L201")
     sheet.conditional_formatting.add(
-        "A2:P201",
-        FormulaRule(
-            formula=["COUNTIF($D$2:$D$201,$D2)>1"], fill=sheet["A2"].fill.copy(fill_type="solid", fgColor="FCE4D6")
-        ),
+        "A2:M201", FormulaRule(formula=["COUNTIF($D$2:$D$201,$D2)>1"], fill=sheet["A2"].fill.copy(fill_type="solid", fgColor="FCE4D6"))
     )
     buffer = io.BytesIO()
     workbook.save(buffer)
@@ -175,10 +146,6 @@ def _validate_row(row: dict[str, Any], *, seen_ids: set[tuple[str, str]]) -> tup
         errors.append("id_type is not an allowed value")
     if cleaned.get("gender") and cleaned["gender"] not in {item.value for item in Gender}:
         errors.append("gender is not an allowed value")
-    if cleaned.get("assignment_type") and cleaned["assignment_type"] not in {
-        item.value for item in CleanerAssignmentType
-    }:
-        errors.append("assignment_type is not an allowed value")
     if cleaned.get("id_type") and cleaned.get("id_number"):
         key = (cleaned["id_type"], cleaned["id_number"].upper())
         if key in seen_ids:
@@ -204,76 +171,45 @@ def preview_cleaner_workbook(uploaded_file: Any) -> dict[str, Any]:
             errors.append({"row": row["_row_number"], "errors": row_errors})
         else:
             accepted.append({"row": row["_row_number"], "data": cleaned})
-    return {
-        "file_hash": file_hash,
-        "total_rows": len(rows),
-        "accepted_rows": len(accepted),
-        "rejected_rows": len(errors),
-        "accepted": accepted,
-        "errors": errors,
-    }
+    return {"file_hash": file_hash, "total_rows": len(rows), "accepted_rows": len(accepted), "rejected_rows": len(errors), "accepted": accepted, "errors": errors}
 
 
-def import_cleaner_workbook(*, uploaded_file: Any, actor: User) -> dict[str, Any]:
+def import_cleaner_workbook(*, uploaded_file: Any, actor: User, onboarding_status: CleanerStatus | str, site: Site) -> dict[str, Any]:
+    """Import one HR-configured cohort; spreadsheet cells cannot alter its site or status."""
+    status = _configuration(onboarding_status=onboarding_status, site=site)
     preview = preview_cleaner_workbook(uploaded_file)
     if preview["rejected_rows"]:
         return {**preview, "committed": False, "message": "Import stopped. Correct all rejected rows and upload again."}
     created: list[int] = []
-    updated: list[int] = []
+    matched: list[int] = []
     assignment_results: list[dict[str, Any]] = []
     with transaction.atomic():
         for item in preview["accepted"]:
             data = dict(item["data"])
             row_number = item["row"]
             identity = {"id_type": data.pop("id_type"), "id_number": data.pop("id_number").upper()}
-            site_code = data.pop("site_code", "")
-            assignment_type = data.pop("assignment_type", "")
-            shift_name = data.pop("shift_name", "")
             cleaner, was_created = Cleaner.objects.get_or_create(
                 **identity,
-                defaults={**data, "status": CleanerStatus.TRAINEE, "created_by": actor, "updated_by": actor},
+                defaults={**data, "status": status, "created_by": actor, "updated_by": actor},
             )
-            if was_created:
-                created.append(cleaner.pk)
-            else:
-                updated.append(cleaner.pk)
-            if site_code:
-                site = Site.objects.filter(code=site_code, is_active=True).first()
-                if site is None:
-                    raise ValidationError(f"Row {row_number}: site_code '{site_code}' does not exist or is inactive.")
-                if not cleaner.trainee_programs.filter(status__in=["in_training", "extended"]).exists():
-                    start_trainee_program(
-                        cleaner=cleaner,
-                        site=site,
-                        expected_end_date=date.today() + timedelta(days=90),
-                        actor=actor,
-                        notes=f"Created from HR workbook row {row_number}.",
-                    )
-                assignment_results.append(
-                    {
-                        "row": row_number,
-                        "cleaner_id": cleaner.pk,
-                        "site_id": site.pk,
-                        "status": "trainee_program_started",
-                    }
+            (created if was_created else matched).append(cleaner.pk)
+            active_assignment = CleanerSiteAssignment.objects.filter(
+                cleaner=cleaner, site=site, status__in=["active", "draft"]
+            ).exists()
+            if not active_assignment:
+                assignment = assign_cleaner_to_site(
+                    cleaner=cleaner, site=site, assignment_type=CleanerAssignmentType.FULL_TIME,
+                    start_date=data["registration_date"], notes=f"Bulk HR {status.value} onboarding row {row_number}.", actor=actor,
+                )
+                assignment_results.append({"row": row_number, "cleaner_id": cleaner.pk, "site_id": site.pk, "assignment_id": assignment.pk, "status": assignment.status})
+            if status == CleanerStatus.TRAINEE and not cleaner.trainee_programs.filter(status__in=["in_training", "extended"]).exists():
+                start_trainee_program(
+                    cleaner=cleaner, site=site, expected_end_date=data["registration_date"] + timedelta(days=90),
+                    start_date=data["registration_date"], actor=actor, notes=f"Created from HR workbook row {row_number}.",
                 )
         record_audit(
-            action=AuditLog.Action.CREATE,
-            actor=actor,
-            entity=actor,
-            summary=f"Imported HR cleaner workbook {preview['file_hash']} ({len(created)} created, {len(updated)} matched)",
-            after_data={
-                "file_hash": preview["file_hash"],
-                "created": created,
-                "updated": updated,
-                "assignments": assignment_results,
-            },
+            action=AuditLog.Action.CREATE, actor=actor, entity=actor,
+            summary=f"Imported HR cleaner workbook {preview['file_hash']} to {site.code} as {status.value}",
+            after_data={"file_hash": preview["file_hash"], "onboarding_status": status.value, "site_id": site.pk, "created": created, "matched": matched, "assignments": assignment_results},
         )
-    return {
-        **preview,
-        "committed": True,
-        "created_cleaner_ids": created,
-        "matched_cleaner_ids": updated,
-        "assignment_results": assignment_results,
-        "message": "HR workbook imported successfully. New cleaners remain trainees until qualification.",
-    }
+    return {**preview, "committed": True, "created_cleaner_ids": created, "matched_cleaner_ids": matched, "assignment_results": assignment_results, "onboarding_status": status.value, "site_id": site.pk, "message": f"HR workbook imported successfully to {site.name} as {status.value} cleaners."}

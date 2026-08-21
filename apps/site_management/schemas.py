@@ -635,6 +635,8 @@ class CleanerCreateIn(Schema):
     near_person_relationship: str = ""
     near_person_phone: str = ""
     notes: str = ""
+    onboarding_status: str = Field(default="trainee", pattern="^(trainee|active)$")
+    site_id: int
 
 
 class CleanerUpdateIn(Schema):

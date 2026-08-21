@@ -91,9 +91,10 @@ def register_cleaner(
     near_person_relationship: str = "",
     near_person_phone: str = "",
     notes: str = "",
+    initial_status: CleanerStatus = CleanerStatus.APPLICANT,
     actor: User,
 ) -> Cleaner:
-    """Register a new applicant."""
+    """Register a new cleaner with an audited HR-selected initial lifecycle status."""
     with transaction.atomic():
         cleaner = Cleaner(
             first_name=first_name,
@@ -108,7 +109,7 @@ def register_cleaner(
             near_person_relationship=near_person_relationship,
             near_person_phone=near_person_phone,
             notes=notes,
-            status=CleanerStatus.APPLICANT,
+            status=CleanerStatus(initial_status),
             created_by=actor,
             updated_by=actor,
         )
