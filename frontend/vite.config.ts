@@ -9,7 +9,7 @@ import { defineConfig } from "vite";
  * API; production builds into frontend/dist for collection under /static/frontend/.
  */
 export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/static/frontend/" : "/",
+  base: command === "build" ? (process.env.VITE_BASE_PATH || "/static/frontend/") : "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
