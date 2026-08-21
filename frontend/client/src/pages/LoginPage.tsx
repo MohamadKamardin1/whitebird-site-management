@@ -7,14 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { readableApiError } from "@/lib/api";
-import { brandMark, loginOperationsImage } from "@/lib/assets";
+import { brandLogo, loginOperationsImage } from "@/lib/assets";
 
-const LOGO = brandMark;
+const LOGO = brandLogo;
 const LOGIN_ILLUSTRATION = loginOperationsImage;
 
 function BrandLockup({ light = false }: { light?: boolean }) {
   return <span className={`inline-flex items-center gap-3 ${light ? "text-white" : "text-[#16383B]"}`}>
-    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FDFBF6] shadow-[0_10px_30px_rgba(27,51,50,.12)]"><img src={LOGO} alt="" className="h-9 w-9" /></span>
+    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FDFBF6] shadow-[0_10px_30px_rgba(27,51,50,.12)]"><img src={LOGO} alt="" className="h-9 w-9 object-contain" /></span>
     <span className="leading-tight"><strong className="block text-[13px] font-extrabold uppercase tracking-[.18em]">White Bird</strong><span className={`mt-1 block text-[10px] font-bold uppercase tracking-[.13em] ${light ? "text-[#B4D6D0]" : "text-[#53706E]"}`}>Zanzibar operational ledger</span></span>
   </span>;
 }
