@@ -243,6 +243,7 @@ from .reporting_services import (
 )
 from .remuneration_services import (
     administrator_monthly_remuneration_rows,
+    leadership_monthly_remuneration_rows,
     prepare_monthly_remuneration,
     remuneration_line_view,
     remuneration_window_is_open,
@@ -328,6 +329,7 @@ from .schemas import (
     JobReopenIn,
     JobSummaryOut,
     JobUpdateIn,
+    LeadershipMonthlyRemunerationRowOut,
     MessageOut,
     MonthlyRemunerationReportOut,
     MessagingContactOut,
@@ -1391,6 +1393,16 @@ def administrator_monthly_remuneration_overview(
     return [
         AdminMonthlyRemunerationRowOut(**row)
         for row in administrator_monthly_remuneration_rows(actor=request.auth, period=period)
+    ]
+
+
+@router.get("/remuneration/register/monthly", response=list[LeadershipMonthlyRemunerationRowOut])
+def leadership_monthly_remuneration_register(
+    request: AuthenticatedRequest, period: date
+) -> list[LeadershipMonthlyRemunerationRowOut]:
+    return [
+        LeadershipMonthlyRemunerationRowOut(**row)
+        for row in leadership_monthly_remuneration_rows(actor=request.auth, period=period)
     ]
 
 

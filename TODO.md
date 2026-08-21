@@ -419,3 +419,8 @@
 - [x] Ensure trainee onboarding always creates a clear initial site assignment and that each site training-management workspace shows its currently assigned trainees.
 - [x] Make People Registry site assignment and transfer controls clear for both cleaners and trainees, including effective dates, a required transfer reason, and retained assignment history.
 - [x] Add an HR-authorized bulk transfer workflow for selected cleaners or trainees, with per-person validation, atomic audit-safe assignment changes, visible outcome messages, bilingual UI, and regression coverage.
+
+## Trainee Supervisor Visibility and Read-only Remuneration Registers
+- [x] Fix the reported defect where a Site Supervisor assigned to a trainee’s site cannot see that trainee in Training Management; add an end-to-end role-scope regression test.
+- [x] Provide HR, General Supervisor, and Assistant General Supervisor with a bilingual, Excel-style, read-only all-site remuneration register; preserve all existing remuneration write permissions for Site Supervisors and reviewers only.
+- [x] Validate role visibility and read-only enforcement, then document, commit, and push the completed changes.

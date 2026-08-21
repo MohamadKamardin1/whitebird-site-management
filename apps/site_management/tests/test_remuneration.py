@@ -110,6 +110,21 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     assert overview_row["form_status"] == "reviewed"
     assert _authed(supervisor).get(f"/api/site-management/v1/admin/remuneration/monthly?period={period.isoformat()}").status_code == 403
 
+    for role in (RoleCode.HR, RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR):
+        register = _authed(UserFactory(role=role)).get(
+            f"/api/site-management/v1/remuneration/register/monthly?period={period.isoformat()}"
+        )
+        assert register.status_code == 200, register.content
+        register_row = next(item for item in register.json() if item["cleaner_id"] == cleaner.pk)
+        assert register_row["cleaner_name"] == cleaner.full_name
+        assert register_row["previous_payment_account_holder_name"] == "Asha Juma"
+        assert register_row["new_payment_account_holder_name"] == "Asha Juma Msaidizi"
+        assert "previous_account" not in register_row
+        assert "new_account" not in register_row
+    assert _authed(supervisor).get(
+        f"/api/site-management/v1/remuneration/register/monthly?period={period.isoformat()}"
+    ).status_code == 403
+
     with pytest.raises(ValidationError):
         prepare_monthly_remuneration(actor=supervisor, site=site, period=period, today=period.replace(day=14))
     assert MonthlyRemunerationReport.objects.filter(site=other_site).count() == 0

@@ -341,6 +341,27 @@ class AdminMonthlyRemunerationRowOut(Schema):
     form_reviewed_at: datetime | None = None
 
 
+class LeadershipMonthlyRemunerationRowOut(Schema):
+    site_id: int
+    site_name: str
+    cleaner_id: int
+    cleaner_name: str
+    present_days: int
+    absent_days: int
+    start_work_date: date | None = None
+    previous_payment_account_holder_name: str
+    new_payment_account_holder_name: str
+    phone_change_status: str
+    account_change_status: str
+    payment_saved_by: str
+    payment_saved_at: datetime | None = None
+    form_status: str
+    form_prepared_by: str
+    form_submitted_at: datetime | None = None
+    form_reviewed_by: str
+    form_reviewed_at: datetime | None = None
+
+
 class SiteCreateIn(Schema):
     name: str = Field(min_length=1, max_length=160)
     zone_id: int | None = None

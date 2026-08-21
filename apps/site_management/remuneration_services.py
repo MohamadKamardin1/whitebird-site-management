@@ -261,6 +261,73 @@ def administrator_monthly_remuneration_rows(*, actor: User, period: date) -> lis
     return rows
 
 
+def leadership_monthly_remuneration_rows(*, actor: User, period: date) -> list[dict[str, Any]]:
+    """Return a non-editable all-site remuneration register for authorised leaders.
+
+    The register intentionally omits raw payment numbers. It gives HR, the
+    General Supervisor, and Assistant General Supervisors operational
+    visibility of every cleaner, attendance totals, payment-holder changes,
+    and report accountability without creating a new mutation path.
+    """
+    allowed_roles = {RoleCode.HR, RoleCode.GENERAL_SUPERVISOR, RoleCode.ASSISTANT_GENERAL_SUPERVISOR}
+    if not (actor.is_system_admin or actor.role in allowed_roles):
+        raise PermissionDenied("Only HR or senior supervisors can view the all-site remuneration register.")
+    starts, ends = month_bounds(period)
+    assignments = (
+        CleanerSiteAssignment.objects.filter(status=CleanerAssignmentStatus.ACTIVE, start_date__lte=ends)
+        .filter(end_date__isnull=True)
+        | CleanerSiteAssignment.objects.filter(
+            status=CleanerAssignmentStatus.ACTIVE,
+            start_date__lte=ends,
+            end_date__gte=starts,
+        )
+    ).select_related("cleaner", "site")
+    reports = {
+        report.site_id: report
+        for report in MonthlyRemunerationReport.objects.filter(period=period)
+        .select_related("prepared_by", "reviewed_by")
+        .prefetch_related("lines__cleaner", "lines__payment_saved_by")
+    }
+    line_map = {
+        (line.report.site_id, line.cleaner_id): line
+        for report in reports.values()
+        for line in report.lines.select_related("payment_saved_by").all()
+    }
+    rows: list[dict[str, Any]] = []
+    for assignment in assignments:
+        profile = getattr(assignment.cleaner, "payment_profile", None)
+        line = line_map.get((assignment.site_id, assignment.cleaner_id))
+        present, absent = _monthly_counts(site_id=assignment.site_id, cleaner_id=assignment.cleaner_id, period=period)
+        report = reports.get(assignment.site_id)
+        rows.append(
+            {
+                "site_id": assignment.site_id,
+                "site_name": assignment.site.name,
+                "cleaner_id": assignment.cleaner_id,
+                "cleaner_name": assignment.cleaner.full_name,
+                "present_days": line.present_days if line else present,
+                "absent_days": line.absent_days if line else absent,
+                "start_work_date": line.start_work_date if line else (assignment.start_date if starts <= assignment.start_date <= ends else None),
+                "previous_payment_account_holder_name": (
+                    line.previous_payment_account_holder_name
+                    if line and line.previous_payment_account_holder_name
+                    else (profile.payment_account_holder_name if profile else "")
+                ),
+                "new_payment_account_holder_name": line.proposed_payment_account_holder_name if line else "",
+                "phone_change_status": line.phone_change_status if line else "not_recorded",
+                "account_change_status": line.account_change_status if line else "not_recorded",
+                "payment_saved_by": line.payment_saved_by.full_name if line and line.payment_saved_by else "",
+                "payment_saved_at": line.payment_saved_at if line else None,
+                "form_status": report.status if report else "not_prepared",
+                "form_prepared_by": report.prepared_by.full_name if report else "",
+                "form_submitted_at": report.submitted_at if report else None,
+                "form_reviewed_by": report.reviewed_by.full_name if report and report.reviewed_by else "",
+                "form_reviewed_at": report.reviewed_at if report else None,
+            }
+        )
+    return rows
+
+
 def submit_monthly_remuneration(*, report: MonthlyRemunerationReport, actor: User) -> MonthlyRemunerationReport:
     _assert_site_supervisor_scope(actor=actor, site_id=report.site_id)
     if report.prepared_by_id != actor.pk or not report.is_editable:

@@ -589,3 +589,34 @@ def test_hr_bulk_transfer_keeps_trainee_assignment_and_training_scope_in_sync() 
         content_type="application/json",
     )
     assert denied.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+def test_site_supervisor_sees_currently_assigned_trainee_in_training_workspace_scope() -> None:
+    site = SiteFactory()
+    supervisor = UserFactory(role=RoleCode.SITE_SUPERVISOR)
+    SiteSupervisorAssignmentFactory(
+        site=site,
+        user=supervisor,
+        assigned_from=date.today() - timedelta(days=1),
+        assigned_to=date.today() + timedelta(days=30),
+        is_active=True,
+    )
+    trainee = CleanerFactory(status=CleanerStatus.TRAINEE)
+    CleanerSiteAssignmentFactory(
+        cleaner=trainee,
+        site=site,
+        status=CleanerAssignmentStatus.DRAFT,
+        start_date=date.today(),
+    )
+    programme = TraineeProgramFactory(
+        cleaner=trainee,
+        site=site,
+        status=TraineeProgramStatus.IN_TRAINING,
+    )
+
+    response = _authed(supervisor).get(
+        "/api/site-management/v1/trainees", {"status": TraineeProgramStatus.IN_TRAINING}
+    )
+    assert response.status_code == 200, response.content
+    assert any(row["id"] == programme.pk for row in response.json()["results"])

@@ -14,6 +14,7 @@ query internals to routers. Rules:
 from __future__ import annotations
 
 from django.db.models import Q, QuerySet
+from django.utils import timezone
 
 from apps.accounts.models import RoleCode, User
 
@@ -60,7 +61,14 @@ def visible_sites(user: User) -> QuerySet[Site]:
     if _sees_all_zones(user):
         return Site.objects.all()
     if user.role == RoleCode.SITE_SUPERVISOR:
-        return Site.objects.filter(supervisor_assignments__user=user, supervisor_assignments__is_active=True).distinct()
+        today = timezone.localdate()
+        return Site.objects.filter(
+            supervisor_assignments__user=user,
+            supervisor_assignments__is_active=True,
+            supervisor_assignments__assigned_from__lte=today,
+        ).filter(
+            Q(supervisor_assignments__assigned_to__isnull=True) | Q(supervisor_assignments__assigned_to__gte=today)
+        ).distinct()
     return Site.objects.filter(zone_id__in=assigned_zone_ids(user))
 
 
@@ -77,7 +85,14 @@ def supervised_sites(user: User) -> QuerySet[Site]:
     if user.is_management_viewer:
         return Site.objects.none()
     if user.role == RoleCode.SITE_SUPERVISOR:
-        return Site.objects.filter(supervisor_assignments__user=user, supervisor_assignments__is_active=True).distinct()
+        today = timezone.localdate()
+        return Site.objects.filter(
+            supervisor_assignments__user=user,
+            supervisor_assignments__is_active=True,
+            supervisor_assignments__assigned_from__lte=today,
+        ).filter(
+            Q(supervisor_assignments__assigned_to__isnull=True) | Q(supervisor_assignments__assigned_to__gte=today)
+        ).distinct()
     if user.role == RoleCode.ZONE_SUPERVISOR:
         return Site.objects.filter(zone_id__in=assigned_zone_ids(user))
     return Site.objects.none()
