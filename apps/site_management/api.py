@@ -100,7 +100,12 @@ from .export_services import (
     job_export_rows,
     report_export_rows,
 )
-from .hr_services import build_cleaner_workbook_template, import_cleaner_workbook, preview_cleaner_workbook
+from .hr_services import (
+    build_cleaner_workbook_template,
+    import_cleaner_workbook,
+    preview_cleaner_workbook,
+    transfer_cleaners_between_sites,
+)
 from .inspection_selectors import (
     InspectionFilter,
     TemplateFilter,
@@ -274,6 +279,8 @@ from .schemas import (
     CleanerShiftAssignmentOut,
     CleanerSiteAssignmentCreateIn,
     CleanerSiteAssignmentOut,
+    CleanerSiteTransferIn,
+    CleanerSiteTransferOut,
     CleanerSiteAssignmentUpdateIn,
     CleanerStatusIn,
     CleanerUpdateIn,
@@ -2333,6 +2340,31 @@ def cleaner_create(request: AuthenticatedRequest, payload: CleanerCreateIn) -> C
             notes="Started from individual HR onboarding.",
         )
     return CleanerOut(**cleaner_serialize(cleaner, request.auth))
+
+
+@router.post(
+    "/hr/cleaners/transfer",
+    response=list[CleanerSiteTransferOut],
+    summary="Transfer one or more cleaners or trainees between sites",
+    tags=["HR"],
+)
+def hr_cleaner_transfer(
+    request: AuthenticatedRequest, payload: CleanerSiteTransferIn
+) -> list[CleanerSiteTransferOut]:
+    _cleaner_write(request.auth)
+    destination_site = get_site_or_none(payload.destination_site_id)
+    if destination_site is None:
+        raise Http404("Destination site not found.")
+    return [
+        CleanerSiteTransferOut(**result)
+        for result in transfer_cleaners_between_sites(
+            cleaner_ids=payload.cleaner_ids,
+            destination_site=destination_site,
+            effective_date=payload.effective_date,
+            reason=payload.reason,
+            actor=request.auth,
+        )
+    ]
 
 
 @router.get("/cleaners/{cleaner_id}", response=CleanerOut, summary="Cleaner detail")

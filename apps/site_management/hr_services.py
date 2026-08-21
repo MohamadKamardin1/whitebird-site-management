@@ -18,9 +18,21 @@ from apps.accounts.models import User
 from apps.core.models import AuditLog
 from apps.core.services import record_audit
 
-from .assignment_services import assign_cleaner_to_site
-from .models import Cleaner, CleanerAssignmentType, CleanerSiteAssignment, CleanerStatus, Gender, IdType, Site
-from .trainee_services import start_trainee_program
+from .assignment_services import assign_cleaner_to_site, end_assignment
+from .models import (
+    Cleaner,
+    CleanerAssignmentStatus,
+    CleanerAssignmentType,
+    CleanerSiteAssignment,
+    CleanerStatus,
+    Gender,
+    IdType,
+    Site,
+    TraineeProgram,
+    TraineeProgramStatus,
+    WorkMode,
+)
+from .trainee_services import start_trainee_program, transfer_trainee_program
 
 
 HEADERS = [
@@ -213,3 +225,118 @@ def import_cleaner_workbook(*, uploaded_file: Any, actor: User, onboarding_statu
             after_data={"file_hash": preview["file_hash"], "onboarding_status": status.value, "site_id": site.pk, "created": created, "matched": matched, "assignments": assignment_results},
         )
     return {**preview, "committed": True, "created_cleaner_ids": created, "matched_cleaner_ids": matched, "assignment_results": assignment_results, "onboarding_status": status.value, "site_id": site.pk, "message": f"HR workbook imported successfully to {site.name} as {status.value} cleaners."}
+
+
+def _assignment_type_for_site(site: Site, current: CleanerSiteAssignment | None) -> CleanerAssignmentType:
+    if site.work_mode == WorkMode.SHIFT:
+        return CleanerAssignmentType.SHIFT
+    if site.work_mode == WorkMode.FULL_TIME:
+        return CleanerAssignmentType.FULL_TIME
+    return CleanerAssignmentType(current.assignment_type) if current else CleanerAssignmentType.FULL_TIME
+
+
+def transfer_cleaners_between_sites(
+    *,
+    cleaner_ids: list[int],
+    destination_site: Site,
+    effective_date: date,
+    reason: str,
+    actor: User,
+) -> list[dict[str, Any]]:
+    """Transfer selected cleaners or trainees as one atomic HR People Registry action.
+
+    Active and draft assignments are ended with history retained. Active trainee
+    programmes move to the same destination site so that the receiving site's
+    training worksheet immediately becomes the authoritative workspace.
+    """
+    unique_ids = list(dict.fromkeys(cleaner_ids))
+    if not unique_ids:
+        raise ValidationError("Select at least one cleaner or trainee to transfer.", code="no_cleaners")
+    if len(unique_ids) > 100:
+        raise ValidationError("Transfer no more than 100 people at once.", code="batch_too_large")
+    if not destination_site.is_active:
+        raise ValidationError("Choose an active destination site.", code="destination_inactive")
+    if not reason.strip():
+        raise ValidationError("A transfer reason is required.", code="reason_required")
+
+    with transaction.atomic():
+        cleaners = list(Cleaner.objects.filter(pk__in=unique_ids).order_by("pk"))
+        if len(cleaners) != len(unique_ids):
+            found_ids = {cleaner.pk for cleaner in cleaners}
+            missing = sorted(set(unique_ids) - found_ids)
+            raise ValidationError(f"Cleaner records not found: {missing}", code="cleaner_not_found")
+
+        plans: list[tuple[Cleaner, list[CleanerSiteAssignment], TraineeProgram | None]] = []
+        active_statuses = [CleanerAssignmentStatus.ACTIVE, CleanerAssignmentStatus.DRAFT]
+        trainee_statuses = [TraineeProgramStatus.IN_TRAINING, TraineeProgramStatus.EXTENDED]
+        for cleaner in cleaners:
+            if cleaner.status == CleanerStatus.INACTIVE:
+                raise ValidationError(f"{cleaner.full_name} is inactive and cannot be transferred.", code="cleaner_inactive")
+            assignments = list(
+                CleanerSiteAssignment.objects.filter(cleaner=cleaner, status__in=active_statuses)
+                .select_related("site")
+                .order_by("-start_date", "-pk")
+            )
+            if assignments and all(assignment.site_id == destination_site.pk for assignment in assignments):
+                raise ValidationError(
+                    f"{cleaner.full_name} is already assigned to {destination_site.name}.", code="already_assigned"
+                )
+            program = (
+                TraineeProgram.objects.filter(cleaner=cleaner, status__in=trainee_statuses)
+                .select_related("site")
+                .order_by("-start_date", "-pk")
+                .first()
+            )
+            plans.append((cleaner, assignments, program))
+
+        results: list[dict[str, Any]] = []
+        for cleaner, assignments, program in plans:
+            previous_site = assignments[0].site if assignments else (program.site if program else None)
+            for assignment in assignments:
+                end_assignment(assignment=assignment, actor=actor, end_date=effective_date)
+            assignment = assign_cleaner_to_site(
+                cleaner=cleaner,
+                site=destination_site,
+                assignment_type=_assignment_type_for_site(destination_site, assignments[0] if assignments else None),
+                start_date=effective_date,
+                notes=f"HR People Registry transfer on {effective_date}: {reason.strip()}",
+                actor=actor,
+            )
+            trainee_program_id: int | None = None
+            if program is not None:
+                trainee_program_id = transfer_trainee_program(
+                    program=program,
+                    destination_site=destination_site,
+                    effective_date=effective_date,
+                    reason=reason,
+                    actor=actor,
+                ).pk
+            elif cleaner.status == CleanerStatus.TRAINEE:
+                trainee_program_id = start_trainee_program(
+                    cleaner=cleaner,
+                    site=destination_site,
+                    start_date=effective_date,
+                    expected_end_date=effective_date + timedelta(days=90),
+                    actor=actor,
+                    notes=f"Training programme restored during HR transfer on {effective_date}: {reason.strip()}",
+                ).pk
+            results.append(
+                {
+                    "cleaner_id": cleaner.pk,
+                    "cleaner_name": cleaner.full_name,
+                    "previous_site_id": previous_site.pk if previous_site else None,
+                    "previous_site_name": previous_site.name if previous_site else None,
+                    "destination_site_id": destination_site.pk,
+                    "destination_site_name": destination_site.name,
+                    "assignment_id": assignment.pk,
+                    "trainee_program_id": trainee_program_id,
+                }
+            )
+        record_audit(
+            action=AuditLog.Action.UPDATE,
+            actor=actor,
+            entity=actor,
+            summary=f"Transferred {len(results)} cleaner(s) to {destination_site.name} from HR People Registry",
+            after_data={"destination_site_id": destination_site.pk, "effective_date": effective_date.isoformat(), "reason": reason.strip(), "people": results},
+        )
+    return results

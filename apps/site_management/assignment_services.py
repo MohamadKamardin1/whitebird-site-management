@@ -136,13 +136,15 @@ def update_assignment(
     return assignment
 
 
-def end_assignment(*, assignment: CleanerSiteAssignment, actor: User) -> CleanerSiteAssignment:
+def end_assignment(
+    *, assignment: CleanerSiteAssignment, actor: User, end_date: date | None = None
+) -> CleanerSiteAssignment:
     """End an assignment; history is preserved (never hard-deleted)."""
     with transaction.atomic():
         before = model_data(assignment)
         assignment.status = CleanerAssignmentStatus.ENDED
         if not assignment.end_date:
-            assignment.end_date = date.today()
+            assignment.end_date = end_date or date.today()
         assignment.updated_by = actor
         assignment.save(update_fields=["status", "end_date", "updated_by", "updated_at"])
         _assignment_audit(

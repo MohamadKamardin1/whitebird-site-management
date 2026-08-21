@@ -124,6 +124,39 @@ def update_trainee_program(
     return program
 
 
+def transfer_trainee_program(
+    *,
+    program: TraineeProgram,
+    destination_site: Site,
+    effective_date: datetime.date,
+    reason: str,
+    actor: User,
+) -> TraineeProgram:
+    """Move an active programme while retaining its evaluations and full history."""
+    if not program.is_active_program:
+        raise ValidationError("Only an active trainee programme can be transferred.", code="program_completed")
+    if not reason.strip():
+        raise ValidationError("A transfer reason is required.", code="reason_required")
+    with transaction.atomic():
+        before = model_data(program)
+        previous_site_name = program.site.name
+        program.site = destination_site
+        program.assigned_site_supervisor = None
+        movement_note = f"Transferred from {previous_site_name} to {destination_site.name} on {effective_date}: {reason.strip()}"
+        program.notes = f"{program.notes}\n{movement_note}".strip()
+        program.updated_by = actor
+        program.full_clean()
+        program.save(update_fields=["site", "assigned_site_supervisor", "notes", "updated_by", "updated_at"])
+        _audit(
+            AuditLog.Action.UPDATE,
+            program,
+            actor,
+            f"Transferred trainee programme for {program.cleaner.full_name} to {destination_site.name}",
+            before=before,
+        )
+    return program
+
+
 def extend_trainee_program(
     *,
     program: TraineeProgram,

@@ -414,3 +414,8 @@
 - [x] Add an audited, bilingual payment-account holder name field to monthly remuneration confirmations so Site Supervisors can record the name registered to a Yas or PBZ payment number when it differs from the cleaner name.
 - [x] Surface the verified account-holder name in authorized HR/System Administrator review and remuneration audit views while retaining protected payment-data controls.
 - [x] Add model/API/frontend regression coverage for account-holder name persistence, authorization, localization, and audit visibility; validate, document, commit, and push.
+
+## Trainee Assignment Visibility and People Registry Transfers
+- [x] Ensure trainee onboarding always creates a clear initial site assignment and that each site training-management workspace shows its currently assigned trainees.
+- [x] Make People Registry site assignment and transfer controls clear for both cleaners and trainees, including effective dates, a required transfer reason, and retained assignment history.
+- [x] Add an HR-authorized bulk transfer workflow for selected cleaners or trainees, with per-person validation, atomic audit-safe assignment changes, visible outcome messages, bilingual UI, and regression coverage.

@@ -6,7 +6,7 @@ HR now selects both the **onboarding status** and the **assigned site** before r
 
 | HR selection | Result |
 |---|---|
-| **Trainee** | Creates a draft site assignment and starts a 90-day trainee programme at the selected site. |
+| **Trainee** | Creates a draft site assignment and starts a 90-day trainee programme at the selected site. The trainee appears in that site's Training Management workspace immediately. |
 | **Active** | Creates an active site assignment at the selected site for an existing worker who is already ready for operational deployment. |
 
 Only HR and System Administrators can register cleaners. The selected site must be active.
@@ -21,6 +21,10 @@ Each upload remains preview-first. Rows with invalid identity data, invalid date
 
 ## HR People Registry and protected data
 
-The HR People Registry is the HR management workspace for cleaner records. HR can update permitted cleaner profile fields, deactivate a cleaner without deleting operational history, and transfer a cleaner by ending the current assignment and creating an audited assignment at the selected site.
+The HR People Registry is the HR management workspace for cleaner records. It shows each person's **current assigned site** and, for trainees, their **training site**. HR can update permitted cleaner profile fields, deactivate a cleaner without deleting operational history, and transfer a cleaner or trainee with an effective date and required reason.
+
+Transfers retain history instead of overwriting it. The service ends the current active or draft assignment, creates the destination assignment, and—when the person is in training—moves the active trainee programme to the same site. The receiving site's Training Management workspace therefore becomes the authoritative place for that trainee's daily assessments, while earlier assignments and evaluations remain auditable.
+
+HR can select multiple cleaners or trainees in the registry and transfer them as one atomic, audited batch. The system validates every selected person before changing any record; if any selected person cannot move, the batch is not partially applied. The batch audit records the actor, effective date, transfer reason, origin, destination, resulting assignment, and trainee-programme linkage for every person.
 
 Cleaner ID numbers and phone numbers remain masked in the ordinary registry list. HR can use the explicit **Reveal details** control for a specific cleaner when the information is required for an HR review. Each reveal is authorized by the backend and recorded in the audit trail. Customized template downloads also use the authenticated application request path, so downloading no longer bypasses the HR session token.

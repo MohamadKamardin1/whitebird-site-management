@@ -624,6 +624,10 @@ class CleanerOut(Schema):
     near_person_relationship: str
     near_person_phone: str
     status: str
+    current_site_id: int | None = None
+    current_site_name: str | None = None
+    trainee_program_id: int | None = None
+    training_site_name: str | None = None
     registration_date: date
     has_verified_id: bool
     notes: str
@@ -725,6 +729,24 @@ class CleanerSiteAssignmentCreateIn(Schema):
 class CleanerSiteAssignmentUpdateIn(Schema):
     end_date: date | None = None
     notes: str | None = None
+
+
+class CleanerSiteTransferIn(Schema):
+    cleaner_ids: list[int] = Field(min_length=1, max_length=100)
+    destination_site_id: int
+    effective_date: date
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class CleanerSiteTransferOut(Schema):
+    cleaner_id: int
+    cleaner_name: str
+    previous_site_id: int | None = None
+    previous_site_name: str | None = None
+    destination_site_id: int
+    destination_site_name: str
+    assignment_id: int
+    trainee_program_id: int | None = None
 
 
 class CleanerShiftAssignmentOut(Schema):

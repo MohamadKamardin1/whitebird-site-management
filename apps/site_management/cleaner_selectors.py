@@ -1,4 +1,4 @@
-"""Cleaner registry read selectors with privacy-aware field masking.
+"""Selectors and serializers for cleaner records with protected personal data.
 
 ID numbers and phone numbers are masked for callers who lack the sensitive
 cleaner-document permission. No cleaner data is cached — PII never lives in
@@ -10,17 +10,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from django.db.models import Q, QuerySet
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 
 from apps.accounts.models import RoleCode, User
 
-from .models import Cleaner, CleanerAssignmentStatus, CleanerDocument
+from .models import (
+    Cleaner,
+    CleanerAssignmentStatus,
+    CleanerDocument,
+    CleanerSiteAssignment,
+    TraineeProgram,
+    TraineeProgramStatus,
+)
 
 SENSITIVE_DOCUMENT_PERMISSION = "accounts.view_sensitive_cleaner_documents"
 
 
 def mask_value(value: str, *, keep: int = 4) -> str:
-    """Mask a sensitive value, keeping the last ``keep`` characters."""
+    """Mask a sensitive string, retaining only its final characters."""
     value = (value or "").strip()
     if not value:
         return ""
@@ -30,11 +37,7 @@ def mask_value(value: str, *, keep: int = 4) -> str:
 
 
 def can_view_full_cleaner_profile(user: User, cleaner: Cleaner | None = None) -> bool:
-    """True only for administrators' ordinary full-profile views.
-
-    HR records remain masked in normal lists and require an explicit, audited
-    reveal action for each cleaner.
-    """
+    """Allow unmasked ordinary cleaner profile data only to System Administrators."""
     return user.is_system_admin
 
 
@@ -56,15 +59,19 @@ class CleanerFilter:
 
 
 def cleaner_list_queryset(user: User, spec: CleanerFilter) -> QuerySet[Cleaner]:
-    """Cleaners visible to the user (all statuses; management roles only).
-
-    The verified-identity flag is annotated with an ``Exists`` subquery so
-    serializing a page never fires a per-cleaner document query (N+1).
-    """
-    from django.db.models import Exists, OuterRef
+    """Return role-scoped cleaner records with current site/training location annotations."""
+    from django.db.models import Exists
 
     from .models import CleanerDocument, CleanerDocumentStatus, CleanerDocumentType
 
+    current_assignments = CleanerSiteAssignment.objects.filter(
+        cleaner_id=OuterRef("pk"),
+        status__in=[CleanerAssignmentStatus.ACTIVE, CleanerAssignmentStatus.DRAFT],
+    ).order_by("-start_date", "-pk")
+    active_programs = TraineeProgram.objects.filter(
+        cleaner_id=OuterRef("pk"),
+        status__in=[TraineeProgramStatus.IN_TRAINING, TraineeProgramStatus.EXTENDED],
+    ).order_by("-start_date", "-pk")
     qs: QuerySet[Cleaner] = Cleaner.objects.annotate(
         has_verified_id_flag=Exists(
             CleanerDocument.objects.filter(
@@ -76,7 +83,11 @@ def cleaner_list_queryset(user: User, spec: CleanerFilter) -> QuerySet[Cleaner]:
                     CleanerDocumentType.ZANZIBAR_ID,
                 ],
             )
-        )
+        ),
+        current_site_id_value=Subquery(current_assignments.values("site_id")[:1]),
+        current_site_name_value=Subquery(current_assignments.values("site__name")[:1]),
+        trainee_program_id_value=Subquery(active_programs.values("pk")[:1]),
+        trainee_site_name_value=Subquery(active_programs.values("site__name")[:1]),
     )
     if spec.search:
         qs = qs.filter(
@@ -91,15 +102,14 @@ def cleaner_list_queryset(user: User, spec: CleanerFilter) -> QuerySet[Cleaner]:
     if spec.gender:
         qs = qs.filter(gender=spec.gender)
 
-    # Site supervisors only see cleaners with an active assignment inside
-    # their authenticated site scope. Zone/assistant/general supervisors keep
-    # portfolio visibility so they can administer and review onboarding work.
+    # Site supervisors see operationally assigned cleaners and trainees at
+    # their site. HR and higher management retain portfolio visibility.
     if user.role == RoleCode.SITE_SUPERVISOR:
         from .scoping import visible_sites
 
         qs = qs.filter(
             site_assignments__site__in=visible_sites(user),
-            site_assignments__status=CleanerAssignmentStatus.ACTIVE,
+            site_assignments__status__in=[CleanerAssignmentStatus.ACTIVE, CleanerAssignmentStatus.DRAFT],
         ).distinct()
     return qs
 
@@ -142,6 +152,10 @@ def cleaner_serialize(cleaner: Cleaner, user: User) -> dict[str, Any]:
         "near_person_relationship": cleaner.near_person_relationship,
         "near_person_phone": cleaner.near_person_phone if full else mask_value(cleaner.near_person_phone),
         "status": cleaner.status,
+        "current_site_id": getattr(cleaner, "current_site_id_value", None),
+        "current_site_name": getattr(cleaner, "current_site_name_value", None),
+        "trainee_program_id": getattr(cleaner, "trainee_program_id_value", None),
+        "training_site_name": getattr(cleaner, "trainee_site_name_value", None),
         "registration_date": cleaner.registration_date.isoformat(),
         "has_verified_id": (
             bool(getattr(cleaner, "has_verified_id_flag", None))

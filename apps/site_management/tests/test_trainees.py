@@ -10,15 +10,20 @@ from django.test import Client
 from apps.accounts.factories import UserFactory
 from apps.accounts.models import RoleCode, User
 from apps.accounts.services import issue_api_token
+from apps.core.models import AuditLog
 from apps.site_management.factories import (
     CleanerDocumentFactory,
     CleanerFactory,
+    CleanerSiteAssignmentFactory,
     SiteFactory,
+    SiteSupervisorAssignmentFactory,
     TraineeProgramFactory,
     ZoneSupervisorAssignmentFactory,
 )
 from apps.site_management.models import (
     CleanerDocumentStatus,
+    CleanerAssignmentStatus,
+    CleanerSiteAssignment,
     CleanerStatus,
     TraineeProgram,
     TraineeProgramStatus,
@@ -500,3 +505,87 @@ def test_admin_pass_and_fail_actions() -> None:
     fail_program.refresh_from_db()
     assert fail_program.status == TraineeProgramStatus.FAILED
     assert fail_program.cleaner.status == CleanerStatus.INACTIVE
+
+
+@pytest.mark.django_db
+def test_hr_bulk_transfer_keeps_trainee_assignment_and_training_scope_in_sync() -> None:
+    source = SiteFactory()
+    destination = SiteFactory()
+    hr = UserFactory(role=RoleCode.HR)
+    source_supervisor = UserFactory(role=RoleCode.SITE_SUPERVISOR)
+    destination_supervisor = UserFactory(role=RoleCode.SITE_SUPERVISOR)
+    SiteSupervisorAssignmentFactory(site=source, user=source_supervisor)
+    SiteSupervisorAssignmentFactory(site=destination, user=destination_supervisor)
+
+    trainee = CleanerFactory(status=CleanerStatus.TRAINEE)
+    trainee_assignment = CleanerSiteAssignmentFactory(
+        cleaner=trainee,
+        site=source,
+        status=CleanerAssignmentStatus.DRAFT,
+        start_date=date.today() - timedelta(days=5),
+    )
+    trainee_program = TraineeProgramFactory(
+        cleaner=trainee,
+        site=source,
+        status=TraineeProgramStatus.IN_TRAINING,
+    )
+    active_cleaner = CleanerFactory(status=CleanerStatus.ACTIVE)
+    CleanerSiteAssignmentFactory(cleaner=active_cleaner, site=source, status=CleanerAssignmentStatus.ACTIVE)
+
+    transferred = _authed(hr).post(
+        "/api/site-management/v1/hr/cleaners/transfer",
+        data={
+            "cleaner_ids": [trainee.pk, active_cleaner.pk],
+            "destination_site_id": destination.pk,
+            "effective_date": date.today().isoformat(),
+            "reason": "Move both people to the new operating site.",
+        },
+        content_type="application/json",
+    )
+    assert transferred.status_code == 200, transferred.content
+    assert {item["cleaner_id"] for item in transferred.json()} == {trainee.pk, active_cleaner.pk}
+
+    trainee_assignment.refresh_from_db()
+    assert trainee_assignment.status == CleanerAssignmentStatus.ENDED
+    assert trainee_assignment.end_date == date.today()
+    trainee_program.refresh_from_db()
+    assert trainee_program.site_id == destination.pk
+    assert trainee_program.assigned_site_supervisor_id is None
+    assert "Move both people" in trainee_program.notes
+    assert CleanerSiteAssignment.objects.filter(
+        cleaner=trainee,
+        site=destination,
+        status=CleanerAssignmentStatus.DRAFT,
+    ).exists()
+    assert CleanerSiteAssignment.objects.filter(
+        cleaner=active_cleaner,
+        site=destination,
+        status=CleanerAssignmentStatus.ACTIVE,
+    ).exists()
+
+    source_rows = _authed(source_supervisor).get(
+        "/api/site-management/v1/trainees", {"status": TraineeProgramStatus.IN_TRAINING}
+    )
+    destination_rows = _authed(destination_supervisor).get(
+        "/api/site-management/v1/trainees", {"status": TraineeProgramStatus.IN_TRAINING}
+    )
+    assert all(item["id"] != trainee_program.pk for item in source_rows.json()["results"])
+    assert any(item["id"] == trainee_program.pk for item in destination_rows.json()["results"])
+
+    registry = _authed(hr).get("/api/site-management/v1/cleaners", {"page_size": 100})
+    trainee_row = next(item for item in registry.json()["results"] if item["id"] == trainee.pk)
+    assert trainee_row["current_site_name"] == destination.name
+    assert trainee_row["training_site_name"] == destination.name
+    assert AuditLog.objects.filter(summary__contains="Transferred 2 cleaner(s)").exists()
+
+    denied = _authed(source_supervisor).post(
+        "/api/site-management/v1/hr/cleaners/transfer",
+        data={
+            "cleaner_ids": [trainee.pk],
+            "destination_site_id": source.pk,
+            "effective_date": date.today().isoformat(),
+            "reason": "Not permitted.",
+        },
+        content_type="application/json",
+    )
+    assert denied.status_code in (401, 403)
