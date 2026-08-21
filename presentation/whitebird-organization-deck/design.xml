@@ -1,0 +1,14 @@
+<design>
+  <size width="1280" height="720"></size>
+  <color name="brand" value="#0F4C5C"/>
+  <color name="ink" value="#2A2D34"/>
+  <color name="paper" value="#F9F8F6"/>
+  <color name="mist" value="#E5E9E8"/>
+  <color name="gold" value="#D4AF37"/>
+  <color name="sea-green" value="#3C887E"/>
+  <color name="hairline" value="#D1D5D6"/>
+  <font name="display" family="Playfair Display" size="48"/>
+  <font name="heading" family="Montserrat" size="32"/>
+  <font name="body" family="Inter" size="18"/>
+  <font name="caption" family="Inter" size="14"/>
+</design>

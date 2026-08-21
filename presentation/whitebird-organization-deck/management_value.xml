@@ -1,0 +1,26 @@
+<slide id="management_value">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">08</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">WHY MANAGEMENT BENEFITS</text>
+  <text id="title" x="60" y="132" width="1050" height="58" font="heading" size="39" color="brand">Better evidence creates better decisions</text>
+  <shape id="value-card-one" type="rect" x="60" y="230" width="510" height="165" fill="mist" corner-radius="10"/>
+  <icon id="accountability-icon" name="badge-check" x="90" y="263" width="42" height="42" color="sea-green"/>
+  <text id="accountability-title" x="155" y="258" width="345" height="30" font="heading" size="23" color="brand">Real-time accountability</text>
+  <text id="accountability-copy" x="155" y="302" width="355" height="52" font="body" size="17" color="ink" line-height="1.32">Every key action carries an owner, a time, an approval state and retained history.</text>
+  <shape id="value-card-two" type="rect" x="710" y="230" width="510" height="165" fill="mist" corner-radius="10"/>
+  <icon id="speed-icon" name="zap" x="740" y="263" width="42" height="42" color="sea-green"/>
+  <text id="speed-title" x="805" y="258" width="345" height="30" font="heading" size="23" color="brand">Faster supervision</text>
+  <text id="speed-copy" x="805" y="302" width="355" height="52" font="body" size="17" color="ink" line-height="1.32">Role-based dashboards surface exceptions instead of making managers search through paperwork.</text>
+  <shape id="value-card-three" type="rect" x="60" y="425" width="510" height="165" fill="mist" corner-radius="10"/>
+  <icon id="quality-icon" name="sparkles" x="90" y="458" width="42" height="42" color="sea-green"/>
+  <text id="quality-title" x="155" y="453" width="345" height="30" font="heading" size="23" color="brand">Stronger service quality</text>
+  <text id="quality-copy" x="155" y="497" width="355" height="52" font="body" size="17" color="ink" line-height="1.32">Daily cleanliness and attendance evidence makes standards visible to clients and leaders.</text>
+  <shape id="value-card-four" type="rect" x="710" y="425" width="510" height="165" fill="mist" corner-radius="10"/>
+  <icon id="cost-icon" name="chart-no-axes-column-increasing" x="740" y="458" width="42" height="42" color="gold"/>
+  <text id="cost-title" x="805" y="453" width="345" height="30" font="heading" size="23" color="brand">Cost control</text>
+  <text id="cost-copy" x="805" y="497" width="355" height="52" font="body" size="17" color="ink" line-height="1.32">Item use and stock-value trends show shortages, waste and high-demand sites earlier.</text>
+  <shape id="insight-strip" type="rect" x="60" y="615" width="1120" height="30" fill="gold" corner-radius="4"/>
+  <text id="insight-text" x="80" y="619" width="1080" height="18" font="body" size="15" color="ink" align="center" wrap="false">The result: less chasing, more control, and a stronger standard of service.</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

@@ -1,0 +1,144 @@
+{
+  "project_info": {
+    "title": "White Bird Zanzibar Site Management Platform",
+    "created": 1787284558.807,
+    "last_updated": 1787285045.994,
+    "total_slides": 12
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "operational_case",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "pain_points",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "platform_solution",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "roles",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "daily_workflow",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "stock_workflow",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "hr_onboarding",
+      "state": "edited",
+      "pageNum": 8
+    },
+    {
+      "id": "management_value",
+      "state": "edited",
+      "pageNum": 9
+    },
+    {
+      "id": "rollout",
+      "state": "edited",
+      "pageNum": 10
+    },
+    {
+      "id": "investment",
+      "state": "edited",
+      "pageNum": 11
+    },
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 12
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "White Bird Zanzibar Site Management Platform",
+      "summary": "A visual title slide that frames the platform as one trusted operational picture from cleaner to leadership.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "operational_case",
+      "title": "A Growing Operation Needs One Clear System",
+      "summary": "Use simple language to explain why White Bird needs one reliable picture of people, sites, supplies, service quality, and reports.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "pain_points",
+      "title": "Today’s Problems Consume Time and Trust",
+      "summary": "Show how paper sheets, fragmented calls, late evidence, and informal stock tracking delay management action.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "platform_solution",
+      "title": "One Operational Control Centre",
+      "summary": "Introduce the role-aware, Kiswahili-first, auditable web platform and its four integrated capability areas.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "roles",
+      "title": "Every Role Has a Clear Responsibility",
+      "summary": "Visualize the chain from field teams through supervisors, HR, Store Manager, General Supervisor, and System Administrator.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "daily_workflow",
+      "title": "Daily Service Becomes a Simple Routine",
+      "summary": "Show the day-to-day loop of attendance, daily cleanliness evidence, issue escalation, and supervisory visibility.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "stock_workflow",
+      "title": "Stock Moves with Control, Not Confusion",
+      "summary": "Combine the Super Store to Power Store to Site Store hierarchy with the controlled stock request and approval flow.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "hr_onboarding",
+      "title": "HR Onboarding Is Flexible and Protected",
+      "summary": "Explain individual and bulk onboarding, status selection, site assignment, trainee handling, and controlled personal-data reveal.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "management_value",
+      "title": "Better Evidence Creates Better Decisions",
+      "summary": "Present the primary service quality, accountability, response speed, and cost-control benefits for leadership.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "rollout",
+      "title": "A Practical 90-Day Rollout",
+      "summary": "Show a four-stage 90-day rollout from configuration through pilot, expansion, and management review.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "investment",
+      "title": "A Transparent, Scalable Planning Budget",
+      "summary": "Show domain, reserved hosting, and training assumptions with an indicative first-year operating budget and source note.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "decision",
+      "title": "Approve the Pilot. Build the Operating Standard.",
+      "summary": "Close with the decision requested, pilot sponsors, and the transformation promise.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

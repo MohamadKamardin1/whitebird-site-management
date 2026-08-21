@@ -1,0 +1,21 @@
+<slide id="operational_case">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">01</text>
+  <text id="eyebrow" x="60" y="94" width="500" height="26" font="body" size="15" color="sea-green" wrap="false">THE CASE FOR CHANGE</text>
+  <text id="title" x="60" y="132" width="660" height="85" font="heading" size="39" color="brand" line-height="1.12">A growing operation needs one clear system</text>
+  <text id="narrative" x="60" y="242" width="645" height="115" font="body" size="22" color="ink" line-height="1.38">White Bird manages people, sites, supplies, service quality and reports across many locations. Every supervisor needs simple tools; leadership needs reliable proof — not late updates.</text>
+  <image id="case-photo" src="https://private-us-east-1.manuscdn.com/sessionFile/Y8XRunPXtsrmDpBkJ6dG4V/sandbox/slides_resource_ibycsdpy0aaxoubp8trsb-1b48792b-e2b-prod-azure-central-us_1787284632170_na1fn_L2hvbWUvdWJ1bnR1L3VwbG9hZC9zZWFyY2hfaW1hZ2VzLzg2UENCVFEyUFRkYg.jpg?x-oss-process=image/resize,w_1560,h_1560/format,webp&Expires=1789430400&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvWThYUnVuUFh0c3JtRHBCa0o2ZEc0Vi9zYW5kYm94L3NsaWRlc19yZXNvdXJjZV9pYnljc2RweTBhYXhvdWJwOHRyc2ItMWI0ODc5MmItZTJiLXByb2QtYXp1cmUtY2VudHJhbC11c18xNzg3Mjg0NjMyMTcwX25hMWZuX0wyaHZiV1V2ZFdKMWJuUjFMM1Z3Ykc5aFpDOXpaV0Z5WTJoZmFXMWhaMlZ6THpnMlVFTkNWRkV5VUZSa1lnLmpwZz94LW9zcy1wcm9jZXNzPWltYWdlL3Jlc2l6ZSx3XzE1NjAsaF8xNTYwL2Zvcm1hdCx3ZWJwIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzg5NDMwNDAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIFYM-NpJjoFeuQbF2p4a1nczQ2guy9yl6SErhHFCh8r2AiEA1KiuFiwQzVThtmcX43dMQPaEHAiq3PPIwn3lzrKhpJw_" x="790" y="120" width="430" height="390" fit="cover" corner-radius="8"/>
+  <shape id="photo-caption-panel" type="rect" x="820" y="438" width="350" height="48" fill="#0F4C5CEB" corner-radius="5"/>
+  <text id="photo-caption" x="838" y="449" width="315" height="25" font="body" size="15" color="#FFFFFF" align="center" wrap="false">FIELD WORK DESERVES SIMPLE TOOLS</text>
+  <shape id="card-one" type="rect" x="60" y="510" width="200" height="120" fill="mist" corner-radius="8"/>
+  <icon id="people-icon" name="users" x="82" y="531" width="28" height="28" color="sea-green"/>
+  <text id="card-one-text" x="82" y="568" width="155" height="48" font="body" size="17" color="ink" line-height="1.22"><p><strong>People</strong></p><p>Clear ownership</p></text>
+  <shape id="card-two" type="rect" x="285" y="510" width="200" height="120" fill="mist" corner-radius="8"/>
+  <icon id="sites-icon" name="map-pin" x="307" y="531" width="28" height="28" color="sea-green"/>
+  <text id="card-two-text" x="307" y="568" width="155" height="48" font="body" size="17" color="ink" line-height="1.22"><p><strong>Sites</strong></p><p>Visible standards</p></text>
+  <shape id="card-three" type="rect" x="510" y="510" width="200" height="120" fill="mist" corner-radius="8"/>
+  <icon id="decision-icon" name="chart-column" x="532" y="531" width="28" height="28" color="gold"/>
+  <text id="card-three-text" x="532" y="568" width="155" height="48" font="body" size="17" color="ink" line-height="1.22"><p><strong>Leadership</strong></p><p>Faster decisions</p></text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

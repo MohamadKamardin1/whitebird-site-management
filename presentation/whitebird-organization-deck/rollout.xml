@@ -1,0 +1,31 @@
+<slide id="rollout">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">09</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">ADOPTION PLAN</text>
+  <text id="title" x="60" y="132" width="900" height="58" font="heading" size="39" color="brand">A practical 90-day rollout reduces risk</text>
+  <text id="intro" x="60" y="202" width="900" height="28" font="body" size="19" color="ink">Start with a controlled pilot, prove the routine, then extend confidently across the organization.</text>
+  <shape id="timeline-line" type="line" x="120" y="492" width="1020" height="0" stroke="sea-green" stroke-width="5" arrow-end="arrow"/>
+  <shape id="phase-one-card" type="rect" x="70" y="260" width="250" height="160" fill="mist" corner-radius="10"/>
+  <text id="phase-one-days" x="92" y="284" width="200" height="24" font="body" size="15" color="sea-green" align="center">DAYS 1–15</text>
+  <text id="phase-one-title" x="92" y="321" width="200" height="28" font="heading" size="22" color="brand" align="center">Configure</text>
+  <text id="phase-one-copy" x="92" y="360" width="200" height="40" font="body" size="16" color="ink" align="center">Confirm sites, zones, users, products and rules.</text>
+  <shape id="phase-one-dot" type="ellipse" x="177" y="470" width="30" height="30" fill="sea-green"/>
+  <shape id="phase-two-card" type="rect" x="350" y="260" width="250" height="160" fill="mist" corner-radius="10"/>
+  <text id="phase-two-days" x="372" y="284" width="200" height="24" font="body" size="15" color="sea-green" align="center">DAYS 16–45</text>
+  <text id="phase-two-title" x="372" y="321" width="200" height="28" font="heading" size="22" color="brand" align="center">Train &amp; pilot</text>
+  <text id="phase-two-copy" x="372" y="360" width="200" height="40" font="body" size="16" color="ink" align="center">Train core roles and pilot selected sites.</text>
+  <shape id="phase-two-dot" type="ellipse" x="457" y="470" width="30" height="30" fill="sea-green"/>
+  <shape id="phase-three-card" type="rect" x="630" y="260" width="250" height="160" fill="mist" corner-radius="10"/>
+  <text id="phase-three-days" x="652" y="284" width="200" height="24" font="body" size="15" color="sea-green" align="center">DAYS 46–75</text>
+  <text id="phase-three-title" x="652" y="321" width="200" height="28" font="heading" size="22" color="brand" align="center">Expand</text>
+  <text id="phase-three-copy" x="652" y="360" width="200" height="40" font="body" size="16" color="ink" align="center">Extend routines to every site and manager.</text>
+  <shape id="phase-three-dot" type="ellipse" x="737" y="470" width="30" height="30" fill="sea-green"/>
+  <shape id="phase-four-card" type="rect" x="910" y="260" width="250" height="160" fill="#FFF4D6" corner-radius="10"/>
+  <text id="phase-four-days" x="932" y="284" width="200" height="24" font="body" size="15" color="#B68115" align="center">DAYS 76–90</text>
+  <text id="phase-four-title" x="932" y="321" width="200" height="28" font="heading" size="22" color="brand" align="center">Improve</text>
+  <text id="phase-four-copy" x="932" y="360" width="200" height="40" font="body" size="16" color="ink" align="center">Review adoption and hold the first management review.</text>
+  <shape id="phase-four-dot" type="ellipse" x="1017" y="470" width="30" height="30" fill="gold"/>
+  <text id="outcome-label" x="90" y="545" width="1080" height="38" font="heading" size="23" color="brand" align="center">By day 90: one operating routine, one evidence trail, one leadership view.</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

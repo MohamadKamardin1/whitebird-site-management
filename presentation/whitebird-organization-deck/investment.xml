@@ -1,0 +1,22 @@
+<slide id="investment">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">10</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">PLANNING BUDGET</text>
+  <text id="title" x="60" y="132" width="1100" height="58" font="heading" size="39" color="brand">A transparent, scalable planning budget</text>
+  <text id="disclaimer" x="60" y="195" width="1060" height="26" font="body" size="17" color="ink">Planning assumptions only — confirm final vendor quotes, actual usage and training scope before purchase.</text>
+  <table id="budget-table" x="60" y="245" width="790" height="285" columns="3,5,3" rows="48,58,58,58,63" font="body" size="16" color="ink" padding="12 14" header-fill="brand" header-border="2 brand" border-h="1 hairline" border-outer="1 hairline">
+    <tr color="#FFFFFF"><td>Cost area</td><td>Planning basis</td><td align="right">First-year range</td></tr>
+    <tr><td><strong>Domain name</strong></td><td>One .com domain including renewal allowance</td><td align="right">US$20–25</td></tr>
+    <tr fill="mist"><td><strong>Hosting</strong></td><td>Reserved always-on hosting for real-time operations</td><td align="right">Up to ~US$432</td></tr>
+    <tr><td><strong>Training &amp; rollout</strong></td><td>2–4 facilitated days, pilot support and Kiswahili job aids</td><td align="right">US$1,200–2,000</td></tr>
+    <tr fill="#FFF4D6"><td colspan="2"><strong>Indicative first-year operating budget</strong></td><td align="right"><strong>US$1,657–2,457</strong></td></tr>
+  </table>
+  <shape id="budget-callout" type="rect" x="895" y="245" width="285" height="285" fill="brand" corner-radius="12" shadow="true"/>
+  <icon id="budget-icon" name="wallet-cards" x="995" y="285" width="70" height="70" color="gold"/>
+  <text id="callout-label" x="925" y="380" width="225" height="26" font="body" size="15" color="#DDEBE8" align="center">INDICATIVE YEAR 1</text>
+  <text id="callout-value" x="915" y="415" width="245" height="48" font="display" size="34" color="#FFFFFF" align="center">US$1.7K–2.5K</text>
+  <text id="callout-copy" x="925" y="474" width="225" height="32" font="body" size="14" color="#DDEBE8" align="center">Domain + hosting + training</text>
+  <text id="source-note" x="60" y="563" width="1080" height="34" font="caption" size="12" color="#66746F">Sources: Namecheap lists .com registration and renewal pricing. Manus documents reserved hosting at up to approximately US$36/month at full utilization, plus automatic SSL. Prices and credits can change.</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">Sources: namecheap.com · manus.im/docs</text>
+</slide>

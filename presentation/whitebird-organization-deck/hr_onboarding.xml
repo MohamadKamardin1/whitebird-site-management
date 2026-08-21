@@ -1,0 +1,22 @@
+<slide id="hr_onboarding">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">07</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">HR ONBOARDING AND PROTECTION</text>
+  <text id="title" x="60" y="132" width="670" height="88" font="heading" size="39" color="brand" line-height="1.12">HR onboarding is flexible and protected</text>
+  <shape id="single-card" type="rect" x="60" y="258" width="670" height="102" fill="mist" corner-radius="10"/>
+  <icon id="single-icon" name="user-round-plus" x="88" y="286" width="38" height="38" color="sea-green"/>
+  <text id="single-title" x="150" y="277" width="500" height="28" font="heading" size="22" color="brand">Register one cleaner</text>
+  <text id="single-copy" x="150" y="314" width="520" height="30" font="body" size="17" color="ink">HR selects Active or Trainee status and the assigned site before saving.</text>
+  <shape id="bulk-card" type="rect" x="60" y="385" width="670" height="112" fill="#F3F7F5" corner-radius="10"/>
+  <icon id="bulk-icon" name="file-spreadsheet" x="88" y="419" width="38" height="38" color="sea-green"/>
+  <text id="bulk-title" x="150" y="407" width="500" height="28" font="heading" size="22" color="brand">Onboard a prepared group</text>
+  <text id="bulk-copy" x="150" y="444" width="525" height="35" font="body" size="17" color="ink">HR configures one site and status, then downloads and previews a protected workbook.</text>
+  <shape id="privacy-callout" type="rect" x="60" y="535" width="670" height="82" fill="#FFF4D6" corner-radius="8"/>
+  <icon id="privacy-icon" name="shield" x="88" y="558" width="34" height="34" color="#B68115"/>
+  <text id="privacy-text" x="145" y="552" width="545" height="42" font="body" size="17" color="ink" line-height="1.25"><p><strong>Personal data stays protected.</strong></p><p>ID and phone details are masked by default and revealed only through an authorized, audited HR action.</p></text>
+  <image id="hr-photo" src="https://private-us-east-1.manuscdn.com/sessionFile/Y8XRunPXtsrmDpBkJ6dG4V/sandbox/slides_resource_ibycsdpy0aaxoubp8trsb-1b48792b-e2b-prod-azure-central-us_1787284721019_na1fn_L2hvbWUvdWJ1bnR1L3VwbG9hZC9zZWFyY2hfaW1hZ2VzL0FvS1lOTWRySUR3ZQ.jpg?x-oss-process=image/resize,w_1560,h_1560/format,webp&Expires=1789430400&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvWThYUnVuUFh0c3JtRHBCa0o2ZEc0Vi9zYW5kYm94L3NsaWRlc19yZXNvdXJjZV9pYnljc2RweTBhYXhvdWJwOHRyc2ItMWI0ODc5MmItZTJiLXByb2QtYXp1cmUtY2VudHJhbC11c18xNzg3Mjg0NzIxMDE5X25hMWZuX0wyaHZiV1V2ZFdKMWJuUjFMM1Z3Ykc5aFpDOXpaV0Z5WTJoZmFXMWhaMlZ6TDBGdlMxbE9UV1J5U1VSM1pRLmpwZz94LW9zcy1wcm9jZXNzPWltYWdlL3Jlc2l6ZSx3XzE1NjAsaF8xNTYwL2Zvcm1hdCx3ZWJwIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzg5NDMwNDAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEQCIDL57Ft52SUm60H9ms~FvgrLGmcI33cWQQ2MEWd-PNNVAiB5jJgK-sxqBYlDGbLPcRs6XyE~GkNmhgNYW3-r~-ZtCA__" x="800" y="160" width="420" height="390" fit="cover" corner-radius="8"/>
+  <shape id="photo-overlay" type="rect" x="830" y="466" width="330" height="55" fill="#0F4C5CEB" corner-radius="5"/>
+  <text id="photo-caption" x="850" y="480" width="290" height="25" font="body" size="15" color="#FFFFFF" align="center">PEOPLE RECORDS WITH DIGNITY</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

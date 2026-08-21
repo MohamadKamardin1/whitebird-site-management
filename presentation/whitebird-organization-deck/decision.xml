@@ -1,0 +1,20 @@
+<slide id="decision">
+  <background color="#0A3945"/>
+  <image id="hero-background" src="https://private-us-east-1.manuscdn.com/sessionFile/Y8XRunPXtsrmDpBkJ6dG4V/sandbox/slides_resource_ibycsdpy0aaxoubp8trsb-1b48792b-e2b-prod-azure-central-us_1787285042611_na1fn_L2hvbWUvdWJ1bnR1L3dlYmRldi1zdGF0aWMtYXNzZXRzL3doaXRlYmlyZF9wcmVzZW50YXRpb25faGVybw.jpg?x-oss-process=image/resize,w_1560,h_1560/format,webp&Expires=1789430400&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvWThYUnVuUFh0c3JtRHBCa0o2ZEc0Vi9zYW5kYm94L3NsaWRlc19yZXNvdXJjZV9pYnljc2RweTBhYXhvdWJwOHRyc2ItMWI0ODc5MmItZTJiLXByb2QtYXp1cmUtY2VudHJhbC11c18xNzg3Mjg1MDQyNjExX25hMWZuX0wyaHZiV1V2ZFdKMWJuUjFMM2RsWW1SbGRpMXpkR0YwYVdNdFlYTnpaWFJ6TDNkb2FYUmxZbWx5WkY5d2NtVnpaVzUwWVhScGIyNWZhR1Z5YncuanBnP3gtb3NzLXByb2Nlc3M9aW1hZ2UvcmVzaXplLHdfMTU2MCxoXzE1NjAvZm9ybWF0LHdlYnAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3ODk0MzA0MDB9fX1dfQ__&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEQCIGpv1JD4l7nCT5S78Ek~GXKbL6TQFZ7C8Db9KL4zL-UWAiBp1oRcbiM~6D5751SSHpDSZx7IK9aiv-X4B-ABQVi8Dg__" x="0" y="0" width="1280" height="720" fit="cover"/>
+  <shape id="full-overlay" type="rect" x="0" y="0" width="1280" height="720" fill="#072F3CE0"/>
+  <shape id="left-panel" type="rect" x="0" y="0" width="790" height="720" fill="#083845E8"/>
+  <shape id="top-hairline" type="rect" x="75" y="62" width="220" height="5" fill="gold"/>
+  <text id="eyebrow" x="75" y="98" width="480" height="24" font="body" size="15" color="gold" wrap="false">THE DECISION</text>
+  <text id="title" x="75" y="145" width="625" height="132" font="display" size="52" color="#FFFFFF" line-height="1.1"><p>Approve the pilot.</p><p>Build the operating standard.</p></text>
+  <text id="decision-copy" x="75" y="315" width="585" height="58" font="body" size="22" color="#DDEBE8" line-height="1.32">Give White Bird teams one simple, auditable way to run daily service — and leadership one reliable view of performance.</text>
+  <shape id="accent-line" type="rect" x="75" y="414" width="540" height="2" fill="#6FA49D"/>
+  <text id="action-heading" x="75" y="443" width="500" height="26" font="body" size="16" color="gold" wrap="false">PILOT SPONSORS ARE ASKED TO:</text>
+  <icon id="action-one-icon" name="circle-check" x="78" y="488" width="24" height="24" color="gold"/>
+  <text id="action-one" x="120" y="487" width="520" height="24" font="body" size="19" color="#FFFFFF" wrap="false">Approve the initial pilot sites and 90-day rollout.</text>
+  <icon id="action-two-icon" name="circle-check" x="78" y="530" width="24" height="24" color="gold"/>
+  <text id="action-two" x="120" y="529" width="520" height="24" font="body" size="19" color="#FFFFFF" wrap="false">Nominate site champions and accountable supervisors.</text>
+  <icon id="action-three-icon" name="circle-check" x="78" y="572" width="24" height="24" color="gold"/>
+  <text id="action-three" x="120" y="571" width="530" height="24" font="body" size="19" color="#FFFFFF" wrap="false">Confirm the governance team for weekly review.</text>
+  <text id="closing-mark" x="75" y="654" width="400" height="20" font="caption" size="13" color="#AFC8C4">WHITE BIRD ZANZIBAR · OPERATIONS MANAGEMENT PLATFORM</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#D0E0DD" align="right">White Bird platform proposal</text>
+</slide>

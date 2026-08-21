@@ -1,0 +1,32 @@
+<slide id="platform_solution">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">03</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">THE PROPOSED SOLUTION</text>
+  <text id="title" x="60" y="132" width="980" height="58" font="heading" size="39" color="brand">One operational control centre</text>
+  <shape id="connector-people" type="line" x="390" y="285" width="100" height="55" stroke="hairline" stroke-width="3"/>
+  <shape id="connector-quality" type="line" x="790" y="285" width="80" height="55" stroke="hairline" stroke-width="3"/>
+  <shape id="connector-stock" type="line" x="390" y="500" width="100" height="-70" stroke="hairline" stroke-width="3"/>
+  <shape id="connector-leadership" type="line" x="790" y="500" width="80" height="-70" stroke="hairline" stroke-width="3"/>
+  <shape id="people-card" type="rect" x="70" y="220" width="320" height="135" fill="mist" corner-radius="10"/>
+  <icon id="people-icon" name="users-round" x="98" y="248" width="38" height="38" color="sea-green"/>
+  <text id="people-title" x="158" y="245" width="190" height="30" font="heading" size="22" color="brand">People</text>
+  <text id="people-copy" x="158" y="282" width="195" height="46" font="body" size="16" color="ink">Onboarding, shifts, attendance and trainee records.</text>
+  <shape id="quality-card" type="rect" x="870" y="220" width="320" height="135" fill="mist" corner-radius="10"/>
+  <icon id="quality-icon" name="clipboard-check" x="898" y="248" width="38" height="38" color="sea-green"/>
+  <text id="quality-title" x="958" y="245" width="190" height="30" font="heading" size="22" color="brand">Site quality</text>
+  <text id="quality-copy" x="958" y="282" width="195" height="46" font="body" size="16" color="ink">Daily checks, issues, evidence and follow-up.</text>
+  <shape id="stock-card" type="rect" x="70" y="440" width="320" height="135" fill="mist" corner-radius="10"/>
+  <icon id="stock-icon" name="package-check" x="98" y="468" width="38" height="38" color="sea-green"/>
+  <text id="stock-title" x="158" y="465" width="190" height="30" font="heading" size="22" color="brand">Stock</text>
+  <text id="stock-copy" x="158" y="502" width="195" height="46" font="body" size="16" color="ink">Stores, items, balances, transfers and approvals.</text>
+  <shape id="leadership-card" type="rect" x="870" y="440" width="320" height="135" fill="mist" corner-radius="10"/>
+  <icon id="leadership-icon" name="chart-no-axes-combined" x="898" y="468" width="38" height="38" color="sea-green"/>
+  <text id="leadership-title" x="958" y="465" width="190" height="30" font="heading" size="22" color="brand">Leadership</text>
+  <text id="leadership-copy" x="958" y="502" width="195" height="46" font="body" size="16" color="ink">Dashboards, reports, GIS and AI-supported insight.</text>
+  <shape id="control-centre" type="ellipse" x="490" y="285" width="300" height="150" fill="brand" shadow="true"/>
+  <icon id="control-icon" name="shield-check" x="610" y="310" width="55" height="55" color="gold"/>
+  <text id="control-title" x="520" y="375" width="240" height="30" font="heading" size="24" color="#FFFFFF" align="center">One trusted system</text>
+  <text id="control-copy" x="540" y="408" width="200" height="22" font="body" size="14" color="#DDEBE8" align="center">Role-aware · Kiswahili-first · Auditable</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

@@ -1,0 +1,23 @@
+<slide id="pain_points">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">02</text>
+  <text id="eyebrow" x="60" y="94" width="500" height="26" font="body" size="15" color="sea-green" wrap="false">THE CURRENT OPERATING GAP</text>
+  <text id="title" x="60" y="132" width="980" height="58" font="heading" size="39" color="brand" wrap="false">Today’s problems consume time and trust</text>
+  <shape id="pain-card-one" type="rect" x="60" y="238" width="340" height="242" fill="mist" corner-radius="10"/>
+  <icon id="files-icon" name="files" x="90" y="270" width="40" height="40" color="sea-green"/>
+  <text id="pain-one-title" x="90" y="332" width="250" height="32" font="heading" size="22" color="brand">Information is fragmented</text>
+  <text id="pain-one-copy" x="90" y="383" width="250" height="63" font="body" size="17" color="ink" line-height="1.34">Paper sheets, calls and separate files make it difficult to see one reliable story.</text>
+  <shape id="pain-card-two" type="rect" x="450" y="238" width="340" height="242" fill="mist" corner-radius="10"/>
+  <icon id="clock-icon" name="clock-3" x="480" y="270" width="40" height="40" color="sea-green"/>
+  <text id="pain-two-title" x="480" y="332" width="250" height="32" font="heading" size="22" color="brand">Visibility arrives late</text>
+  <text id="pain-two-copy" x="480" y="383" width="250" height="63" font="body" size="17" color="ink" line-height="1.34">Attendance gaps, stock shortages and service failures are discovered after they grow.</text>
+  <shape id="pain-card-three" type="rect" x="840" y="238" width="340" height="242" fill="mist" corner-radius="10"/>
+  <icon id="search-icon" name="search-x" x="870" y="270" width="40" height="40" color="sea-green"/>
+  <text id="pain-three-title" x="870" y="332" width="250" height="32" font="heading" size="22" color="brand">Evidence is hard to trace</text>
+  <text id="pain-three-copy" x="870" y="383" width="250" height="63" font="body" size="17" color="ink" line-height="1.34">Management cannot quickly confirm who acted, when it happened, or what changed.</text>
+  <shape id="consequence-band" type="rect" x="60" y="535" width="1120" height="80" fill="#FFF4D6" corner-radius="8"/>
+  <icon id="alert-icon" name="triangle-alert" x="88" y="557" width="34" height="34" color="#B68115"/>
+  <text id="consequence-text" x="145" y="552" width="980" height="42" font="heading" size="23" color="ink" anchor="middle">Managers spend too much time chasing information — and too little time solving the problem.</text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>

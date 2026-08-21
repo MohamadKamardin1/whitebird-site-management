@@ -406,3 +406,6 @@
 - [x] Restore HR People Registry actions for cleaner editing, deactivation, and transfer or assignment management under backend-enforced HR permissions.
 - [x] Add explicit controlled reveal controls for HR to view masked cleaner ID numbers and phone numbers, preserving masked-by-default display and audit-safe authorization.
 - [x] Add bilingual UI labels, API and frontend regression coverage, validation, documentation, commit, and push for the HR access-control correction.
+
+## White Bird Organizational Presentation
+- [x] Prepare a visual PowerPoint explaining operational problems, the White Bird platform solution, roles, workflows, benefits, adoption approach, and operating budget assumptions.

@@ -1,0 +1,34 @@
+<slide id="roles">
+  <background color="paper"/>
+  <shape id="top-hairline" type="rect" x="60" y="54" width="1160" height="4" fill="gold"/>
+  <text id="slide-number" x="60" y="670" width="42" height="22" font="caption" size="13" color="sea-green">04</text>
+  <text id="eyebrow" x="60" y="94" width="600" height="26" font="body" size="15" color="sea-green" wrap="false">ROLE-BASED RESPONSIBILITY</text>
+  <text id="title" x="60" y="132" width="1050" height="58" font="heading" size="39" color="brand">Every role has a clear responsibility</text>
+  <text id="intro" x="60" y="205" width="1020" height="30" font="body" size="19" color="ink">The platform gives each person the work, information and approval authority that belongs to their role.</text>
+  <shape id="role-flow" type="line" x="145" y="378" width="970" height="0" stroke="hairline" stroke-width="4" arrow-end="arrow"/>
+  <shape id="role-card-1" type="rect" x="60" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-1" type="rect" x="60" y="275" width="170" height="6" fill="sea-green"/>
+  <icon id="role-icon-1" name="clipboard-list" x="118" y="300" width="42" height="42" color="sea-green"/>
+  <text id="role-text-1" x="76" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>Site Supervisor</strong></p><p>Runs daily work, attendance, quality records and site requests.</p></text>
+  <shape id="role-card-2" type="rect" x="250" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-2" type="rect" x="250" y="275" width="170" height="6" fill="sea-green"/>
+  <icon id="role-icon-2" name="shield-check" x="308" y="300" width="42" height="42" color="sea-green"/>
+  <text id="role-text-2" x="266" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>Zone Supervisor</strong></p><p>Verifies physical conditions and follows up across sites.</p></text>
+  <shape id="role-card-3" type="rect" x="440" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-3" type="rect" x="440" y="275" width="170" height="6" fill="sea-green"/>
+  <icon id="role-icon-3" name="route" x="498" y="300" width="42" height="42" color="sea-green"/>
+  <text id="role-text-3" x="456" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>Assistant General</strong></p><p>Approves verified work and monitors cross-zone risk.</p></text>
+  <shape id="role-card-4" type="rect" x="630" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-4" type="rect" x="630" y="275" width="170" height="6" fill="sea-green"/>
+  <icon id="role-icon-4" name="users" x="688" y="300" width="42" height="42" color="sea-green"/>
+  <text id="role-text-4" x="646" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>HR &amp; Store Manager</strong></p><p>Manages people, assignments, stores and supply readiness.</p></text>
+  <shape id="role-card-5" type="rect" x="820" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-5" type="rect" x="820" y="275" width="170" height="6" fill="sea-green"/>
+  <icon id="role-icon-5" name="binoculars" x="878" y="300" width="42" height="42" color="sea-green"/>
+  <text id="role-text-5" x="836" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>General Supervisor</strong></p><p>Sees performance patterns and drives operational action.</p></text>
+  <shape id="role-card-6" type="rect" x="1010" y="275" width="170" height="205" fill="#FFFFFF" stroke="hairline" stroke-width="1" corner-radius="8" shadow="true"/>
+  <shape id="role-accent-6" type="rect" x="1010" y="275" width="170" height="6" fill="gold"/>
+  <icon id="role-icon-6" name="settings" x="1068" y="300" width="42" height="42" color="gold"/>
+  <text id="role-text-6" x="1026" y="360" width="138" height="92" font="body" size="16" color="ink" align="center" line-height="1.22"><p><strong>System Administrator</strong></p><p>Controls users, sites, permissions and governance.</p></text>
+  <text id="source-footer" x="900" y="672" width="320" height="18" font="caption" size="12" color="#71807A" align="right">White Bird platform proposal</text>
+</slide>
