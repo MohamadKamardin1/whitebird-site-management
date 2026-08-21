@@ -277,6 +277,7 @@ class RemunerationPrepareIn(Schema):
 class RemunerationPaymentDecisionIn(Schema):
     proposed_yas_zantel_phone: str = ""
     proposed_pbz_account_number: str = ""
+    proposed_payment_account_holder_name: str = Field(default="", max_length=160)
 
 
 class RemunerationReviewIn(Schema):
@@ -293,8 +294,10 @@ class RemunerationLineOut(Schema):
     start_work_date: date | None = None
     last_phone_masked: str = ""
     last_account_masked: str = ""
+    last_payment_account_holder_name: str = ""
     proposed_yas_zantel_phone: str = ""
     proposed_pbz_account_number: str = ""
+    proposed_payment_account_holder_name: str = ""
     phone_change_status: str
     account_change_status: str
 
@@ -323,8 +326,10 @@ class AdminMonthlyRemunerationRowOut(Schema):
     start_work_date: date | None = None
     previous_phone: str = ""
     previous_account: str = ""
+    previous_payment_account_holder_name: str = ""
     new_phone: str = ""
     new_account: str = ""
+    new_payment_account_holder_name: str = ""
     phone_change_status: str
     account_change_status: str
     payment_saved_by: str = ""

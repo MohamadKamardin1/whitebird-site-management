@@ -43,7 +43,14 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=today, status=AttendanceStatus.PRESENT)
     AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=today.replace(day=max(1, today.day - 1)), status=AttendanceStatus.LATE)
     AttendanceRecordFactory(cleaner=cleaner, site=site, attendance_date=today.replace(day=max(1, today.day - 2)), status=AttendanceStatus.ABSENT)
-    CleanerPaymentProfile.objects.create(cleaner=cleaner, yas_zantel_phone="0777000000", pbz_account_number="PBZ-OLD-123", created_by=supervisor, updated_by=supervisor)
+    CleanerPaymentProfile.objects.create(
+        cleaner=cleaner,
+        yas_zantel_phone="0777000000",
+        pbz_account_number="PBZ-OLD-123",
+        payment_account_holder_name="Asha Juma",
+        created_by=supervisor,
+        updated_by=supervisor,
+    )
 
     report = prepare_monthly_remuneration(actor=supervisor, site=site, period=period, today=today)
     assert report.lines.count() == 1
@@ -60,10 +67,15 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     assert row["last_phone_masked"].endswith("000")
     assert "0777000000" not in row["last_phone_masked"]
     assert row["last_account_masked"].endswith("123")
+    assert row["last_payment_account_holder_name"] == "Asha Juma"
 
     updated = client.patch(
         f"/api/site-management/v1/remuneration/reports/{report.pk}/lines/{line.pk}",
-        data={"proposed_yas_zantel_phone": "0777111111", "proposed_pbz_account_number": "PBZ-NEW-456"},
+        data={
+            "proposed_yas_zantel_phone": "0777111111",
+            "proposed_pbz_account_number": "PBZ-NEW-456",
+            "proposed_payment_account_holder_name": "Asha Juma Msaidizi",
+        },
         content_type="application/json",
     )
     assert updated.status_code == 200, updated.content
@@ -83,6 +95,7 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     profile = CleanerPaymentProfile.objects.get(cleaner=cleaner)
     assert profile.yas_zantel_phone == "0777111111"
     assert profile.pbz_account_number == "PBZ-NEW-456"
+    assert profile.payment_account_holder_name == "Asha Juma Msaidizi"
     assert AuditLog.objects.filter(summary__contains="Approved remuneration payment-contact update").exists()
 
     admin = UserFactory(role=RoleCode.SYSTEM_ADMIN)
@@ -91,6 +104,8 @@ def test_monthly_remuneration_prefills_scoped_attendance_and_applies_reviewed_pa
     overview_row = next(row for row in overview.json() if row["cleaner_id"] == cleaner.pk)
     assert overview_row["previous_account"] == "PBZ-OLD-123"
     assert overview_row["new_account"] == "PBZ-NEW-456"
+    assert overview_row["previous_payment_account_holder_name"] == "Asha Juma"
+    assert overview_row["new_payment_account_holder_name"] == "Asha Juma Msaidizi"
     assert overview_row["payment_saved_by"] == supervisor.full_name
     assert overview_row["form_status"] == "reviewed"
     assert _authed(supervisor).get(f"/api/site-management/v1/admin/remuneration/monthly?period={period.isoformat()}").status_code == 403

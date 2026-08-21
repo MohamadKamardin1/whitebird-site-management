@@ -1356,6 +1356,7 @@ def remuneration_payment_decision(
         actor=request.auth,
         phone=payload.proposed_yas_zantel_phone,
         account=payload.proposed_pbz_account_number,
+        account_holder_name=payload.proposed_payment_account_holder_name,
     )
     return _remuneration_report_out(_load_remuneration_report_or_404(report.pk))
 

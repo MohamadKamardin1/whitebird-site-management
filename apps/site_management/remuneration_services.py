@@ -155,15 +155,23 @@ def remuneration_line_view(line: MonthlyRemunerationLine) -> dict[str, Any]:
         "start_work_date": line.start_work_date,
         "last_phone_masked": _masked(profile.yas_zantel_phone) if profile else "",
         "last_account_masked": _masked(profile.pbz_account_number) if profile else "",
+        "last_payment_account_holder_name": profile.payment_account_holder_name if profile else "",
         "proposed_yas_zantel_phone": line.proposed_yas_zantel_phone,
         "proposed_pbz_account_number": line.proposed_pbz_account_number,
+        "proposed_payment_account_holder_name": line.proposed_payment_account_holder_name,
         "phone_change_status": line.phone_change_status,
         "account_change_status": line.account_change_status,
     }
 
 
 def save_payment_contact_decision(
-    *, report: MonthlyRemunerationReport, line: MonthlyRemunerationLine, actor: User, phone: str, account: str
+    *,
+    report: MonthlyRemunerationReport,
+    line: MonthlyRemunerationLine,
+    actor: User,
+    phone: str,
+    account: str,
+    account_holder_name: str,
 ) -> MonthlyRemunerationLine:
     _assert_site_supervisor_scope(actor=actor, site_id=report.site_id)
     if report.prepared_by_id != actor.pk or not report.is_editable:
@@ -175,8 +183,10 @@ def save_payment_contact_decision(
         profile = getattr(line.cleaner, "payment_profile", None)
         line.previous_yas_zantel_phone = profile.yas_zantel_phone if profile else ""
         line.previous_pbz_account_number = profile.pbz_account_number if profile else ""
+        line.previous_payment_account_holder_name = profile.payment_account_holder_name if profile else ""
         line.proposed_yas_zantel_phone = phone.strip()
         line.proposed_pbz_account_number = account.strip()
+        line.proposed_payment_account_holder_name = account_holder_name.strip()
         line.phone_change_status = PaymentChangeStatus.PENDING
         line.account_change_status = PaymentChangeStatus.PENDING
         line.payment_saved_by = actor
@@ -233,8 +243,10 @@ def administrator_monthly_remuneration_rows(*, actor: User, period: date) -> lis
                 "start_work_date": line.start_work_date if line else (assignment.start_date if starts <= assignment.start_date <= ends else None),
                 "previous_phone": line.previous_yas_zantel_phone if line and line.previous_yas_zantel_phone else (profile.yas_zantel_phone if profile else ""),
                 "previous_account": line.previous_pbz_account_number if line and line.previous_pbz_account_number else (profile.pbz_account_number if profile else ""),
+                "previous_payment_account_holder_name": line.previous_payment_account_holder_name if line and line.previous_payment_account_holder_name else (profile.payment_account_holder_name if profile else ""),
                 "new_phone": line.proposed_yas_zantel_phone if line else "",
                 "new_account": line.proposed_pbz_account_number if line else "",
+                "new_payment_account_holder_name": line.proposed_payment_account_holder_name if line else "",
                 "phone_change_status": line.phone_change_status if line else "not_recorded",
                 "account_change_status": line.account_change_status if line else "not_recorded",
                 "payment_saved_by": line.payment_saved_by.full_name if line and line.payment_saved_by else "",
@@ -271,6 +283,7 @@ def submit_monthly_remuneration(*, report: MonthlyRemunerationReport, actor: Use
                     "start_work_date": line.start_work_date.isoformat() if line.start_work_date else None,
                     "phone_change_recorded": bool(line.proposed_yas_zantel_phone),
                     "account_change_recorded": bool(line.proposed_pbz_account_number),
+                    "payment_account_holder_name_recorded": bool(line.proposed_payment_account_holder_name),
                 }
                 for line in report.lines.select_related("cleaner").all()
             ],
@@ -311,6 +324,9 @@ def review_monthly_remuneration(*, report: MonthlyRemunerationReport, actor: Use
                 if line.proposed_pbz_account_number:
                     profile.pbz_account_number = line.proposed_pbz_account_number
                     line.account_change_status = PaymentChangeStatus.APPROVED
+                    changed = True
+                if line.proposed_payment_account_holder_name:
+                    profile.payment_account_holder_name = line.proposed_payment_account_holder_name
                     changed = True
                 if changed:
                     profile.approved_at = timezone.now()

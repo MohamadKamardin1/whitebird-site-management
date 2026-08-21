@@ -28,3 +28,7 @@ The document includes fields for `JINA LA KITUO` and `MWEZI`.
 4. A start-work date appears only for a cleaner whose start date falls inside the selected month.
 5. A blank phone or PBZ-account override means use the last approved payment contact. A non-blank override creates a proposed update with prior and new masked values, actor, timestamp, month, site, and approval history.
 6. The submitted form must preserve a complete immutable monthly snapshot of the pre-filled attendance, payment-contact decision, changes, and authenticated attestation.
+
+## Platform Extension: Verified Payment-Account Holder Name
+
+The platform records the **name registered to the active Yas/Zantel number or PBZ account** when it differs from the cleaner name. The Site Supervisor can leave this field blank when the prior approved payment-holder name remains correct; otherwise, the proposed name is retained with the payment decision, reviewed by HR or a System Administrator, and written to the approved payment profile only after review.

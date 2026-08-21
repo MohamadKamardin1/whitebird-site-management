@@ -615,6 +615,7 @@ class CleanerPaymentProfile(UserStampedModel):
     cleaner = models.OneToOneField("Cleaner", on_delete=models.CASCADE, related_name="payment_profile")
     yas_zantel_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
     pbz_account_number = models.CharField(max_length=64, blank=True, default="")
+    payment_account_holder_name = models.CharField(max_length=160, blank=True, default="")
     approved_at = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payment_profiles"
@@ -672,8 +673,10 @@ class MonthlyRemunerationLine(TimeStampedModel):
     start_work_date = models.DateField(null=True, blank=True)
     previous_yas_zantel_phone = models.CharField(max_length=16, blank=True, default="")
     previous_pbz_account_number = models.CharField(max_length=64, blank=True, default="")
+    previous_payment_account_holder_name = models.CharField(max_length=160, blank=True, default="")
     proposed_yas_zantel_phone = models.CharField(max_length=16, blank=True, default="", validators=[validate_phone])
     proposed_pbz_account_number = models.CharField(max_length=64, blank=True, default="")
+    proposed_payment_account_holder_name = models.CharField(max_length=160, blank=True, default="")
     phone_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
     account_change_status = models.CharField(max_length=16, choices=PaymentChangeStatus.choices, default=PaymentChangeStatus.PENDING)
     payment_saved_by = models.ForeignKey(
